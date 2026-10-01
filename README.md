@@ -84,7 +84,7 @@ Start the development server:
 python manage.py runserver
 ```
 
-The project currently exposes the Django administration site at <http://127.0.0.1:8000/admin/>. Create an administrator account with `python manage.py createsuperuser` to sign in. No route is configured at the site root yet.
+Open <http://127.0.0.1:8000/> to see the Django "The install worked successfully!" starter page, which confirms the project is running. The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an administrator account with `python manage.py createsuperuser` to sign in.
 
 ## Running tests
 
@@ -93,6 +93,8 @@ With the virtual environment active, run the Django test suite from the `canvas_
 ```console
 python manage.py test
 ```
+
+The suite currently contains no tests, so the command reports `Found 0 test(s)` and `NO TESTS RAN`.
 
 ## AI disclaimer
 
