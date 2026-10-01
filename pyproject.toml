@@ -11,6 +11,7 @@ packages = []
 
 [project.optional-dependencies]
 dev = [
-    "pycodestyle",
+    "pylint",
     "pytest",
+    "pytest-cov",
 ]

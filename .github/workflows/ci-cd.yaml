@@ -34,11 +34,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[dev]"
 
+      # Will add the  flag once codebase is mature enough
       - name: Run linter
-        run: pycodestyle --max-line-length=79 .
+        run: pylint --fail-under=8.0 .
 
       - name: Check test
         run: python -m pytest
+
+      - name: Code Coverage
+        run: |
+          coverage run --source='.' src/main.py test
+          coverage report -m --fail-under=80
 
   deploy:
     name: Deploy
