@@ -1,5 +1,13 @@
 .codex/
 .venv/
-__pycache__/
-*.pyc
+
+# Django Specific
 db.sqlite3
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[codz]
+*$py.class
+
+# Code Coverage
+.coverage
