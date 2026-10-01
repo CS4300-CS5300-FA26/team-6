@@ -34,10 +34,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[dev]"
 
-      - name: Lint
+      - name: Run linter
         run: pycodestyle --max-line-length=79 .
 
-      - name: Test
+      - name: Check test
         run: python -m pytest
 
   deploy:
