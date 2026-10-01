@@ -30,15 +30,15 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: >
-          echo "python -m pip install --upgrade pip\n
-          python -m pip install ."
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]"
 
       - name: Lint
-        run: echo "pycodestyle ."
+        run: pycodestyle --max-line-length=79 .
 
       - name: Test
-        run: echo "python -m pytest"
+        run: python -m pytest
 
   deploy:
     name: Deploy

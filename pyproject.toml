@@ -10,4 +10,7 @@ version = "0.1.0"
 packages = []
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "pycodestyle",
+    "pytest",
+]
