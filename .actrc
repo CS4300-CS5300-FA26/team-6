@@ -1,2 +1,2 @@
-# Add local-test-event.json as event to local pipeline runs.
+# Add local-test-event.json as event to local pipeline runs when using "act".
 --eventpath .github/local_test-event.json
