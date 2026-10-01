@@ -1,0 +1,58 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+
+  push:
+    branches: [main]
+
+  # Adds a "Run workflow" button in GitHub
+  workflow_dispatch:
+
+jobs:
+  lint_and_test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    # If I can get the container image used for DevEdu I won't need to setup python.
+    # container:
+    #   image: abc.io/container/path-to-container-image
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up python
+        uses: actions/setup-python@v7
+        with:
+          python-version: 3.12.3
+          cache: pip
+
+      - name: Install dependencies
+        run: >
+          echo "python -m pip install --upgrade pip\n
+          python -m pip install ."
+
+      - name: Lint
+        run: echo "pycodestyle ."
+
+      - name: Test
+        run: echo "python -m pytest"
+
+  deploy:
+    name: Deploy
+    needs: lint_and_test
+    if: >-
+      github.event.local_test != true &&
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Deploy
+        run: echo "Replace with your deployment command"
