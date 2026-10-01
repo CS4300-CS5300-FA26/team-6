@@ -34,7 +34,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[dev]"
 
-      # Will add the  flag once codebase is mature enough
       - name: Run linter
         run: pylint --fail-under=8.0 .
 
@@ -43,7 +42,7 @@ jobs:
 
       - name: Code Coverage
         run: |
-          coverage run --source='.' src/main.py test
+          coverage run --source=src -m pytest
           coverage report -m --fail-under=80
 
   deploy:
@@ -53,6 +52,9 @@ jobs:
       github.event.local_test != true &&
       github.event_name == 'push' && 
       github.ref == 'refs/heads/main'
+    concurrency:
+      group: production
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: production
 
@@ -60,5 +62,16 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v6
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "."
+
+      - name: Build container
+        run: echo "Build container"
+
       - name: Deploy
         run: echo "Replace with your deployment command"
+
+      - name: Post Deployment Health Check
+        run: echo "Check that deployment is successful"
