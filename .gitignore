@@ -1,5 +1,8 @@
 .codex/
+.venv/
 
+# Django Specific
+db.sqlite3
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
