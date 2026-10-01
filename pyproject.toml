@@ -5,13 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "my-project"
 version = "0.1.0"
+dependencies = [
+    "Django==6.1.1",
+]
 
 [tool.setuptools]
 packages = []
 
 [project.optional-dependencies]
 dev = [
-    "pylint",
-    "pytest",
-    "pytest-cov",
+    "pylint==4.1.1",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
 ]

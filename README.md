@@ -27,8 +27,7 @@ team-6/
 │   └── main.py
 ├── tests/                       # pytest tests run by the CI pipeline
 │   └── test_main.py
-├── pyproject.toml               # Lint and test tooling (pylint, pytest, pytest-cov)
-├── requirements.txt
+├── pyproject.toml               # Pinned dependencies plus lint/test tooling (dev extra)
 └── README.md
 ```
 
@@ -40,7 +39,7 @@ Local-only files such as `.venv/`, Python bytecode, and `db.sqlite3` are exclude
 - Python 3.14
 - `pip`
 
-The pinned Python dependencies, including Django 6.1.1, are listed in `requirements.txt`.
+The pinned Python dependencies, including Django 6.1.1, are listed in `pyproject.toml`. Lint and test tools are in the `dev` optional dependency group.
 
 ## Local installation
 
@@ -74,7 +73,7 @@ source .venv/bin/activate
 Install the project dependencies:
 
 ```console
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 ```
 
 ## Running the application
