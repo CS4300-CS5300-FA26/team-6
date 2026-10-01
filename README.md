@@ -6,6 +6,9 @@ Canvas Plus is the CS 4300/5300 Fall 2026 Team 6 group project. It is a Django a
 
 ```text
 team-6/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yaml           # CI/CD pipeline (lint, test, coverage, deploy)
 ├── canvas_plus/                 # Django project root
 │   ├── assignments/             # Assignments Django app
 │   │   ├── migrations/
@@ -20,6 +23,11 @@ team-6/
 │   │   ├── asgi.py
 │   │   └── wsgi.py
 │   └── manage.py
+├── src/                         # Placeholder module used by the CI pipeline
+│   └── main.py
+├── tests/                       # pytest tests run by the CI pipeline
+│   └── test_main.py
+├── pyproject.toml               # Lint and test tooling (pylint, pytest, pytest-cov)
 ├── requirements.txt
 └── README.md
 ```
@@ -106,8 +114,14 @@ AI tools were used during the completion of this course project. The use of AI w
 
 Stephen Tovar used ChatGPT to assist with decomposing their assigned high-level user stories.
 
-### During Spring 0–3
+### During Sprint 0–3
+
+#### Updating the README
+
 Joshua Douglas used Codex to assist in updating the README to reflect project changes.
 
-### Translating ADO pipeline knowledge to GitHub Actions
+### During software development
+
+#### Translating ADO pipeline knowledge to GitHub Actions
+
 Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps pipelines into the equivalent terminology and YAML syntax used by GitHub Actions.
