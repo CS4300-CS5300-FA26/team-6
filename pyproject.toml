@@ -2,9 +2,6 @@
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
-[tool.pylint.main]
-ignore = [".venv"]
-
 [project]
 name = "canvas_plus"
 version = "0.1.0"
@@ -32,3 +29,7 @@ python_files = ["test_*.py", "tests.py"]
 
 [tool.coverage.run]
 omit = ["*/manage.py", "*/asgi.py", "*/wsgi.py", "*/migrations/*"]
+
+[tool.pylint.main]
+ignore = [".venv"]
+
