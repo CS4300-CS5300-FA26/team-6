@@ -124,6 +124,10 @@ Joshua Douglas used Codex to assist in updating the README to reflect project ch
 
 Jackson McGuire used Claude Code to apply the CI test configuration Joshua Douglas outlined in PR #64. Jackson reviewed each change and confirmed locally that pytest collects and runs Django tests before committing.
 
+#### Writing the assignments page tests
+
+Jackson McGuire used Claude Code to help write the integration tests for the assignments page. The tests were committed before the page existed and failed with a 404, then passed once the page was merged. Jackson ran every test himself and reviewed each line before committing.
+
 ### During software development
 
 #### Translating ADO pipeline knowledge to GitHub Actions
