@@ -42,7 +42,7 @@ jobs:
 
       - name: Code Coverage
         run: |
-          coverage run --source=src -m pytest
+          coverage run --source=canvas_plus,src -m pytest
           coverage report -m --fail-under=80
 
   deploy:

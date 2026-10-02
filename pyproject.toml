@@ -17,4 +17,13 @@ dev = [
     "pylint==4.1.1",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
+    "pytest-django==4.14.0",
 ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "canvas_plus.settings"
+pythonpath = ["canvas_plus", "."]
+python_files = ["test_*.py", "tests.py"]
+
+[tool.coverage.run]
+omit = ["*/manage.py", "*/asgi.py", "*/wsgi.py", "*/migrations/*"]
