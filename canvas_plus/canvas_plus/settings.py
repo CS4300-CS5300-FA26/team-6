@@ -93,6 +93,16 @@ DATABASES = {
     }
 }
 
+# Connect to postgres database
+
+if "DATABASE_URL" in os.environ:
+    DATABASES = {
+        "default": dj_database_url.config(
+            conn_max_age=600,
+            ssl_require=True,
+        )
+    }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
@@ -130,16 +140,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
-# Database Connecitons
-
-if "DATABASE_URL" in os.environ:
-    DATABASES = {
-        "default": dj_database_url.config(
-            conn_max_age=600,
-            ssl_require=True,
-        )
-    }
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
