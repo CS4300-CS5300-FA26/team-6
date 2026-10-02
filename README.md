@@ -95,13 +95,13 @@ Open <http://127.0.0.1:8000/> to see the Django "The install worked successfully
 
 ## Running tests
 
-With the virtual environment active, run the Django test suite from the `canvas_plus` directory:
+With the virtual environment active, run the test suite from the repository root:
 
 ```console
-python manage.py test
+python -m pytest
 ```
 
-The suite currently contains no tests, so the command reports `Found 0 test(s)` and `NO TESTS RAN`.
+This is the same command the CI pipeline runs. It uses `pytest-django` to find tests in `tests.py` and `test_*.py` files, including the Django app tests under `canvas_plus/`.
 
 ## AI disclaimer
 
@@ -118,6 +118,10 @@ Stephen Tovar used ChatGPT to assist with decomposing their assigned high-level 
 #### Updating the README
 
 Joshua Douglas used Codex to assist in updating the README to reflect project changes.
+
+#### Running Django tests in CI
+
+Jackson McGuire used Claude Code to apply the CI test configuration Joshua Douglas outlined in PR #64. Jackson reviewed each change and confirmed locally that pytest collects and runs Django tests before committing.
 
 ### During software development
 
