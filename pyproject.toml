@@ -28,7 +28,13 @@ pythonpath = ["canvas_plus", "."]
 python_files = ["test_*.py", "tests.py"]
 
 [tool.coverage.run]
-omit = ["*/manage.py", "*/asgi.py", "*/wsgi.py", "*/migrations/*"]
+omit = [
+    "*/manage.py",
+    "*/asgi.py",
+    "*/wsgi.py",
+    "*/migrations/*",
+    "canvas_plus/canvas_plus/settings.py"
+    ]
 
 [tool.pylint.main]
 ignore = [".venv"]
