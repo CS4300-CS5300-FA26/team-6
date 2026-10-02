@@ -1,4 +1,4 @@
-""" Django views """
+"""Django views"""
 from django.shortcuts import render
 from .models import Assignment
 
