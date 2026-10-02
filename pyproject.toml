@@ -2,11 +2,8 @@
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
-[tool.pylint.MASTER]
-ignore-paths = [
-    '^\.venv/.*$',
-    '^.*/\.venv/.*$' 
-]
+[tool.pylint.main]
+ignore = [".venv"]
 
 [project]
 name = "canvas_plus"
