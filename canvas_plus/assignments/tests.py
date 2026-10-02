@@ -25,7 +25,8 @@ class AssignmentsPageTests(TestCase):
         self.assertContains(response, "Test Assignment 123")
 
     def test_assignments_page_loads_with_no_assignments(self):
-        """With an empty database, the page still loads instead of crashing."""
+        """With an empty database, the page loads and says there are no assignments."""
         response = self.client.get("/assignments/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You have no assignments.")
