@@ -91,7 +91,8 @@ Start the development server:
 python manage.py runserver
 ```
 
-Open <http://127.0.0.1:8000/> to see the Django "The install worked successfully!" starter page, which confirms the project is running. The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an administrator account with `python manage.py createsuperuser` to sign in.
+Open <http://127.0.0.1:8000/assignments/> to see the Assignments page, which confirms the project is running. 
+The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an administrator account with `python manage.py createsuperuser` to sign in.
 
 ## Running tests
 
