@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Upcoming Assignments</title>
+  <title>All Assignments</title>
 </head>
 <body>
-  <h1>Upcoming Assignments</h1>
+  <h1>All Assignments</h1>
   <ul>
     {% for a in assignments %}
       <li>{{ a.title }} ({{ a.course }}), due {{ a.due_date|date:"M j, Y g:i A" }}</li>
     {% empty %}
-      <li>You have no upcoming assignments.</li>
+      <li>You have no assignments.</li>
     {% endfor %}
   </ul>
 </body>
