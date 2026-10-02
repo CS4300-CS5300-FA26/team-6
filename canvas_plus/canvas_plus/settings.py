@@ -30,7 +30,6 @@ if DEBUG:
 else:
     SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
-
 # Retrieve hostname from environment variable, default to localhost and
 ALLOWED_HOSTS = [
     host.strip()
