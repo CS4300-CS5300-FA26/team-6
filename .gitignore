@@ -11,3 +11,12 @@ __pycache__/
 
 # Code Coverage
 .coverage
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
