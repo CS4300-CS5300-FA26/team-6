@@ -14,7 +14,8 @@ jobs:
   lint_and_test:
     name: Lint and Test
     runs-on: ubuntu-latest
-    environment: production
+    env:
+      DJANGO_DEBUG: "True"
 
     # If I can get the container image used for DevEdu I won't need to setup python.
     # container:
