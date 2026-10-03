@@ -1,3 +1,6 @@
+# Django settings use uppercase names.
+# pylint: disable=invalid-name
+
 """
 Django settings for canvas_plus project.
 
