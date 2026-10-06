@@ -15,7 +15,8 @@ jobs:
     name: Lint and Test
     runs-on: ubuntu-latest
     env:
-      DJANGO_DEBUG: "True"
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: "fake-secret-key"
 
     # If I can get the container image used for DevEdu I won't need to setup python.
     # container:
