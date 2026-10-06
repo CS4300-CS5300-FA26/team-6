@@ -1,3 +1,11 @@
+# Secrets, other venv names, OS/editor files
+.env
+venv/
+env/
+.vscode/
+.idea/
+.DS_Store
+
 .codex/
 .venv/
 

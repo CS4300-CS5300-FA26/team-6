@@ -14,8 +14,11 @@ team-6/
 │   │   ├── migrations/
 │   │   ├── admin.py
 │   │   ├── apps.py
+│   │   ├── templates/assignments/
+│   │   │   └── assignment_list.html
 │   │   ├── models.py
 │   │   ├── tests.py
+│   │   ├── urls.py
 │   │   └── views.py
 │   ├── canvas_plus/             # Django project configuration
 │   │   ├── settings.py
@@ -50,10 +53,18 @@ git clone git@github.com:CS4300-CS5300-FA26/team-6.git
 cd team-6
 ```
 
-Create a virtual environment:
+Create a virtual environment with Python 3.14. If your prompt shows `(base)`, run `conda deactivate` first, or the venv may be built with conda's Python instead.
+
+macOS or Linux:
 
 ```console
-python -m venv .venv
+python3.14 -m venv .venv
+```
+
+Windows:
+
+```console
+py -3.14 -m venv .venv
 ```
 
 Activate it with the command for your shell.
@@ -68,6 +79,18 @@ Bash or Zsh:
 
 ```bash
 source .venv/bin/activate
+```
+
+Windows (PowerShell or Command Prompt):
+
+```console
+.venv\Scripts\activate
+```
+
+Confirm the venv uses Python 3.14:
+
+```console
+python --version
 ```
 
 Install the project dependencies:
@@ -104,6 +127,12 @@ python -m pytest
 
 This is the same command the CI pipeline runs. It uses `pytest-django` to find tests in `tests.py` and `test_*.py` files, including the Django app tests under `canvas_plus/`.
 
+To run only the Django app tests with Django's own test runner, run this from inside `canvas_plus/`:
+
+```console
+python manage.py test
+```
+
 ## AI disclaimer
 
 AI tools were used during the completion of this course project. The use of AI was encouraged by the professor, and the course provided guidance on appropriate applications of AI through the course book. The course book's AI guidance can be found here: [SWE Book](https://www.swebook.org/index.html).
@@ -127,6 +156,10 @@ Jackson McGuire used Claude Code to apply the CI test configuration Joshua Dougl
 #### Writing the assignments page tests
 
 Jackson McGuire used Claude Code to help write the integration tests for the assignments page. The tests were committed before the page existed and failed with a 404, then passed once the page was merged. Jackson ran every test himself and reviewed each line before committing.
+
+#### Clean-clone check and README fixes
+
+Jackson McGuire used Claude Code to plan a clean-clone check and draft the README fixes it found. Jackson ran every step himself in a fresh clone and confirmed the corrected venv command produces Python 3.14.
 
 ### During software development
 
