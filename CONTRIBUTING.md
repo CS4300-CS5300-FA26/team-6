@@ -37,3 +37,18 @@ act pull_request -W .github/workflows/ci-cd.yaml
 ```
 
 `act` uses Docker to provide the workflow's execution environment. Install and start [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) before running it. Local runs are useful for feedback but may differ from GitHub-hosted runners.
+
+## Main branch protection
+
+The `main` branch is protected by an active GitHub ruleset. Changes must go through a pull request; you cannot push changes directly to `main` or force-push to rewrite its history. The branch also cannot be deleted.
+
+Before a pull request can be merged:
+
+- At least one reviewer must approve it. If new commits are pushed after approval, the old approval is dismissed and the pull request needs another approval.
+- The person who pushed the latest changes must get approval from another reviewer.
+- Review conversations must be resolved.
+- The `Lint and Test` status check must pass, and the branch must include the latest changes from `main` before it can merge.
+- Commits must have verified signatures.
+- The pull request must be merged using a merge commit. Other merge methods, such as squash or rebase, are not allowed.
+
+No users or teams are listed as exempt from these rules. Code-owner approval is not specifically required.
