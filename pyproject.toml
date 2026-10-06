@@ -24,6 +24,10 @@ dev = [
 DJANGO_SETTINGS_MODULE = "canvas_plus.settings"
 pythonpath = ["canvas_plus", "."]
 python_files = ["test_*.py", "tests.py"]
+markers = [
+    "unit: fast tests of one piece in isolation, such as a single model method",
+    "integration: tests that run several layers together, such as a request through URL, view, model, and template",
+]
 
 [tool.coverage.run]
 omit = ["*/manage.py", "*/asgi.py", "*/wsgi.py", "*/migrations/*"]
