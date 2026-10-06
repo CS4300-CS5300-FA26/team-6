@@ -2,12 +2,14 @@
 
 from datetime import timedelta
 
+import pytest
 from django.test import TestCase
 from django.utils import timezone
 
 from .models import Assignment
 
 
+@pytest.mark.integration
 class AssignmentsPageTests(TestCase):
     """The assignments page shows assignments stored in the database."""
 
