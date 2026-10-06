@@ -21,9 +21,6 @@ __pycache__/
 # Code Coverage
 .coverage
 
-# Environment
-.env
-
 # Distribution / packaging
 .Python
 build/
