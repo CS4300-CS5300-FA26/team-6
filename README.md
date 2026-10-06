@@ -99,6 +99,18 @@ Install the project dependencies:
 python -m pip install -e ".[dev]"
 ```
 
+Create a local environment file from the example in the repository root:
+
+```console
+cp env.example .env
+```
+
+Edit `.env` to set local values. `DJANGO_DEBUG=True` enables Django debug mode, and
+`DJANGO_SECRET_KEY` in the example is only a development placeholder. The Django
+settings load `.env` automatically for local runs. `.env` is ignored by Git; do
+not commit it or use the example secret in production. Configure production
+secrets through the server's environment variables instead.
+
 ## Running the application
 
 From the repository root, enter the Django project directory and apply the database migrations:

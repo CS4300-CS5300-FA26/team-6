@@ -9,6 +9,7 @@ env/
 .codex/
 .venv/
 
+
 # Django Specific
 db.sqlite3
 
@@ -19,6 +20,9 @@ __pycache__/
 
 # Code Coverage
 .coverage
+
+# Environment
+.env
 
 # Distribution / packaging
 .Python
