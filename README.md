@@ -173,6 +173,12 @@ Jackson McGuire used Claude Code to help write the integration tests for the ass
 
 Jackson McGuire used Claude Code to plan a clean-clone check and draft the README fixes it found. Jackson ran every step himself in a fresh clone and confirmed the corrected venv command produces Python 3.14.
 
+### During Sprint 1
+
+#### AI code review in CI
+
+Jackson McGuire designed and tested the AI Code Review job and its review guidelines, using Claude Code to help write the workflow and draft triage replies. Jackson chose the key design decisions (full-file context, a two-level severity scale, and rules against invented findings), approved each part, and ran all six acceptance checks on PR #76.
+
 ### During software development
 
 #### Translating ADO pipeline knowledge to GitHub Actions
