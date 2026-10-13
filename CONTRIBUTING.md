@@ -3,6 +3,20 @@
 
 This guide covers managing Python dependencies and validating GitHub Actions workflows locally before opening a pull request.
 
+## Using Django's debug setting
+
+Use `settings.DEBUG` to check whether Django is running in debug mode:
+
+```
+from django.conf import settings
+
+if settings.DEBUG:
+    # Enable behavior intended only for local development.
+    ...
+```
+
+`DEBUG` is configured in the project's Django settings. Keep debug-only behavior, such as verbose diagnostics, behind this check, and never enable `DEBUG` in production: it can expose sensitive information in error pages. For templates, use Django's `{% if debug %}` tag when the debug context processor is enabled.
+
 ## Python dependencies
 
 This project uses [uv](https://docs.astral.sh/uv/) to manage dependencies in `pyproject.toml` and the `uv.lock` lockfile. Install uv by following its [installation guide](https://docs.astral.sh/uv/getting-started/installation/).
