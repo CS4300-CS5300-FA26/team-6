@@ -106,6 +106,9 @@ jobs:
           if [ "$HTTP_STATUS" = "200" ]; then
             REVIEW=$(jq -r '[.output[]? | select(.type == "message") | .content[]? | select(.type == "output_text") | .text] | join("\n")' response.json) || REVIEW=""
           fi
+          if [ -z "$REVIEW" ]; then
+            echo "OpenAI error: $(jq -r '.error.message // "unknown"' response.json 2>/dev/null)"
+          fi
 
           # Changed files as one line: `a.py`, `b.py`
           FILES=$(sed 's/.*/`&`/' files.txt | paste -sd ',' - | sed 's/,/, /g')
