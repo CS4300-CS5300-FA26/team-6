@@ -129,6 +129,10 @@ python manage.py runserver
 Open <http://127.0.0.1:8000/assignments/> to see the Assignments page, which confirms the project is running. 
 The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an administrator account with `python manage.py createsuperuser` to sign in.
 
+## Production deployment
+
+Live application: https://canvas-plus-1dc9dd2e56ac.herokuapp.com/
+
 ## Running tests
 
 With the virtual environment active, run the test suite from the repository root:
@@ -178,3 +182,9 @@ Jackson McGuire used Claude Code to plan a clean-clone check and draft the READM
 #### Translating ADO pipeline knowledge to GitHub Actions
 
 Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps pipelines into the equivalent terminology and YAML syntax used by GitHub Actions.
+
+### During Sprint 1
+
+#### Assistance with CD pipeline
+
+Stephen Tovar used an AI to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
