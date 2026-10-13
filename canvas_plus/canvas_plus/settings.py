@@ -89,15 +89,16 @@ WSGI_APPLICATION = 'canvas_plus.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+# default to sqlite if DATABASE_URL is not set in the environment
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
     )
 }
-DATABASES['default']['CONN_MAX_AGE'] = 600
 
 if env('DATABASE_URL', default=None):
+    DATABASES['default']['CONN_MAX_AGE'] = 600
     DATABASES['default'].setdefault('OPTIONS', {})['sslmode'] = 'require'
 
 
