@@ -97,7 +97,8 @@ DATABASES = {
     )
 }
 
-if env('DATABASE_URL', default=None):
+# Only configure options if db is PostgreSQL
+if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
     DATABASES['default']['CONN_MAX_AGE'] = 600
     DATABASES['default'].setdefault('OPTIONS', {})['sslmode'] = 'require'
 
