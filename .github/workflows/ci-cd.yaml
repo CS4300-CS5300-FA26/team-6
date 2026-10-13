@@ -61,7 +61,7 @@ jobs:
       # Actions > Variables), or else the default after ||. Lets us test failure cases
       # without changing code.
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-6-luna' }}
-      MAX_DIFF_CHARS: ${{ vars.MAX_DIFF_CHARS || '30000' }}
+      MAX_INPUT_CHARS: ${{ vars.MAX_INPUT_CHARS || '60000' }}
 
     steps:
       - name: Check out source
@@ -69,17 +69,39 @@ jobs:
         with:
           fetch-depth: 0  # full history, so the PR can be compared against main
 
-      - name: Collect the pull request diff
+      - name: Collect what the reviewer sees
+        env:
+          # PR text is user-typed, so it comes in through env, never pasted into the script
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          # Only what this PR changed since it branched off main
-          git diff "origin/${{ github.base_ref }}...HEAD" > diff.txt
+          # Only what this PR changed since it branched off main.
+          # The diff skips lock files and migrations (generated noise); the file list keeps them.
+          git diff "origin/${{ github.base_ref }}...HEAD" -- . ':(exclude)*.lock' ':(exclude)*/migrations/*' > diff.txt
           git diff --name-only "origin/${{ github.base_ref }}...HEAD" > files.txt
 
-          # Very large diffs cost more and can exceed OpenAI's input limit, so trim them.
-          # TRUNCATED goes into $GITHUB_ENV so later steps can see it.
-          if [ "$(wc -c < diff.txt)" -gt "$MAX_DIFF_CHARS" ]; then
-            head -c "$MAX_DIFF_CHARS" diff.txt > diff_trimmed.txt
-            mv diff_trimmed.txt diff.txt
+          # One input, most important first, so trimming cuts file context before the diff
+          {
+            printf '## Pull request\nTitle: %s\n\n%s\n\n' "$PR_TITLE" "$PR_BODY"
+            echo "## Diff (review this)"
+            cat diff.txt
+            echo
+            echo "## Full changed files (context only)"
+            while read -r f; do
+              case "$f" in  # skip generated files and images
+                */migrations/*|*.lock|*.png|*.jpg|*.jpeg|*.gif|*.svg|*.ico) continue ;;
+              esac
+              if [ -f "$f" ]; then  # skip deleted files
+                echo "=== $f ==="; cat "$f"; echo
+              fi
+            done < files.txt
+          } > input.txt
+
+          # Over the limit? Keep the beginning, cut the end, and leave a note for the comment
+          # in $GITHUB_ENV (later steps can read it).
+          if [ "$(wc -c < input.txt)" -gt "$MAX_INPUT_CHARS" ]; then
+            head -c "$MAX_INPUT_CHARS" input.txt > input_trimmed.txt
+            mv input_trimmed.txt input.txt
             echo "TRUNCATED=true" >> "$GITHUB_ENV"
           fi
 
@@ -87,12 +109,12 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          # Guidelines file -> instructions, diff -> input. jq builds the JSON safely,
-          # so quotes or symbols in the diff cannot break the request.
+          # Guidelines file -> instructions, input.txt -> input. jq builds the JSON safely,
+          # so quotes or symbols in the code cannot break the request.
           jq -n --arg model "$OPENAI_MODEL" \
             --rawfile instructions .github/ai-review-guidelines.md \
-            --rawfile diff diff.txt \
-            '{model: $model, instructions: $instructions, input: $diff}' > request.json
+            --rawfile input input.txt \
+            '{model: $model, instructions: $instructions, input: $input}' > request.json
 
           # Send it. Saves the reply to response.json and the status code (200 = OK).
           HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" \
@@ -125,7 +147,7 @@ jobs:
             fi
             echo
             if [ "${TRUNCATED:-false}" = "true" ]; then
-              echo "_Note: diff was over the size limit; only part of it was reviewed._"
+              echo "_Note: the PR was over the size limit; only part of it was sent for review._"
             fi
             echo "_AI-generated review. A teammate still has to approve._"
           } > review.md
