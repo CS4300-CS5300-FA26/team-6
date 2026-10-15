@@ -17,11 +17,15 @@ Including another URLconf
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path
+from django.conf import settings
+
 
 from assignments.views import assignment_list
 
 
 def health_check(request):
+    if settings.DEBUG:
+        return HttpResponse("App is running in debug mode.", content_type="text/plain")
     return HttpResponse("App is running.", content_type="text/plain")
 
 

@@ -5,7 +5,6 @@ on:
     branches: [main]
 
   push:
-    branches: [main]
 
   # Adds a "Run workflow" button in GitHub
   workflow_dispatch:
@@ -47,6 +46,116 @@ jobs:
         run: |
           coverage run --source=canvas_plus,src -m pytest
           coverage report -m --fail-under=80
+
+  # Sends each pull request's changes to OpenAI and posts the review as a PR comment.
+  # Separate from lint_and_test, so an OpenAI problem never blocks the tests.
+  ai_review:
+    name: AI Code Review
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # Uses the repo variable if one exists (Settings > Secrets and variables >
+      # Actions > Variables), or else the default after ||. Lets us test failure cases
+      # without changing code.
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-6-luna' }}
+      MAX_INPUT_CHARS: ${{ vars.MAX_INPUT_CHARS || '60000' }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # full history, so the PR can be compared against main
+
+      - name: Collect what the reviewer sees
+        env:
+          # PR text is user-typed, so it comes in through env, never pasted into the script
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Only what this PR changed since it branched off main.
+          # The diff skips lock files and migrations (generated noise); the file list keeps them.
+          git diff "origin/${{ github.base_ref }}...HEAD" -- . ':(exclude)*.lock' ':(exclude)*/migrations/*' > diff.txt
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" > files.txt
+
+          # One input, most important first, so trimming cuts file context before the diff
+          {
+            printf '## Pull request\nTitle: %s\n\n%s\n\n' "$PR_TITLE" "$PR_BODY"
+            echo "## Diff (review this)"
+            cat diff.txt
+            echo
+            echo "## Full changed files (context only)"
+            while read -r f; do
+              case "$f" in  # skip generated files and images
+                */migrations/*|*.lock|*.png|*.jpg|*.jpeg|*.gif|*.svg|*.ico) continue ;;
+              esac
+              if [ -f "$f" ]; then  # skip deleted files
+                echo "=== $f ==="; cat "$f"; echo
+              fi
+            done < files.txt
+          } > input.txt
+
+          # Over the limit? Keep the beginning, cut the end, and leave a note for the comment
+          # in $GITHUB_ENV (later steps can read it).
+          if [ "$(wc -c < input.txt)" -gt "$MAX_INPUT_CHARS" ]; then
+            head -c "$MAX_INPUT_CHARS" input.txt > input_trimmed.txt
+            mv input_trimmed.txt input.txt
+            echo "TRUNCATED=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Ask OpenAI for a review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Guidelines file -> instructions, input.txt -> input. jq builds the JSON safely,
+          # so quotes or symbols in the code cannot break the request.
+          jq -n --arg model "$OPENAI_MODEL" \
+            --rawfile instructions .github/ai-review-guidelines.md \
+            --rawfile input input.txt \
+            '{model: $model, instructions: $instructions, input: $input}' > request.json
+
+          # Send it. Saves the reply to response.json and the status code (200 = OK).
+          HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" \
+            https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data @request.json) || HTTP_STATUS="000"
+
+          # Pull the review text out of OpenAI's reply (stays empty if anything failed)
+          REVIEW=""
+          if [ "$HTTP_STATUS" = "200" ]; then
+            REVIEW=$(jq -r '[.output[]? | select(.type == "message") | .content[]? | select(.type == "output_text") | .text] | join("\n")' response.json) || REVIEW=""
+          fi
+          if [ -z "$REVIEW" ]; then
+            echo "OpenAI error: $(jq -r '.error.message // "unknown"' response.json 2>/dev/null)"
+          fi
+
+          # Changed files as one line: `a.py`, `b.py`
+          FILES=$(sed 's/.*/`&`/' files.txt | paste -sd ',' - | sed 's/,/, /g')
+
+          # Build the comment. If OpenAI failed, say so instead of crashing.
+          {
+            echo "## 🤖 AI Code Review"
+            echo "**Files changed:** $FILES"
+            echo
+            if [ -n "$REVIEW" ]; then
+              echo "$REVIEW"
+            else
+              echo "⚠️ AI review could not be completed (OpenAI error, HTTP $HTTP_STATUS)."
+            fi
+            echo
+            if [ "${TRUNCATED:-false}" = "true" ]; then
+              echo "_Note: the PR was over the size limit; only part of it was sent for review._"
+            fi
+            echo "_AI-generated review. A teammate still has to approve._"
+          } > review.md
+
+      - name: Post the review as a PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}  # temporary token GitHub creates for this run
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file review.md
 
   deploy:
     name: Deploy

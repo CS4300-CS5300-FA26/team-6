@@ -14,37 +14,31 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
-from dotenv import load_dotenv
-import os
-import dj_database_url
+import environ
+
+env = environ.Env()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR.parent / ".env")
+environ.Env.read_env(BASE_DIR.parent / ".env")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG') == "True"
+DEBUG = env.bool('DJANGO_DEBUG', default=False)
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # This key is a default key for dev and testing. Real key is set in environment variables.
 if DEBUG:
-    SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "fake-secret")
+    SECRET_KEY = env.get_value("DJANGO_SECRET_KEY", default="fake-secret")
 else:
-    SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
+    SECRET_KEY = env("DJANGO_SECRET_KEY")
 
 # Retrieve hostname from environment variable, default to localhost and
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.environ.get(
-        "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"
-    ).split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 
 # Application definition
@@ -92,22 +86,18 @@ WSGI_APPLICATION = 'canvas_plus.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+# default to sqlite if DATABASE_URL is not set in the environment
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    "default": env.db(
+        "DATABASE_URL",
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+    )
 }
 
-# Connect to postgres database
-
-if "DATABASE_URL" in os.environ:
-    DATABASES = {
-        "default": dj_database_url.config(
-            conn_max_age=600,
-            ssl_require=True,
-        )
-    }
+# Only configure options if db is PostgreSQL
+if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
+    DATABASES['default']['CONN_MAX_AGE'] = 600
+    DATABASES['default'].setdefault('OPTIONS', {})['sslmode'] = 'require'
 
 
 # Password validation
