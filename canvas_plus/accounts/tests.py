@@ -212,14 +212,24 @@ class AccountFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("s3cure-Pass-99", response.content.decode())
 
-    def test_login_failures_do_not_display_username(self):
-        """Failed login attempts do not reveal the attempted username in the response."""
-        response = self.client.post("/accounts/login/", {
+    def test_login_failures_do_not_reveal_account_existence(self):
+        """Failed logins give the same error for existing and nonexistent users."""
+        wrong_password = self.client.post("/accounts/login/", {
             "username": "student", "password": "wrong-password",
         })
+        nonexistent_user = self.client.post("/accounts/login/", {
+            "username": "nonexistent", "password": "wrong-password",
+        })
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("student", response.content.decode())
+        self.assertEqual(wrong_password.status_code, 200)
+        self.assertEqual(nonexistent_user.status_code, 200)
+        self.assertEqual(
+            list(wrong_password.context["form"].non_field_errors()),
+            list(nonexistent_user.context["form"].non_field_errors()),
+        )
+        content = nonexistent_user.content.decode().lower()
+        for phrase in ("does not exist", "doesn't exist", "no account", "not found", "unknown user"):
+            self.assertNotIn(phrase, content)
 
     def test_logout_requires_post_and_ends_session(self):
         """GET is rejected; POST ends the session."""
