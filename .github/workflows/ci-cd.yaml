@@ -198,9 +198,12 @@ jobs:
 
       - name: Health Check
         env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
           HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
         run: |
-          URL="https://${HEROKU_APP_NAME}.herokuapp.com/"
+          # Heroku appends a random suffix to the hostname, so ask for the real URL (ends in /)
+          BASE_URL=$(heroku apps:info --app "$HEROKU_APP_NAME" --json | jq -r '.app.web_url')
+          URL="${BASE_URL}health/"
           for i in 1 2 3 4 5 6 7 8 9 10; do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || true)
             echo "Attempt $i: HTTP $status"
