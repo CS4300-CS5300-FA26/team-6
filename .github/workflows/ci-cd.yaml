@@ -173,7 +173,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
-        fetch-depth: 0 # Heroku requires full git history or it will be rejected
+        with:
+          fetch-depth: 0 # Heroku requires full git history or it will be rejected
 
       - name: Set up python
         uses: actions/setup-python@v7
