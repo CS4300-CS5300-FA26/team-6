@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 from django.test import TestCase
 from django.utils import timezone
+from django.urls import reverse
 
 from .models import Assignment
 
@@ -32,3 +33,19 @@ class AssignmentsPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "You have no assignments.")
+
+PAGES_USING_BASE_TEMPLATE = ["/", "/assignments/"]
+
+@pytest.mark.integration
+class SharedTemplateTests(TestCase):
+
+    def test_every_page_uses_base_template(self):
+        """The shared base template is used across all canvas+ pages in a list"""
+
+        for url in PAGES_USING_BASE_TEMPLATE:
+
+            with self.subTest(url=url):
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(response, "base.html")
