@@ -1,6 +1,6 @@
 # Canvas Plus
 
-Canvas Plus is the CS 4300/5300 Fall 2026 Team 6 group project. It is a Django application that currently provides the initial project skeleton and an `assignments` app.
+Canvas Plus is the CS 4300/5300 Fall 2026 Team 6 group project. It is a Django application with `accounts` and `assignments` apps.
 
 ## Current project structure
 
@@ -17,6 +17,16 @@ team-6/
 │   │   ├── templates/assignments/
 │   │   │   └── assignment_list.html
 │   │   ├── models.py
+│   │   ├── tests.py
+│   │   ├── urls.py
+│   │   └── views.py
+│   ├── accounts/                # Accounts Django app
+│   │   ├── templates/accounts/
+│   │   │   ├── login.html
+│   │   │   └── register.html
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   ├── forms.py
 │   │   ├── tests.py
 │   │   ├── urls.py
 │   │   └── views.py
@@ -193,4 +203,8 @@ Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps p
 
 #### Assistance with CD pipeline
 
-Stephen Tovar used Copilet to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
+Stephen Tovar used Copilot to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
+
+#### Assistance with Logon and Account Registration
+
+Stephen Tovar used Copilot to explain how `django.contrib.auth` provided django user account creation.
