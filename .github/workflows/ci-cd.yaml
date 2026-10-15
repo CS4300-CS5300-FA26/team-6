@@ -173,6 +173,7 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
+        fetch-depth: 0 # Heroku requires full git history or it will be rejected
 
       - name: Set up python
         uses: actions/setup-python@v7
@@ -200,6 +201,7 @@ jobs:
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
           HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        timeout-minutes: 5
         run: |
           # Heroku appends a random suffix to the hostname, so ask for the real URL (ends in /)
           BASE_URL=$(heroku apps:info --app "$HEROKU_APP_NAME" --json | jq -r '.app.web_url')

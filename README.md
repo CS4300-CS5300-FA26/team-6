@@ -193,4 +193,4 @@ Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps p
 
 #### Assistance with CD pipeline
 
-Stephen Tovar used an AI to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
+Stephen Tovar used Copilet to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
