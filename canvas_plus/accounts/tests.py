@@ -159,6 +159,68 @@ class AccountFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_login_with_nonexistent_user_fails(self):
+        """Logging in with a username that doesn't exist shows an error and does not start a session."""
+        response = self.client.post("/accounts/login/", {
+            "username": "nonexistent", "password": "doesntmatter",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_with_blank_fields_fails(self):
+        """Logging in with blank username or password shows an error and does not start a session."""
+        response = self.client.post("/accounts/login/", {
+            "username": "", "password": "",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_page_renders_form(self):
+        """GET shows the login form."""
+        response = self.client.get("/accounts/login/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/login.html")
+
+    def test_login_ignores_untrusted_next_urls(self):
+        """External or scheme-based 'next' values never become the redirect target."""
+        cases = [
+            "https://evil.example/",
+            "//evil.example/",
+            "/\\evil.example",
+            "javascript:alert(1)",
+        ]
+        for next_url in cases:
+            with self.subTest(next=next_url):
+                response = self.client.post("/accounts/login/", {
+                    "next": next_url,
+                    "username": "student",
+                    "password": "s3cure-Pass-99",
+                }, QUERY_STRING=f"next={next_url}")
+
+                self.assertRedirects(response, "/", fetch_redirect_response=False)
+                self.client.logout()
+
+    def test_login_failures_do_not_display_password(self):
+        """Failed login attempts do not reveal sensitive information in the response."""
+        response = self.client.post("/accounts/login/", {
+            "username": "student", "password": "wrong-password",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("s3cure-Pass-99", response.content.decode())
+
+    def test_login_failures_do_not_display_username(self):
+        """Failed login attempts do not reveal the attempted username in the response."""
+        response = self.client.post("/accounts/login/", {
+            "username": "student", "password": "wrong-password",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("student", response.content.decode())
+
     def test_logout_requires_post_and_ends_session(self):
         """GET is rejected; POST ends the session."""
         self.client.force_login(self.user)
