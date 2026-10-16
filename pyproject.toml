@@ -23,7 +23,6 @@ dev = [
     "pytest-cov==7.1.0",
     "pytest-django==4.14.0",
     "behave-django",
-    "six",
 ]
 
 [tool.pytest.ini_options]
