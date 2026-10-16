@@ -44,7 +44,7 @@ jobs:
 
       - name: Run behave acceptance tests
         working-directory: canvas_plus
-        run: python manage.py behave
+        run: python manage.py behave --settings=canvas_plus.settings_test
 
       - name: Code Coverage
         run: |

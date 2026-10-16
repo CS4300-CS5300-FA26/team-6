@@ -52,13 +52,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'assignments.apps.AssignmentsConfig',
 ]
-try:
-    import behave_django  # pylint: disable=unused-import
-except ImportError:
-    pass
-else:
-    # Register behave-django when development/test dependencies are installed.
-    INSTALLED_APPS.append("behave_django")
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
