@@ -2,9 +2,50 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <!-- viewport with width=device-width ensures the application scales properly on mobile device -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Canvas+{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: sans-serif; overflow-wrap: anywhere; }
+        nav { padding: 1rem; background: #17324d; color: white; }
+        nav a { color: inherit; }
+        .nav-links { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; }
+        .menu-toggle { display: none; font: inherit; padding: 0.5rem 1rem; }
+        main { max-width: 72rem; margin: auto; padding: 1rem; }
+
+        @media (max-width: 40rem) {
+            .menu-toggle { display: inline-block; }
+            .nav-links { flex-direction: column; margin-top: 1rem; }
+            .nav-links[hidden] { display: none; }
+        }
+    </style>
 </head>
 <body>
+    <nav aria-label="Main navigation">
+        <button class="menu-toggle" type="button" aria-expanded="true" aria-controls="navigation-links">
+            Menu
+        </button>
+        <ul class="nav-links" id="navigation-links">
+            <li><a href="{% url 'assignment_list' %}">Assignments</a></li>
+        </ul>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        const menuToggle = document.querySelector('.menu-toggle');
+        const navigationLinks = document.getElementById('navigation-links');
+        const phoneScreen = window.matchMedia('(max-width: 40rem)');
 
+        function setMenuExpanded(expanded) {
+            menuToggle.setAttribute('aria-expanded', String(expanded));
+            navigationLinks.hidden = !expanded;
+        }
+
+        setMenuExpanded(!phoneScreen.matches);
+        phoneScreen.addEventListener('change', () => setMenuExpanded(!phoneScreen.matches));
+        menuToggle.addEventListener('click', () => setMenuExpanded(navigationLinks.hidden));
+    </script>
 </body>
 </html>
