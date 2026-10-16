@@ -133,6 +133,8 @@ class AccountFlowTests(TestCase):
         })
 
         self.assertRedirects(response, "/accounts/login/")
+        self.assertNotEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
 
     def test_register_page_renders_form(self):
         """GET shows the registration form."""
@@ -231,6 +233,29 @@ class AccountFlowTests(TestCase):
         for phrase in ("does not exist", "doesn't exist", "no account", "not found", "unknown user"):
             self.assertNotIn(phrase, content)
 
+    def test_login_rejects_post_without_csrf_token(self):
+        """POST requests without a CSRF token are rejected."""
+        client = Client(enforce_csrf_checks=True)
+        response = client.post("/accounts/login/", {
+            "username": "student",
+            "password": "s3cure-Pass-99",
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("CSRF", response.content.decode())
+
+    def test_login_accepts_post_with_csrf_token(self):
+        """POST requests with a valid CSRF token are accepted."""
+        client = Client(enforce_csrf_checks=True)
+        token = client.get("/accounts/register/").context["csrf_token"]
+
+        response = client.post("/accounts/login/", {
+            "username": "student",
+            "password": "s3cure-Pass-99",
+            "csrfmiddlewaretoken": token,
+        })
+        self.assertNotEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
+
     def test_logout_requires_post_and_ends_session(self):
         """GET is rejected; POST ends the session."""
         self.client.force_login(self.user)
@@ -239,3 +264,25 @@ class AccountFlowTests(TestCase):
         self.client.post("/accounts/logout/")
 
         self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_logout_rejects_post_without_csrf_token(self):
+        """POST requests to logout without a CSRF token are rejected."""
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+
+        response = client.post("/accounts/logout/")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("CSRF", response.content.decode())
+
+    def test_logout_accepts_post_with_csrf_token(self):
+        """POST requests to logout with a valid CSRF token are accepted."""
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        token = client.get("/accounts/register/").context["csrf_token"]
+
+        response = client.post("/accounts/logout/", {
+            "csrfmiddlewaretoken": token,
+        })
+        self.assertNotEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
