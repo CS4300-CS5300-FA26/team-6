@@ -144,12 +144,11 @@ class AccountFlowTests(TestCase):
         self.assertTemplateUsed(response, "accounts/register.html")
 
     def test_login_with_valid_credentials_starts_session(self):
-        """Valid credentials log the user in and redirect home."""
+        """Valid credentials log the user in and starts the session"""
         response = self.client.post("/accounts/login/", {
             "username": "student", "password": "s3cure-Pass-99",
         })
 
-        self.assertRedirects(response, "/", fetch_redirect_response=False)
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
 
     def test_login_with_wrong_password_fails(self):
@@ -204,6 +203,17 @@ class AccountFlowTests(TestCase):
 
                 self.assertRedirects(response, "/", fetch_redirect_response=False)
                 self.client.logout()
+
+    def test_login_redirects_to_next_when_trusted(self):
+        """Login redirects to the 'next' URL if it is a trusted local URL."""
+        next_url = "/some/local/path/"
+        response = self.client.post("/accounts/login/", {
+            "username": "student",
+            "password": "s3cure-Pass-99",
+            "next": next_url,
+        }, QUERY_STRING=f"next={next_url}")
+
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
 
     def test_login_failures_do_not_display_password(self):
         """Failed login attempts do not reveal sensitive information in the response."""
