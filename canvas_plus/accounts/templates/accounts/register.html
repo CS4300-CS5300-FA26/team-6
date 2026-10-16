@@ -1,0 +1,15 @@
+{% comment %}
+<!-- {% extends "accounts/base.html" %} -->
+{% endcomment %}
+
+{% block title %}Create account{% endblock %}
+
+{% block content %}
+  <h1>Create account</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create account</button>
+  </form>
+  <p>Already registered? <a href="{% url 'login' %}">Sign in</a>.</p>
+{% endblock %}

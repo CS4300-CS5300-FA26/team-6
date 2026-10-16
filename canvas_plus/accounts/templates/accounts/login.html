@@ -1,0 +1,16 @@
+{% comment %}
+<!-- {% extends "accounts/base.html" %} -->
+{% endcomment %}
+
+{% block title %}Sign in{% endblock %}
+
+{% block content %}
+  <h1>Sign in</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Sign in</button>
+    <input type="hidden" name="next" value="{{ next|default:'' }}">
+  </form>
+  <p>New here? <a href="{% url 'register' %}">Create an account</a>.</p>
+{% endblock %}
