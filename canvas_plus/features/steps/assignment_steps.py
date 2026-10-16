@@ -1,13 +1,13 @@
 """Step definitions for assignment page Behave tests."""
-
+# pylint: disable=not-callable
+from datetime import timedelta
 # Import Behave decorators.
 from behave import given, when, then
 # Import Django's test client.
 from django.test import Client
-# import Assignment model so BDD test can test using actual DB records
-from assignments.models import Assignment
-from datetime import timedelta
 from django.utils import timezone
+# import Assignment model so BDD test can test using actual DB records
+from assignments.models import Assignment # pylint: disable=import-error
 
 @given("the assignments page exists")
 def step_assignments_page_exists(context):
@@ -46,7 +46,7 @@ def step_create_test_assignment(context):
 
 
 @then("the test assignment exists in the database")
-def step_test_assignment_exists(context):
+def step_test_assignment_exists(_context):
     """Verify the assignment exists during the Behave scenario."""
 
     # Query the database for the record just created.
