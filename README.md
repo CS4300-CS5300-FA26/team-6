@@ -195,6 +195,10 @@ Nathan Hinebaugh used ChatGPT to assist with building Behave testing, all sugges
 
 Jackson McGuire designed and tested the AI Code Review job and its review guidelines, using Claude Code to help write the workflow and draft triage replies. Jackson chose the key design decisions (full-file context, a two-level severity scale, and rules against invented findings), approved each part, and ran all six acceptance checks on PR #76.
 
+#### uv.lock check in CI
+
+Jackson McGuire used Claude Code to help add the uv.lock check to Lint and Test. Jackson proved it works by pushing a stale lockfile on purpose (CI failed), then reverting it (CI passed).
+
 ### During software development
 
 #### Translating ADO pipeline knowledge to GitHub Actions
