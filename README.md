@@ -179,6 +179,8 @@ Jackson McGuire used Claude Code to plan a clean-clone check and draft the READM
 
 ### During Sprint 1
 
+Nathan Hinebaugh used ChatGPT to assist with building Behave testing, all suggested code and configuration changes were reviewed, tested locally, and adjusted before pushed into repository
+
 #### AI code review in CI
 
 Jackson McGuire designed and tested the AI Code Review job and its review guidelines, using Claude Code to help write the workflow and draft triage replies. Jackson chose the key design decisions (full-file context, a two-level severity scale, and rules against invented findings), approved each part, and ran all six acceptance checks on PR #76.
