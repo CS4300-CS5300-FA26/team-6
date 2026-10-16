@@ -215,6 +215,45 @@ class AccountFlowTests(TestCase):
 
         self.assertRedirects(response, next_url, fetch_redirect_response=False)
 
+    def test_login_allows_http_next_url_for_http_request(self):
+        """Login allows 'next' URLs with the HTTP scheme when the request is HTTP."""
+        next_url = "http://testserver/some/path/"
+        response = self.client.post("/accounts/login/", {
+            "username": "student",
+            "password": "s3cure-Pass-99",
+            "next": next_url,
+        }, QUERY_STRING=f"next={next_url}")
+
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
+
+    def test_login_rejects_http_next_url_for_https_request(self):
+        """Login rejects 'next' URLs with the HTTP scheme when the request is HTTPS."""
+        next_url = "http://testserver/some/path/"
+        response = self.client.post("/accounts/login/", {
+            "username": "student",
+            "password": "s3cure-Pass-99",
+            "next": next_url,
+        }, 
+        QUERY_STRING=f"next={next_url}",
+        secure=True
+        )
+
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
+
+    def test_login_accepts_https_next_url_for_https_request(self):
+        """Login accepts 'next' URLs with the HTTPS scheme when the request is HTTPS."""
+        next_url = "https://testserver/some/path/"
+        response = self.client.post("/accounts/login/", {
+            "username": "student",
+            "password": "s3cure-Pass-99",
+            "next": next_url,
+        }, 
+        QUERY_STRING=f"next={next_url}",
+        secure=True
+        )
+
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
+
     def test_login_failures_do_not_display_password(self):
         """Failed login attempts do not reveal sensitive information in the response."""
         response = self.client.post("/accounts/login/", {
