@@ -7,16 +7,18 @@
     <title>{% block title %}Canvas+{% endblock %}</title>
     <style>
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: sans-serif; overflow-wrap: anywhere; }
-        nav { padding: 1rem; background: #17324d; color: white; }
-        nav a { color: inherit; }
-        .nav-links { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; }
+        body { display: flex; min-height: 100vh; margin: 0; font-family: sans-serif; overflow-wrap: anywhere; }
+        nav { flex: 0 0 12rem; padding: 1rem; background: #17324d; color: white; }
+        nav a { display: block; padding: 0.5rem; border-radius: 0.25rem; color: inherit; text-decoration: none; }
+        nav a:hover, nav a:focus-visible { background: #284b6d; text-decoration: underline; }
+        .nav-links { display: flex; flex-direction: column; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
         .menu-toggle { display: none; font: inherit; padding: 0.5rem 1rem; }
-        main { max-width: 72rem; margin: auto; padding: 1rem; }
+        main { flex: 1; min-width: 0; max-width: 72rem; margin: 0 auto; padding: 1rem; }
 
         @media (max-width: 40rem) {
-            .menu-toggle { display: inline-block; }
-            .nav-links { flex-direction: column; margin-top: 1rem; }
+            nav { flex-basis: 8rem; padding: 0.5rem; }
+            .menu-toggle { display: inline-block; padding: 0.5rem; }
+            .nav-links { margin-top: 1rem; }
             .nav-links[hidden] { display: none; }
         }
     </style>
