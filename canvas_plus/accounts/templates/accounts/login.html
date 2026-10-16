@@ -10,6 +10,7 @@
     {% csrf_token %}
     {{ form.as_p }}
     <button type="submit">Sign in</button>
+    <input type="hidden" name="next" value="{{ next|default:'' }}">
   </form>
   <p>New here? <a href="{% url 'register' %}">Create an account</a>.</p>
 {% endblock %}
