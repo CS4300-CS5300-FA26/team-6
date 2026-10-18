@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 from django.test import TestCase
 from django.utils import timezone
+from django.urls import reverse
 
 from .models import Assignment
 
@@ -32,3 +33,35 @@ class AssignmentsPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "You have no assignments.")
+
+PAGES_USING_BASE_TEMPLATE = ["/", "/assignments/"]
+
+@pytest.mark.integration
+class SharedTemplateTests(TestCase):
+    """The shared template is reflected across all pages listed above"""
+
+    def test_every_page_uses_base_template(self):
+        """The shared base template is used across all canvas+ pages in a list"""
+
+        for url in PAGES_USING_BASE_TEMPLATE:
+
+            with self.subTest(url=url):
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(response, "base.html")
+
+    def test_every_page_links_assignments(self):
+        """The assignments list page is displayed on every page through the navigation bar"""
+        assignments_url = reverse("assignment_list")
+
+        for url in PAGES_USING_BASE_TEMPLATE:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response,
+                    f'<a href="{assignments_url}">Assignments</a>',
+                    html=True,
+                )
