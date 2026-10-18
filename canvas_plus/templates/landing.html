@@ -4,20 +4,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Canvas+</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: sans-serif; background: #17324d; color: #1f2933; }
+    .landing { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+               gap: 4rem; padding: 2rem; }
+    .brand h1 { margin: 0; font-size: 3.5rem; color: white; }
+    .login-box { width: 100%; max-width: 22rem; padding: 2rem; background: white;
+                 border: 1px solid #d0d7de; border-radius: 8px;
+                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+    .login-box h2 { margin-top: 0; color: #17324d; }
+    label { display: block; margin-bottom: 0.3rem; font-weight: 600; }
+    input { width: 100%; padding: 0.6rem; margin-bottom: 1rem;
+            border: 1px solid #c5ccd3; border-radius: 6px; font: inherit; }
+    button { width: 100%; padding: 0.7rem; border: none; border-radius: 6px;
+             background: #17324d; color: white; font: inherit; font-weight: 600; cursor: pointer; }
+    button:hover { background: #0f2236; }
+    .login-box p { margin-bottom: 0; text-align: center; }
+    a { color: #17324d; }
+    @media (max-width: 40rem) {
+      .landing { flex-direction: column; gap: 1.5rem; }
+      .brand h1 { font-size: 2.5rem; }
+    }
+  </style>
 </head>
 <body>
-  <h1>Canvas+</h1>
+  <main class="landing">
+    <section class="brand">
+      <h1>Canvas+</h1>
+    </section>
 
-  <form method="post" action="{% url 'login' %}">
-    {% csrf_token %}
-    <label for="username">Username</label>
-    <input id="username" name="username" required>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" required>
-    <input type="hidden" name="next" value="">
-    <button type="submit">Log in</button>
-  </form>
-
-  <p>New here? <a href="{% url 'register' %}">Register</a></p>
+    <section class="login-box">
+      <h2>Log in</h2>
+      <form method="post" action="{% url 'login' %}">
+        {% csrf_token %}
+        <label for="username">Username</label>
+        <input id="username" name="username" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required>
+        <input type="hidden" name="next" value="">
+        <button type="submit">Log in</button>
+      </form>
+      <p>New here? <a href="{% url 'register' %}">Register</a></p>
+    </section>
+  </main>
 </body>
 </html>
