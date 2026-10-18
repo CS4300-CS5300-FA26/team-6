@@ -33,5 +33,6 @@ urlpatterns = [
     path("", assignment_list, name="home"),
     path('admin/', admin.site.urls),
     path('assignments/', include("assignments.urls")),
+    path('accounts/', include("accounts.urls")),
     path('health/', health_check, name="health_check"),
 ]

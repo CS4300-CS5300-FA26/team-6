@@ -1,6 +1,6 @@
 # Canvas Plus
 
-Canvas Plus is the CS 4300/5300 Fall 2026 Team 6 group project. It is a Django application that currently provides the initial project skeleton and an `assignments` app.
+Canvas Plus is the CS 4300/5300 Fall 2026 Team 6 group project. It is a Django application with `accounts` and `assignments` apps.
 
 ## Current project structure
 
@@ -17,6 +17,16 @@ team-6/
 │   │   ├── templates/assignments/
 │   │   │   └── assignment_list.html
 │   │   ├── models.py
+│   │   ├── tests.py
+│   │   ├── urls.py
+│   │   └── views.py
+│   ├── accounts/                # Accounts Django app
+│   │   ├── templates/accounts/
+│   │   │   ├── login.html
+│   │   │   └── register.html
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   ├── forms.py
 │   │   ├── tests.py
 │   │   ├── urls.py
 │   │   └── views.py
@@ -129,6 +139,10 @@ python manage.py runserver
 Open <http://127.0.0.1:8000/assignments/> to see the Assignments page, which confirms the project is running. 
 The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an administrator account with `python manage.py createsuperuser` to sign in.
 
+## Production deployment
+
+Live application: https://canvas-plus-1dc9dd2e56ac.herokuapp.com/
+
 ## Running tests
 
 With the virtual environment active, run the test suite from the repository root:
@@ -175,9 +189,15 @@ Jackson McGuire used Claude Code to plan a clean-clone check and draft the READM
 
 ### During Sprint 1
 
+Nathan Hinebaugh used ChatGPT to assist with building Behave testing, all suggested code and configuration changes were reviewed, tested locally, and adjusted before pushed into repository
+
 #### AI code review in CI
 
 Jackson McGuire designed and tested the AI Code Review job and its review guidelines, using Claude Code to help write the workflow and draft triage replies. Jackson chose the key design decisions (full-file context, a two-level severity scale, and rules against invented findings), approved each part, and ran all six acceptance checks on PR #76.
+
+#### uv.lock check in CI
+
+Jackson McGuire used Claude Code to help add the uv.lock check to Lint and Test. Jackson proved it works by pushing a stale lockfile on purpose (CI failed), then reverting it (CI passed).
 
 ### During software development
 
@@ -188,3 +208,13 @@ Joshua Douglas used Codex to update the shared base template's navigation positi
 #### Translating ADO pipeline knowledge to GitHub Actions
 
 Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps pipelines into the equivalent terminology and YAML syntax used by GitHub Actions.
+
+### During Sprint 1
+
+#### Assistance with CD pipeline
+
+Stephen Tovar used Copilot to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
+
+#### Assistance with Logon and Account Registration
+
+Stephen Tovar used Copilot to explain how `django.contrib.auth` provided django user account creation.
