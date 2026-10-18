@@ -37,6 +37,8 @@ class LandingPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Canvas+")
         self.assertContains(response, f'action="{reverse("login")}"')
+        self.assertContains(response, 'name="username"')
+        self.assertContains(response, 'name="password"')
         self.assertContains(response, 'name="csrfmiddlewaretoken"')
         self.assertContains(response, f'href="{reverse("register")}"')
         self.assertNotContains(response, "Private Homework")

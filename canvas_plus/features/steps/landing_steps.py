@@ -45,6 +45,8 @@ def step_see_text(context, text):
 @then("I see a login form")
 def step_see_login_form(context):
     assert f'action="{reverse("login")}"' in page(context)
+    assert 'name="username"' in page(context)
+    assert 'name="password"' in page(context)
     assert 'name="csrfmiddlewaretoken"' in page(context)
 
 
