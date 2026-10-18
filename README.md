@@ -201,6 +201,10 @@ Jackson McGuire used Claude Code to help add the uv.lock check to Lint and Test.
 
 ### During software development
 
+#### Moving navigation to the left sidebar
+
+Joshua Douglas used Codex to update the shared base template's navigation positioning and styling from a top bar to a left sidebar, preserving the existing menu items and mobile menu toggle.
+
 #### Translating ADO pipeline knowledge to GitHub Actions
 
 Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps pipelines into the equivalent terminology and YAML syntax used by GitHub Actions.
