@@ -44,4 +44,4 @@ def login_view(request):
 def logout_view(request):
     """End the session; POST only so the CSRF token protects it."""
     logout(request)
-    return redirect("login")
+    return redirect("home")
