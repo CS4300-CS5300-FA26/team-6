@@ -28,6 +28,5 @@ develop-eggs/
 eggs/
 .eggs/
 *.egg-info/
-*.eggdev-env.sh
-
+*.egg
 dev-env.sh
