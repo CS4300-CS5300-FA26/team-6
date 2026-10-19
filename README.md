@@ -241,17 +241,10 @@ Joshua Douglas used Codex to update the shared base template's navigation positi
 
 #### Connecting Canvas accounts for issue 38
 
-Joshua Douglas used Codex to review issue #38, estimate and break down the work,
-explain Django forms and views, review his form and API-client code, and create the
-initial acceptance tests and connection-page template. Joshua implemented the initial
-form, route, view, Canvas settings, and API client while working through those explanations.
-He then asked Codex to complete the issue. Codex implemented encrypted per-user token
-storage, connection and reconnection handling, saved-token masking, pagination and
-error safeguards, additional automated tests, and setup and study documentation.
-Codex ran the automated checks and prepared the pull request and its description.
-The automated Canvas tests use a local fake API or mocked responses; they do not
-validate a real school account. Human review of the generated implementation remains
-part of the pull request process.
+Joshua Douglas used codex to generate failing test cases before any code was implemented, codex walked through tests explaining in depth
+Joshua Douglas used codex to create connect_canvas.html front end
+Joshua Douglas used codex to review issue #38, estimate and break down the work
+Joshua douglas used codex to review and improve his form, API client code, models, and implement token encryption
 
 #### Translating ADO pipeline knowledge to GitHub Actions
 
