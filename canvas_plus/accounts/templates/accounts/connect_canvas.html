@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Connect Canvas | Canvas+{% endblock %}
+
+{% block content %}
+  <style>
+    .canvas-connection { width: 100%; max-width: 34rem; margin: 2rem auto; color: #1f2933; }
+    .canvas-connection h1 { margin: 0 0 0.75rem; color: #17324d; }
+    .canvas-connection p { line-height: 1.6; }
+    .canvas-connection .intro { margin-bottom: 1.5rem; }
+    .canvas-connection form { padding: 1.5rem; border: 1px solid #d0d7de;
+                              border-radius: 8px; background: #fff; }
+    .canvas-connection label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+    .canvas-connection input[type="password"] { display: block; width: 100%; padding: 0.75rem;
+                                               border: 1px solid #7b8794; border-radius: 6px;
+                                               background: #fff; color: inherit; font: inherit; }
+    .canvas-connection button { padding: 0.75rem 1.25rem; border: 0; border-radius: 6px;
+                                background: #17324d; color: #fff; font: inherit;
+                                font-weight: 600; cursor: pointer; }
+    .canvas-connection button:hover { background: #284b6d; }
+    .canvas-connection input:focus-visible,
+    .canvas-connection button:focus-visible,
+    .canvas-connection a:focus-visible { outline: 3px solid #2869a8; outline-offset: 3px; }
+    .canvas-connection .errorlist { padding-left: 1.25rem; color: #a31818; line-height: 1.6; }
+    .canvas-connection .token-help { color: #465564; font-size: 0.95rem; }
+    .canvas-connection a { color: #17324d; }
+    @media (max-width: 40rem) {
+      .canvas-connection { margin: 1rem auto; }
+      .canvas-connection form { padding: 1rem; }
+      .canvas-connection button { width: 100%; }
+    }
+  </style>
+
+  <section class="canvas-connection" aria-labelledby="connect-canvas-heading">
+    <h1 id="connect-canvas-heading">Connect Canvas</h1>
+    <p class="intro">
+      Connect your Canvas account so Canvas+ can load your courses and coursework.
+      Paste your Canvas personal access token below.
+    </p>
+
+    <form method="post" action="{% url 'connect_canvas' %}">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <p class="token-help">
+        Use a personal access token from your school's Canvas account, rather than
+        your Canvas password. Your token is hidden as you enter it.
+      </p>
+      <button type="submit">Connect</button>
+    </form>
+
+    <p><a href="{% url 'assignment_list' %}">Back to assignments</a></p>
+  </section>
+{% endblock %}
