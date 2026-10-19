@@ -189,7 +189,7 @@ Jackson McGuire used Claude Code to plan a clean-clone check and draft the READM
 
 ### During Sprint 1
 
-Nathan Hinebaugh used ChatGPT to assist with building Behave testing, all suggested code and configuration changes were reviewed, tested locally, and adjusted before pushed into repository
+Nathan Hinebaugh used ChatGPT to assist with building Behave testing and availability application, all suggested code and configuration changes were reviewed, tested locally, and adjusted before pushed into repository
 
 #### AI code review in CI
 
