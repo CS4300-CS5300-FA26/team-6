@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Availability</title>
+</head>
+<body>
+
+    <!-- Page heading for the student's availability section. -->
+    <h1>My Availability</h1>
+
+    <!-- Form used to create a new availability entry. -->
+    <h2>Add Availability</h2>
+
+    <form method="post">
+
+        <!-- Django requires this token on POST forms for security. -->
+        {% csrf_token %}
+
+        <!-- Display any form-wide validation errors, including
+             the start/end-time validation message. -->
+        {{ form.non_field_errors }}
+
+        <!-- Render the date, start-time, and end-time fields. -->
+        {{ form.as_p }}
+
+        <!-- Submit the new availability entry. -->
+        <button type="submit">Save Availability</button>
+    </form>
+
+    <!-- Display the student's currently saved availability entries. -->
+    <h2>Saved Availability</h2>
+
+    {% if availability_entries %}
+        <ul>
+            {% for entry in availability_entries %}
+                <li>
+                    <!-- Display the saved database values. -->
+                    {{ entry.date }}:
+                    {{ entry.start_time }} - {{ entry.end_time }}
+
+                    <!-- Allow the student to edit this availability entry. -->
+                    <a href="{% url 'availability:edit' entry.id %}">
+                        Edit
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <!-- Show a clear message when no availability has been entered. -->
+        <p>No availability entered yet.</p>
+    {% endif %}
+
+</body>
+</html>

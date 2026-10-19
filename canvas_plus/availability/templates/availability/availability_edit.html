@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Availability</title>
+</head>
+<body>
+
+    <!-- Page heading for editing an existing availability entry. -->
+    <h1>Edit Availability</h1>
+
+    <form method="post">
+
+        <!-- Required by Django for secure POST requests. -->
+        {% csrf_token %}
+
+        <!-- Show validation errors, such as an invalid time range. -->
+        {{ form.non_field_errors }}
+
+        <!-- Pre-filled form fields for the selected availability entry. -->
+        {{ form.as_p }}
+
+        <!-- Save the student's updated availability. -->
+        <button type="submit">Save Changes</button>
+    </form>
+
+    <!-- Return to the main availability page without changing anything. -->
+    <a href="{% url 'availability:list' %}">
+        Cancel
+    </a>
+
+</body>
+</html>
