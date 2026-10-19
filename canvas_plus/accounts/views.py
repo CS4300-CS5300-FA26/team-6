@@ -51,7 +51,7 @@ def connect_canvas(request):
 
         token = form.cleaned_data["token"]
 
-        courses = list_couses(token)
+        courses = list_courses(token)
 
     return render(request, "accounts/connect_canvas.html", {"form": form})
 
