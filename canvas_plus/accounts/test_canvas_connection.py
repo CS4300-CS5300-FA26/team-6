@@ -327,6 +327,29 @@ def test_changed_canvas_host_does_not_receive_a_saved_token(student_client, sett
     assert "Your Canvas connection expired. Please reconnect." in PageContent(response).text
 
 
+@pytest.mark.parametrize("saved_url,configured_url", [
+    ("https://canvas.example.edu", "https://canvas.example.edu:443"),
+    ("https://canvas.example.edu:443", "https://canvas.example.edu"),
+    ("https://Canvas.Example.edu", "https://canvas.example.edu"),
+])
+def test_equivalent_canvas_origin_preserves_connection(student_client, settings,
+                                                       saved_url, configured_url):
+    """Equivalent origin notation must not expire a working saved credential."""
+    client, user = student_client
+    settings.CANVAS_BASE_URL = saved_url
+    with patch("accounts.views.list_courses", return_value=COURSES):
+        connect_successfully(client)
+
+    settings.CANVAS_BASE_URL = configured_url
+    with patch("accounts.connections.list_courses", return_value=COURSES) as request:
+        response = client.get("/", follow=True)
+
+    assert response.status_code == 200
+    assert "Your Canvas connection expired." not in PageContent(response).text
+    request.assert_called_once_with(VALID_TOKEN)
+    assert CanvasConnection.objects.get(user=user).is_valid
+
+
 def test_unreadable_saved_token_offers_reconnection(student_client):
     """Tampered ciphertext is rejected and never sent to Canvas."""
     client, user = student_client

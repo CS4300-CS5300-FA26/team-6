@@ -2,7 +2,9 @@
 
 from django.core.exceptions import ImproperlyConfigured
 
-from .canvas_client import CanvasAPIError, CanvasAuthenticationError, canvas_base_url, list_courses
+from .canvas_client import (
+    CanvasAPIError, CanvasAuthenticationError, canvas_base_url, canvas_origin, list_courses,
+)
 from .models import CanvasConnection, SavedTokenError
 
 
@@ -16,7 +18,7 @@ def connection_status(user):
     if not connection.is_valid:
         return {"canvas_connection_expired": True}
     try:
-        if connection.canvas_url != canvas_base_url():
+        if canvas_origin(connection.canvas_url) != canvas_origin(canvas_base_url()):
             raise SavedTokenError("The configured Canvas host changed.")
         list_courses(connection.get_token())
     except (CanvasAuthenticationError, SavedTokenError):

@@ -245,6 +245,7 @@ Joshua Douglas used codex to generate failing test cases before any code was imp
 Joshua Douglas used codex to create connect_canvas.html front end
 Joshua Douglas used codex to review issue #38, estimate and break down the work
 Joshua douglas used codex to review and improve his form, API client code, models, and implement token encryption
+Joshua Douglas used codex to fix this issue.
 
 #### Translating ADO pipeline knowledge to GitHub Actions
 

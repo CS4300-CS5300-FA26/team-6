@@ -16,7 +16,7 @@ class CanvasAuthenticationError(CanvasAPIError):
     """Canvas rejected the supplied access token."""
 
 
-def _origin(url):
+def canvas_origin(url):
     """Reject credential-bearing URLs and compare effective scheme/host/port."""
     parsed = urlsplit(url)
     if (parsed.scheme not in {"https", "http"} or not parsed.hostname
@@ -29,7 +29,7 @@ def canvas_base_url():
     """Require a configured HTTPS origin; permit HTTP only for loopback testing."""
     base_url = settings.CANVAS_BASE_URL.rstrip("/")
     try:
-        origin = _origin(base_url)
+        origin = canvas_origin(base_url)
         parsed = urlsplit(base_url)
         if parsed.path or parsed.query:
             raise ValueError("Canvas base URL must contain only the origin")
@@ -53,7 +53,7 @@ def list_courses(token):
 
     while next_url:
         try:
-            safe_origin = _origin(next_url) == _origin(base_url)
+            safe_origin = canvas_origin(next_url) == canvas_origin(base_url)
         except ValueError:
             safe_origin = False
         if not safe_origin or next_url in visited or len(visited) >= 100:
