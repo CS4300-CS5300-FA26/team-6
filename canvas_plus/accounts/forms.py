@@ -21,7 +21,6 @@ class CanvasConnectionForm(forms.Form):
             render_value=False,
             attrs={"placeholder": "Paste your Canvas API Token"}
         ),
-        max_length=64,  # Canvas currently generates 64-character personal access tokens.
         strip=True,
         required=True,
         label="Canvas personal access token",
