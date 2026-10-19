@@ -4,8 +4,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.contrib.auth.forms import AuthenticationForm
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
 
 from .forms import RegistrationForm
+from .forms import CanvasConnectionForm
 
 
 def register_view(request):
@@ -38,6 +40,21 @@ def login_view(request):
         "accounts/login.html",
         {"form": form, "next": next_url},
     )
+
+@login_required
+def token_view(request):
+    """Show the Canvas API token form"""
+    form = CanvasConnectionForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+
+        token = form.cleaned_data["token"]
+
+        # TODO: validate the canvas API token through the canvas API client
+
+    return render(request, "accounts/connect_canvas.html", {"form": form})
+
+
 
 
 @require_POST
