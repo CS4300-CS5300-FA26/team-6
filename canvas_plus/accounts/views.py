@@ -42,7 +42,7 @@ def login_view(request):
     )
 
 @login_required
-def token_view(request):
+def connect_canvas(request):
     """Show the Canvas API token form"""
     form = CanvasConnectionForm(request.POST or None)
 
