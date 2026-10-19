@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 
 from .forms import RegistrationForm
 from .forms import CanvasConnectionForm
+from .canvas_client import list_couses
 
 
 def register_view(request):
@@ -50,11 +51,9 @@ def connect_canvas(request):
 
         token = form.cleaned_data["token"]
 
-        # TODO: validate the canvas API token through the canvas API client
+        courses = list_couses(token)
 
     return render(request, "accounts/connect_canvas.html", {"form": form})
-
-
 
 
 @require_POST
