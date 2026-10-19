@@ -36,6 +36,7 @@
         <ul class="nav-links" id="navigation-links">
             <li><a href="{% url 'assignment_list' %}">Assignments</a></li>
             {% if user.is_authenticated %}
+                <li><a href="{% url 'connect_canvas' %}">Connect Canvas</a></li>
                 <li class="logout-item">
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
@@ -46,6 +47,15 @@
         </ul>
     </nav>
     <main>
+        {% if canvas_connection_expired %}
+            <p role="alert">Your Canvas connection expired. Please reconnect.
+                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+            </p>
+        {% elif canvas_connection_error %}
+            <p role="status">{{ canvas_connection_error }}
+                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+            </p>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
     <script>

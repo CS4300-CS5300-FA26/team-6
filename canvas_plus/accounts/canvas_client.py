@@ -1,38 +1,92 @@
+"""Read enrolled courses from Canvas without exposing access tokens."""
+
+from urllib.parse import urlsplit
+
 import requests
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.views.decorators.debug import sensitive_variables
 
-class CanvasAuthenticationError(Exception):
+
+class CanvasAPIError(Exception):
+    """Canvas could not provide a usable response; credentials may still be valid."""
+
+
+class CanvasAuthenticationError(CanvasAPIError):
     """Canvas rejected the supplied access token."""
 
-def list_courses(token):
-    """Return the student's actively enrolled course list from Canvas"""
-    base_url = settings.CANVAS_BASE_URL.rstrip("/")
-    if not base_url:
-        raise ImproperlyConfigured("Canvas base URL not configured in your .env file")
 
-    # Courses require pagination (https://developerdocs.instructure.com/services/canvas/basics/file.pagination)
+def _origin(url):
+    """Reject credential-bearing URLs and compare effective scheme/host/port."""
+    parsed = urlsplit(url)
+    if (parsed.scheme not in {"https", "http"} or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None or parsed.fragment):
+        raise ValueError("Invalid Canvas URL")
+    return parsed.scheme, parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+
+
+def canvas_base_url():
+    """Require a configured HTTPS origin; permit HTTP only for loopback testing."""
+    base_url = settings.CANVAS_BASE_URL.rstrip("/")
+    try:
+        origin = _origin(base_url)
+        parsed = urlsplit(base_url)
+        if parsed.path or parsed.query:
+            raise ValueError("Canvas base URL must contain only the origin")
+        if origin[0] != "https" and origin[1] not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError("Canvas requires HTTPS")
+    except ValueError:
+        raise ImproperlyConfigured(
+            "Configure CANVAS_BASE_URL with your school's HTTPS origin."
+        ) from None
+    return base_url
+
+
+@sensitive_variables("token", "response")
+def list_courses(token):
+    """Return all active student courses, following same-origin pagination only."""
+    base_url = canvas_base_url()
     courses = []
     next_url = f"{base_url}/api/v1/courses"
-    params = {
-        "enrollment_type": "student",
-        "enrollment_state": "active",
-    }
+    params = {"enrollment_type": "student", "enrollment_state": "active"}
+    visited = set()
 
-    while next_url is not None:
-        response = requests.get(
-            next_url,
-            headers={"Authorization": f"Bearer {token}"},
-            params=params,
-            timeout=10,
-        )
+    while next_url:
+        try:
+            safe_origin = _origin(next_url) == _origin(base_url)
+        except ValueError:
+            safe_origin = False
+        if not safe_origin or next_url in visited or len(visited) >= 100:
+            raise CanvasAPIError("Canvas returned an unsafe or repeated pagination link.")
+        visited.add(next_url)
 
-        # Error code 401 is specifically when the API token is rejected. Other errors (403, 429, 500, etc) are handled in response.raise_for_status()
+        try:
+            response = requests.get(
+                next_url,
+                headers={"Authorization": f"Bearer {token}"},
+                params=params,
+                timeout=10,
+                allow_redirects=False,
+            )
+        except requests.RequestException:
+            raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
         if response.status_code == 401:
             raise CanvasAuthenticationError("Canvas rejected the token.")
 
-        response.raise_for_status()
-        courses.extend(response.json())
+        if response.status_code != 200:
+            raise CanvasAPIError("Canvas could not load your courses. Please try again.")
+        try:
+            page = response.json()
+        except ValueError:
+            raise CanvasAPIError(
+                "Canvas returned an unreadable response. Please try again."
+            ) from None
+        if not isinstance(page, list) or any(
+            not isinstance(course, dict) or not isinstance(course.get("name"), str)
+            for course in page
+        ):
+            raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
+        courses.extend(page)
 
         next_url = response.links.get("next", {}).get("url")
         params = None

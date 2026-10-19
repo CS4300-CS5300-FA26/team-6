@@ -143,6 +143,36 @@ The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an a
 
 Live application: https://canvas-plus-1dc9dd2e56ac.herokuapp.com/
 
+## Connecting a Canvas account
+
+Sign in to Canvas+ and choose **Connect Canvas** from the sidebar. Paste a personal
+access token generated in your school's Canvas account. A successful connection
+shows your active student course names and saves the credential encrypted. Returning
+to the connection page shows only its last four characters. Opening the signed-in
+home page checks the saved connection and offers reconnection if Canvas rejects it.
+
+Configure these environment variables before connecting:
+
+- `CANVAS_BASE_URL`: your school's HTTPS origin, such as `https://school.instructure.com`,
+  without `/api/v1` or any other path.
+- `CANVAS_TOKEN_ENCRYPTION_KEY`: a separate Fernet encryption key. Generate it once
+  with the following command after installing dependencies, then save it in `.env`
+  locally or the production platform's secret environment configuration:
+
+```console
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Do not commit the generated key or a Canvas token. Keep the encryption key stable
+across deployments and protect its backup: replacing or losing it requires students
+to reconnect. The app can start without Canvas configuration, but connecting fails
+closed until both settings are supplied. Apply the new accounts migration with
+`python canvas_plus/manage.py migrate`; Heroku's existing release command also runs migrations.
+
+The [Canvas connection study guide](docs/canvas-connection.md) explains the request
+flow, files, tests, deployment configuration, and limitations. Assignment importing
+is tracked separately in issue #39.
+
 ## Running tests
 
 With the virtual environment active, run the test suite from the repository root:
@@ -208,6 +238,20 @@ Jackson McGuire used Claude Code to help write the landing page and its pytest a
 #### Moving navigation to the left sidebar
 
 Joshua Douglas used Codex to update the shared base template's navigation positioning and styling from a top bar to a left sidebar, preserving the existing menu items and mobile menu toggle.
+
+#### Connecting Canvas accounts for issue 38
+
+Joshua Douglas used Codex to review issue #38, estimate and break down the work,
+explain Django forms and views, review his form and API-client code, and create the
+initial acceptance tests and connection-page template. Joshua implemented the initial
+form, route, view, Canvas settings, and API client while working through those explanations.
+He then asked Codex to complete the issue. Codex implemented encrypted per-user token
+storage, connection and reconnection handling, saved-token masking, pagination and
+error safeguards, additional automated tests, and setup and study documentation.
+Codex ran the automated checks and prepared the pull request and its description.
+The automated Canvas tests use a local fake API or mocked responses; they do not
+validate a real school account. Human review of the generated implementation remains
+part of the pull request process.
 
 #### Translating ADO pipeline knowledge to GitHub Actions
 

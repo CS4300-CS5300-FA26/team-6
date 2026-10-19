@@ -1,4 +1,4 @@
-"""Forms for account creation."""
+"""Forms for account creation and Canvas connection credentials."""
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
@@ -12,6 +12,7 @@ class RegistrationForm(UserCreationForm):  # pylint: disable=too-many-ancestors
         model = get_user_model()
         fields = ("username",)
 
+
 class CanvasConnectionForm(forms.Form):
     """Collect the canvas API token without displaying it"""
 
@@ -20,13 +21,8 @@ class CanvasConnectionForm(forms.Form):
             render_value=False,
             attrs={"placeholder": "Paste your Canvas API Token"}
         ),
-        max_length=64,  # Canvas max token size is 64 characters (https://raw.githubusercontent.com/instructure/canvas-lms/master/app/models/access_token.rb#:~:text=TOKEN_SIZE%20%3D%2064,%3Agenerate_token%20before_create%20%3Agenerate_refresh_token)
+        max_length=64,  # Canvas currently generates 64-character personal access tokens.
         strip=True,
         required=True,
-        label="Canvas personal access token")
-
-
-
-
-
-
+        label="Canvas personal access token",
+    )

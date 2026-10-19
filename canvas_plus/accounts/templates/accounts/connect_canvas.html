@@ -38,6 +38,23 @@
       Paste your Canvas personal access token below.
     </p>
 
+    {% if saved_token_last_four %}
+      <p>Saved token: <span aria-label="Hidden token characters">••••</span>{{ saved_token_last_four }}</p>
+      <p class="token-help">Enter a new token below to replace your saved connection.</p>
+    {% endif %}
+
+    {% if canvas_connected %}
+      <p role="status">Canvas connected</p>
+      <h2>Your enrolled courses</h2>
+      <ul>
+        {% for course in courses %}
+          <li>{{ course.name }}</li>
+        {% empty %}
+          <li>No active enrolled courses found.</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
     <form method="post" action="{% url 'connect_canvas' %}">
       {% csrf_token %}
       {{ form.as_p }}

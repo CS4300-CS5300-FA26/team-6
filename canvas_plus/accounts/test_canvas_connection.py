@@ -14,6 +14,7 @@ HTTP is used only for this loopback test server; production must use HTTPS.
 """
 
 import json
+from unittest.mock import patch
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -21,7 +22,11 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import pytest
+from cryptography.fernet import Fernet
 from django.test import Client
+
+from .canvas_client import CanvasAPIError
+from .models import CanvasConnection
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
@@ -71,6 +76,7 @@ class PageContent(HTMLParser):
 @pytest.fixture(name="canvas_api")
 def fake_canvas_api(settings):
     """Canvas accepts one fake token until the test revokes it."""
+    settings.CANVAS_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
     state = SimpleNamespace(revoked=False, course_requests=0, rejected_requests=0)
 
     class Handler(BaseHTTPRequestHandler):
@@ -202,3 +208,160 @@ def test_saved_token_is_not_displayed_in_full(student_client):
     assert VALID_TOKEN not in html
     assert VALID_TOKEN[:-4] not in html
     assert "fake-canvas-secret" not in html
+
+
+def test_saved_token_is_encrypted_in_the_database(student_client):
+    """The database stores ciphertext while the server can recover the credential."""
+    client, user = student_client
+    connect_successfully(client)
+    connection = CanvasConnection.objects.get(user=user)
+    assert VALID_TOKEN not in connection.encrypted_token
+    assert "fake-canvas-secret" not in connection.encrypted_token
+    assert connection.get_token() == VALID_TOKEN
+    assert connection.token_last_four == "W9Z7"
+    assert connection.is_valid
+
+
+def test_rejected_replacement_preserves_the_saved_connection(student_client):
+    """A mistyped replacement must not destroy a working saved credential."""
+    client, user = student_client
+    connect_successfully(client)
+    before = CanvasConnection.objects.get(user=user).encrypted_token
+    response = client.post(CONNECT_URL, {"token": INVALID_TOKEN})
+    assert "Invalid token. Check your token and try again." in PageContent(response).text
+    connection = CanvasConnection.objects.get(user=user)
+    assert connection.encrypted_token == before
+    assert connection.is_valid
+    assert INVALID_TOKEN not in response.content.decode()
+
+
+def test_reconnect_updates_existing_record_and_clears_expiry(student_client, canvas_api):
+    """Revocation persists until a successful reconnect replaces the credential."""
+    client, user = student_client
+    connect_successfully(client)
+    original_pk = CanvasConnection.objects.get(user=user).pk
+    canvas_api.revoked = True
+    client.get("/", follow=True)
+    connection = CanvasConnection.objects.get(user=user)
+    assert not connection.is_valid
+    response = client.get("/assignments/")
+    assert "Your Canvas connection expired. Please reconnect." in PageContent(response).text
+    canvas_api.revoked = False
+    connect_successfully(client)
+    connection.refresh_from_db()
+    assert connection.pk == original_pk
+    assert connection.is_valid
+    assert CanvasConnection.objects.filter(user=user).count() == 1
+    response = client.get("/assignments/")
+    assert "Your Canvas connection expired." not in PageContent(response).text
+
+
+def test_another_student_cannot_see_or_replace_the_connection(student_client, django_user_model):
+    """Connections are always selected using the authenticated user."""
+    client, owner = student_client
+    connect_successfully(client)
+    other = django_user_model.objects.create_user(username="other-student")
+    client.force_login(other)
+    response = client.get(CONNECT_URL, {"user_id": owner.pk})
+    assert "W9Z7" not in PageContent(response).text
+    response = client.post(CONNECT_URL, {"token": VALID_TOKEN, "user_id": owner.pk})
+    assert response.status_code == 200
+    assert CanvasConnection.objects.filter(user=owner).exists()
+    assert CanvasConnection.objects.filter(user=other).exists()
+    assert CanvasConnection.objects.count() == 2
+
+
+def test_anonymous_student_is_redirected_to_login(canvas_api):
+    """A credential page cannot be used without a Canvas+ account session."""
+    del canvas_api
+    response = Client().get(CONNECT_URL)
+    assert response.status_code == 302
+    assert response.url == f"/accounts/login/?next={CONNECT_URL}"
+
+
+def test_connect_form_requires_csrf(student_client):
+    """Even a signed-in student must submit the CSRF token."""
+    _client, user = student_client
+    protected_client = Client(enforce_csrf_checks=True)
+    protected_client.force_login(user)
+    response = protected_client.post(CONNECT_URL, {"token": VALID_TOKEN})
+    assert response.status_code == 403
+    assert not CanvasConnection.objects.filter(user=user).exists()
+    page = protected_client.get(CONNECT_URL)
+    response = protected_client.post(CONNECT_URL, {
+        "token": VALID_TOKEN,
+        "csrfmiddlewaretoken": page.context["csrf_token"],
+    })
+    assert "Canvas connected" in PageContent(response).text
+
+
+def test_blank_submission_does_not_contact_canvas(student_client, canvas_api):
+    """Empty POST data must bind the form and display required-field feedback."""
+    client, _user = student_client
+    response = client.post(CONNECT_URL, {})
+    assert "This field is required." in PageContent(response).text
+    assert canvas_api.course_requests == 0
+    assert not CanvasConnection.objects.exists()
+
+
+@pytest.mark.parametrize("key", ["", "not-a-fernet-key"])
+def test_missing_or_invalid_encryption_key_fails_closed(student_client, settings, key):
+    """A valid Canvas token cannot be saved without configured encryption."""
+    client, _user = student_client
+    settings.CANVAS_TOKEN_ENCRYPTION_KEY = key
+    response = client.post(CONNECT_URL, {"token": VALID_TOKEN})
+    assert "Canvas connection is not configured." in PageContent(response).text
+    assert "Canvas connected" not in PageContent(response).text
+    assert VALID_TOKEN not in response.content.decode()
+    assert not CanvasConnection.objects.exists()
+
+
+def test_changed_canvas_host_does_not_receive_a_saved_token(student_client, settings):
+    """A saved credential remains bound to the Canvas origin it was validated on."""
+    client, _user = student_client
+    connect_successfully(client)
+    settings.CANVAS_BASE_URL = "https://different-school.example"
+    with patch("accounts.connections.list_courses") as request:
+        response = client.get("/assignments/")
+    request.assert_not_called()
+    assert "Your Canvas connection expired. Please reconnect." in PageContent(response).text
+
+
+def test_unreadable_saved_token_offers_reconnection(student_client):
+    """Tampered ciphertext is rejected and never sent to Canvas."""
+    client, user = student_client
+    connect_successfully(client)
+    CanvasConnection.objects.filter(user=user).update(encrypted_token="corrupted")
+    response = client.get("/assignments/")
+    assert "Your Canvas connection expired. Please reconnect." in PageContent(response).text
+
+
+def test_temporary_outage_does_not_expire_saved_token(student_client):
+    """An outage preserves the credential and offers retry rather than expiry."""
+    client, user = student_client
+    connect_successfully(client)
+    with patch("accounts.connections.list_courses", side_effect=CanvasAPIError("Unavailable")):
+        response = client.get("/assignments/")
+    assert "Unable to check Canvas right now." in PageContent(response).text
+    assert "Your Canvas connection expired." not in PageContent(response).text
+    assert CanvasConnection.objects.get(user=user).is_valid
+
+
+def test_valid_token_with_no_courses_still_connects(student_client):
+    """An empty enrollment list is a successful connection, not an invalid token."""
+    client, user = student_client
+    with patch("accounts.views.list_courses", return_value=[]):
+        response = client.post(CONNECT_URL, {"token": VALID_TOKEN})
+    assert "Canvas connected" in PageContent(response).text
+    assert "No active enrolled courses found." in PageContent(response).text
+    assert CanvasConnection.objects.get(user=user).is_valid
+
+
+def test_canvas_failure_during_connect_shows_safe_feedback(student_client):
+    """Service failures do not save credentials or report invalid tokens."""
+    client, _user = student_client
+    with patch("accounts.views.list_courses", side_effect=CanvasAPIError("Please try again.")):
+        response = client.post(CONNECT_URL, {"token": VALID_TOKEN})
+    assert "Please try again." in PageContent(response).text
+    assert "Invalid token." not in PageContent(response).text
+    assert not CanvasConnection.objects.exists()
