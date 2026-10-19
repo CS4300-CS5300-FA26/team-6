@@ -310,15 +310,16 @@ class AccountFlowTests(TestCase):
         self.client.force_login(self.user)
 
         self.assertEqual(self.client.get("/accounts/logout/").status_code, 405)
-        self.client.post("/accounts/logout/")
+        response = self.client.post("/accounts/logout/")
 
+        self.assertRedirects(response, "/")
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_authenticated_navigation_renders_csrf_protected_logout_button(self):
         """Authenticated users can log out from the shared navigation."""
         self.client.force_login(self.user)
 
-        response = self.client.get("/accounts/login/")
+        response = self.client.get("/assignments/")
 
         self.assertContains(response, 'action="/accounts/logout/"')
         self.assertContains(response, 'name="csrfmiddlewaretoken"')
