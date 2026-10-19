@@ -20,7 +20,7 @@ from django.urls import include, path
 from django.conf import settings
 
 
-from assignments.views import assignment_list
+from .views import landing
 
 
 def health_check(request):
@@ -30,7 +30,7 @@ def health_check(request):
 
 
 urlpatterns = [
-    path("", assignment_list, name="home"),
+    path("", landing, name="home"),
     path('admin/', admin.site.urls),
     path('assignments/', include("assignments.urls")),
     path('accounts/', include("accounts.urls")),
