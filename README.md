@@ -7,40 +7,72 @@ Canvas Plus is the CS 4300/5300 Fall 2026 Team 6 group project. It is a Django a
 ```text
 team-6/
 ├── .github/
+│   ├── ai-review-guidelines.md
+│   ├── local_test-event.json
 │   └── workflows/
-│       └── ci-cd.yaml           # CI/CD pipeline (lint, test, coverage, deploy)
-├── canvas_plus/                 # Django project root
-│   ├── assignments/             # Assignments Django app
+│       └── ci-cd.yaml                  # Lint, tests, coverage, AI review, deployment
+├── canvas_plus/                        # Django project root
+│   ├── accounts/                       # Registration, login, and Canvas connections
 │   │   ├── migrations/
-│   │   ├── admin.py
+│   │   │   └── 0001_initial.py         # Per-user encrypted Canvas connection table
+│   │   ├── templates/accounts/
+│   │   │   ├── connect_canvas.html
+│   │   │   ├── login.html
+│   │   │   └── register.html
 │   │   ├── apps.py
+│   │   ├── canvas_client.py            # Canvas course requests and safe pagination
+│   │   ├── connections.py              # Saved-connection checks and banner context
+│   │   ├── forms.py                    # Registration and Canvas token forms
+│   │   ├── models.py                   # Encrypted per-user Canvas credentials
+│   │   ├── test_canvas_client.py       # HTTP client behavior and failure cases
+│   │   ├── test_canvas_connection.py   # Connection acceptance and security tests
+│   │   ├── tests.py                    # Registration, login, and logout tests
+│   │   ├── urls.py
+│   │   └── views.py
+│   ├── assignments/                    # Assignment listing
+│   │   ├── migrations/
 │   │   ├── templates/assignments/
 │   │   │   └── assignment_list.html
+│   │   ├── admin.py
+│   │   ├── apps.py
 │   │   ├── models.py
 │   │   ├── tests.py
 │   │   ├── urls.py
 │   │   └── views.py
-│   ├── accounts/                # Accounts Django app
-│   │   ├── templates/accounts/
-│   │   │   ├── login.html
-│   │   │   └── register.html
-│   │   ├── __init__.py
-│   │   ├── apps.py
-│   │   ├── forms.py
+│   ├── canvas_plus/                    # Django project configuration and landing view
+│   │   ├── asgi.py
+│   │   ├── settings.py
+│   │   ├── settings_test.py            # Behave test settings
 │   │   ├── tests.py
 │   │   ├── urls.py
-│   │   └── views.py
-│   ├── canvas_plus/             # Django project configuration
-│   │   ├── settings.py
-│   │   ├── urls.py
-│   │   ├── asgi.py
+│   │   ├── views.py
 │   │   └── wsgi.py
+│   ├── features/                       # Executable Gherkin acceptance scenarios
+│   │   ├── steps/
+│   │   │   ├── assignment_steps.py
+│   │   │   ├── connect_canvas_steps.py
+│   │   │   └── landing_steps.py
+│   │   ├── assignments_page.feature
+│   │   ├── connect_canvas.feature
+│   │   └── landing_page.feature
+│   ├── templates/                      # Shared layout and landing page
+│   │   ├── base.html
+│   │   └── landing.html
 │   └── manage.py
-├── src/                         # Placeholder module used by the CI pipeline
-│   └── main.py
-├── tests/                       # pytest tests run by the CI pipeline
+├── docs/
+│   ├── adr/
+│   │   └── 0001-canvas-token-storage.md # Token storage architecture decision
+│   └── canvas-connection.md            # Implementation study guide
+├── src/
+│   └── main.py                         # Placeholder module used by CI
+├── tests/
 │   └── test_main.py
-├── pyproject.toml               # Pinned dependencies plus lint/test tooling (dev extra)
+├── AGENTS.md                           # Project instructions for coding agents
+├── CONTRIBUTING.md                     # Dependencies and contribution workflow
+├── env.example                         # Environment variable names and placeholders
+├── Procfile                            # Heroku migration and web commands
+├── pyproject.toml                      # Dependencies and lint/test configuration
+├── uv.lock                             # Resolved dependency versions
 └── README.md
 ```
 
