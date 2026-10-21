@@ -1,4 +1,4 @@
-"""Read enrolled courses from Canvas without exposing access tokens."""
+"""Read enrolled courses and assignments from Canvas without exposing tokens."""
 
 from urllib.parse import urlsplit
 
@@ -92,3 +92,9 @@ def list_courses(token):
         params = None
 
     return courses
+
+
+@sensitive_variables("token", "response")
+def list_upcoming_assignments(token, courses):
+    """Return normalized upcoming assignments for the supplied enrolled courses."""
+    raise NotImplementedError("Upcoming assignment retrieval is not implemented yet.")

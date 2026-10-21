@@ -1,11 +1,17 @@
 """Canvas HTTP boundary tests; no requests reach a real Canvas server."""
 
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 
-from .canvas_client import CanvasAPIError, CanvasAuthenticationError, list_courses
+from .canvas_client import (
+    CanvasAPIError,
+    CanvasAuthenticationError,
+    list_courses,
+    list_upcoming_assignments,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -106,3 +112,145 @@ def test_malformed_course_data_is_not_treated_as_success(payload):
     with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
         with pytest.raises(CanvasAPIError):
             list_courses("fake-token")
+
+
+@pytest.mark.unit
+def test_upcoming_assignments_are_normalized_and_include_course_name():
+    """Return upcoming assignments with a UTC due date and their course name."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    assignments = [{
+        "name": "Project 1",
+        "due_at": "2026-10-22T18:30:00-06:00",
+    }]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response(assignments),
+    ) as get:
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert result == [{
+        "title": "Project 1",
+        "course_name": "CS 4300",
+        "due_date": datetime(2026, 10, 23, 0, 30, tzinfo=timezone.utc),
+    }]
+    assert get.call_args.args == (
+        "https://canvas.example.edu/api/v1/courses/42/assignments",
+    )
+    assert get.call_args.kwargs["params"] == {"bucket": "upcoming"}
+    assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+
+
+@pytest.mark.unit
+def test_upcoming_assignments_preserve_missing_due_date_as_none():
+    """A Canvas null due_at value remains None in the normalized record."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response([{"name": "Project 1", "due_at": None}]),
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert result == [{
+        "title": "Project 1",
+        "course_name": "CS 4300",
+        "due_date": None,
+    }]
+
+
+@pytest.mark.unit
+def test_upcoming_assignments_combine_course_results_and_return_empty_list():
+    """Each supplied course is queried and a successful empty response is empty."""
+    courses = [
+        {"id": 42, "name": "CS 4300"},
+        {"id": 84, "name": "MATH 2250"},
+    ]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response([]), response([])],
+    ) as get:
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert result == []
+    assert get.call_count == 2
+    assert [call.kwargs["params"] for call in get.call_args_list] == [
+        {"bucket": "upcoming"},
+        {"bucket": "upcoming"},
+    ]
+
+
+@pytest.mark.unit
+def test_upcoming_assignments_follow_pagination_without_repeating_query_params():
+    """Follow Canvas next links and retain the course name across pages."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    next_url = "https://canvas.example.edu/api/v1/courses/42/assignments?page=2"
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{"name": "Project 1", "due_at": None}], next_url=next_url),
+            response([{"name": "Project 2", "due_at": None}]),
+        ],
+    ) as get:
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["Project 1", "Project 2"]
+    assert get.call_args_list[1].args == (next_url,)
+    assert get.call_args_list[0].kwargs["params"] == {"bucket": "upcoming"}
+    assert get.call_args_list[1].kwargs["params"] is None
+    for call in get.call_args_list:
+        assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+        assert call.kwargs["timeout"] == 10
+        assert call.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.unit
+def test_upcoming_assignments_reject_unauthorized_pagination_links():
+    """Do not send the bearer token to a different origin from a next link."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response(
+            [], next_url="https://untrusted.example/api/v1/assignments"
+        ),
+    ) as get:
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", courses)
+
+    assert get.call_count == 1
+
+
+@pytest.mark.unit
+def test_upcoming_assignments_raise_authentication_error_for_401():
+    """A rejected token remains distinguishable from a transient Canvas failure."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response({}, status=401),
+    ):
+        with pytest.raises(CanvasAuthenticationError):
+            list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("status", [403, 429, 500])
+def test_upcoming_assignments_raise_api_error_for_other_http_failures(status):
+    """Permission, throttling, and server errors are not treated as empty results."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response({}, status=status),
+    ):
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("payload", [{"error": "bad"}, ["not an assignment"], [{}]])
+def test_malformed_upcoming_assignment_data_raises_api_error(payload):
+    """Malformed payloads cannot silently become assignment records."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response(payload),
+    ):
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", courses)
