@@ -278,6 +278,7 @@ Joshua Douglas used codex to create connect_canvas.html front end
 Joshua Douglas used codex to review issue #38, estimate and break down the work
 Joshua douglas used codex to review and improve his form, API client code, models, and implement token encryption
 Joshua Douglas used codex to fix this issue.
+Joshua Douglas used Codex to implement a red banner for the expired Canvas connection message.
 
 #### Translating ADO pipeline knowledge to GitHub Actions
 
