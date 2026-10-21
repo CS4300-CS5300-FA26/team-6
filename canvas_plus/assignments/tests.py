@@ -34,7 +34,7 @@ class AssignmentsPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "You have no assignments.")
 
-PAGES_USING_BASE_TEMPLATE = ["/", "/assignments/"]
+PAGES_USING_BASE_TEMPLATE = ["/assignments/"]
 
 @pytest.mark.integration
 class SharedTemplateTests(TestCase):

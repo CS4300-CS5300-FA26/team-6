@@ -199,6 +199,10 @@ Jackson McGuire designed and tested the AI Code Review job and its review guidel
 
 Jackson McGuire used Claude Code to help add the uv.lock check to Lint and Test. Jackson proved it works by pushing a stale lockfile on purpose (CI failed), then reverting it (CI passed).
 
+#### Landing page
+
+Jackson McGuire used Claude Code to help write the landing page and its pytest and Behave tests. Jackson refined the Gherkin acceptance criteria, ran every test (red before the page existed, green after), and flip-checked the failed-login test.
+
 ### During software development
 
 #### Moving navigation to the left sidebar
