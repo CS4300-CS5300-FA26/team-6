@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.views.decorators.debug import sensitive_variables
 
+MAX_COURSE_PAGES = 100
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -51,12 +52,13 @@ def list_courses(token):
     params = {"enrollment_type": "student", "enrollment_state": "active"}
     visited = set()
 
+
     while next_url:
         try:
             safe_origin = canvas_origin(next_url) == canvas_origin(base_url)
         except ValueError:
             safe_origin = False
-        if not safe_origin or next_url in visited or len(visited) >= 100:
+        if not safe_origin or next_url in visited or len(visited) >= MAX_COURSE_PAGES:
             raise CanvasAPIError("Canvas returned an unsafe or repeated pagination link.")
         visited.add(next_url)
 
