@@ -1,13 +1,13 @@
-#Form to create and update availability
+"""Form to create and update availability"""
 
 #import forms and model
 from django import forms
 from .models import Availability
 
 class AvailabilityForm(forms.ModelForm):
-    #form for students to enter or update availability
+    """form for students to enter or update availability"""
     class Meta:
-        #Configure which fields appear in the form.
+        """Configure which fields appear in the form."""
         #creates and updates database records.
         model = Availability
         #user selects date, start time, and end time
@@ -39,4 +39,3 @@ class AvailabilityForm(forms.ModelForm):
             )
         #returns validated data back to django.
         return cleaned_data
-        

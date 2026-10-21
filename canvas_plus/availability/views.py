@@ -1,3 +1,4 @@
+"""Views for creating and updating student availability."""
 #imports for user login, html templates, availability form, and model.
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
@@ -6,9 +7,9 @@ from .models import Availability
 
 @login_required
 def availability_list(request):
-    #display and create availability entries for logged-in student.
+    """display and create availability entries for logged-in student."""
     #get only availability records belonging to current user.
-    availability_entries = Availability.objects.filter(
+    availability_entries = Availability.objects.filter( # pylint: disable=no-member
         user=request.user
     ).order_by("date", "start_time")
 
@@ -40,14 +41,14 @@ def availability_list(request):
     )
 @login_required
 def availability_edit(request, availability_id):
-    #allow change to availability
+    """allow change to availability"""
     #find requested record, but only if it belonds to logged-in user.
     availability = get_object_or_404(
         Availability,
         id=availability_id,
         user=request.user,
     )
-    #if student submitted changes, validate them 
+    #if student submitted changes, validate them
     if request.method == "POST":
         form = AvailabilityForm(
             request.POST,
