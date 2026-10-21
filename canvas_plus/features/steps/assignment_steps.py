@@ -1,58 +1,132 @@
-"""Step definitions for assignment page Behave tests."""
-# pylint: disable=not-callable
-from datetime import timedelta
-# Import Behave decorators.
+"""Behavior steps for upcoming coursework on the logged-in home page."""
+# pylint: disable=import-error,missing-function-docstring,not-callable
+
+from datetime import datetime, timezone
+from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
+
 from behave import given, when, then
-# Import Django's test client.
-from django.test import Client
-from django.utils import timezone
-# import Assignment model so BDD test can test using actual DB records
-from assignments.models import Assignment # pylint: disable=import-error
+from cryptography.fernet import Fernet
+from django.contrib.auth import get_user_model
+from django.test import Client, override_settings
 
-@given("the assignments page exists")
-def step_assignments_page_exists(context):
-    """Prepare the Django test client for this scenario."""
+from accounts.models import CanvasConnection
 
-    # Create a Django test client.
+COURSE = {"id": 42, "name": "CS 4300"}
+ASSIGNMENT_TITLE = "Canvas Project 1"
+TOKEN = "fake-behave-canvas-token"
+
+
+def parse_due_date(value):
+    """Translate scenario dates into aware UTC values returned by the API."""
+    try:
+        parsed = datetime.strptime(value, "%B %d, %Y at %I:%M %p")
+    except ValueError:
+        parsed = datetime.strptime(value, "%b %d, %Y %I:%M %p")
+    return parsed.replace(tzinfo=ZoneInfo("America/Denver")).astimezone(timezone.utc)
+
+
+def assignment_result(due_date):
+    """Build one normalized result from the assignment-read contract."""
+    return {
+        "title": ASSIGNMENT_TITLE,
+        "course_name": COURSE["name"],
+        "due_date": due_date,
+    }
+
+
+def prepare_student(context, assignments):
+    """Use real per-user encrypted connection storage and stub Canvas calls."""
+    configured = override_settings(
+        CANVAS_BASE_URL="https://canvas.example.edu",
+        CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+    )
+    configured.enable()
+    context.add_cleanup(configured.disable)
+
+    context.user = get_user_model().objects.create_user(username="canvas-student")
+    connection = CanvasConnection(
+        user=context.user,
+        canvas_url="https://canvas.example.edu",
+    )
+    connection.set_token(TOKEN)
+    connection.save()
+
     context.client = Client()
+    context.client.force_login(context.user)
+    context.canvas_courses = Mock(return_value=[COURSE])
+    context.canvas_assignments = Mock(return_value=assignments)
 
-@when("I request the assignments page")
-def step_request_assignments_page(context):
-    """Request the assignments page."""
+    targets = (
+        ("accounts.connections.list_courses", context.canvas_courses, False),
+        ("assignments.views.list_courses", context.canvas_courses, True),
+        ("assignments.views.list_upcoming_assignments", context.canvas_assignments, True),
+    )
+    for target, replacement, create in targets:
+        patcher = patch(target, replacement, create=create)
+        patcher.start()
+        context.add_cleanup(patcher.stop)
 
-    # Sends GET request to the assignments URL, Saves the response in context
-    # so the Then step can check what Django returned.
+
+def get_assignment_for_date(value):
+    return [assignment_result(parse_due_date(value))]
+
+
+@given('I am a connected student with upcoming coursework due on "{due_date}"')
+def step_connected_student_with_upcoming_work(context, due_date):
+    prepare_student(context, get_assignment_for_date(due_date))
+
+
+@given("I am a connected student with no upcoming coursework")
+def step_connected_student_with_no_upcoming_work(context):
+    prepare_student(context, [])
+
+
+@given('I am viewing "{title}" for "{course}" due "{due_date}"')
+def step_viewing_assignment(context, title, course, due_date):
+    prepare_student(context, get_assignment_for_date(due_date))
+    context.response = context.client.get("/assignments/")
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    assert title in html
+    assert course in html
+    assert due_date in html
+
+
+@when("I open the logged-in home page")
+def step_open_logged_in_home(context):
     context.response = context.client.get("/assignments/")
 
 
-@then("the assignments page loads successfully")
-def step_assignments_page_loads(context):
-    """Verify that the assignments page returned HTTP 200."""
+@when('Canvas changes its due date to "{due_date}"')
+def step_canvas_changes_due_date(context, due_date):
+    context.canvas_assignments.return_value = get_assignment_for_date(due_date)
 
-    # HTTP status code 200 means success
-    # If the response is anything other than 200, assertion fails marked as failed.
+
+@when("I reload the logged-in home page")
+def step_reload_logged_in_home(context):
+    context.response = context.client.get("/assignments/")
+
+
+@then('I see "{title}" for "{course}" due "{due_date}"')
+def step_assignment_due_date_is_visible(context, title, course, due_date):
     assert context.response.status_code == 200
-
-@given("I create a test assignment")
-def step_create_test_assignment(context):
-    """Create an assignment inside Behave's test database."""
-
-    # Create a database record specifically for this scenario. should be in iso DB
-    context.assignment = Assignment.objects.create(
-        title="Behave Test Assignment",
-        course="CS4300",
-        due_date=timezone.now() + timedelta(days=7),
-    )
+    html = context.response.content.decode()
+    for expected in (title, course, due_date):
+        assert expected in html
 
 
-@then("the test assignment exists in the database")
-def step_test_assignment_exists(_context):
-    """Verify the assignment exists during the Behave scenario."""
+@then('I see exactly "{message}"')
+def step_exact_empty_state(context, message):
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    assert message in html
+    assert "You have no assignments." not in html
 
-    # Query the database for the record just created.
-    assignment_exists = Assignment.objects.filter(
-        title="Behave Test Assignment"
-    ).exists()
 
-    # Fail the scenario if the record cannot be found.
-    assert assignment_exists
+@then('I see the revised due date "{revised}" instead of "{original}"')
+def step_revised_due_date_is_visible(context, revised, original):
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    assert revised in html
+    assert original not in html
