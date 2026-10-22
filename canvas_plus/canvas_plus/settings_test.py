@@ -1,6 +1,6 @@
 """Django Settings Used specifically for testing."""
 
-# import normal Django settings 
+# import normal Django settings
 from .settings import * #pylint: disable=wildcard-import,unused-wildcard-import
 from . import settings as base_settings
 
