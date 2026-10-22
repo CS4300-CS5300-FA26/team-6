@@ -245,10 +245,12 @@ def test_multiple_undated_assignments_sort_after_dated_in_original_order():
             {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
             {"name": "Undated B", "due_at": None},
         ]),
+        response([]),
         response([
             {"name": "Undated C", "due_at": None},
             {"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"},
         ]),
+        response([]),
     ]
     with patch("accounts.canvas_client.requests.get", side_effect=responses):
         result = list_upcoming_assignments("fake-token", courses)
@@ -267,7 +269,10 @@ def test_only_undated_assignments_keep_original_order():
     """A result set with no due dates at all sorts without error."""
     courses = [{"id": 42, "name": "CS 4300"}]
     payload = [{"name": "First", "due_at": None}, {"name": "Second", "due_at": None}]
-    with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response(payload), response([])],
+    ):
         result = list_upcoming_assignments("fake-token", courses)
 
     assert [assignment["title"] for assignment in result] == ["First", "Second"]
