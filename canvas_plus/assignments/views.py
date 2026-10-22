@@ -19,8 +19,14 @@ from .grades import recent_grades
 @sensitive_variables("token")
 def recently_graded_context(token, courses):
     """Context for the Recently graded section."""
-    submissions = list_graded_submissions(token, courses)
-    return {"show_recently_graded": True, "recently_graded": recent_grades(submissions)}
+    try:
+        submissions = list_graded_submissions(token, courses)
+    except CanvasAuthenticationError:
+        raise
+    except CanvasAPIError:
+        return {"recently_graded_error": "Unable to load recently graded work right now."}
+    else:
+        return {"show_recently_graded": True, "recently_graded": recent_grades(submissions)}
 
 
 @login_required

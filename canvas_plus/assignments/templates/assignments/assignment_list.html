@@ -60,5 +60,7 @@
         <li>No recently graded work</li>
       {% endfor %}
     </ul>
+  {% elif recently_graded_error %}
+    <p role="status">{{ recently_graded_error }}</p>
   {% endif %}
 {% endblock %}
