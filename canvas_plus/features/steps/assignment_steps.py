@@ -33,6 +33,7 @@ def assignment_result(due_date):
         "title": ASSIGNMENT_TITLE,
         "course_name": COURSE["name"],
         "due_date": due_date,
+        "submitted": False,
     }
 
 

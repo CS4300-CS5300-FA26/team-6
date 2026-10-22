@@ -18,6 +18,7 @@ UPCOMING = [{
     "title": "Canvas Project 1",
     "course_name": "CS 4300",
     "due_date": timezone.now() + timedelta(days=7),
+    "submitted": False,
 }]
 
 
