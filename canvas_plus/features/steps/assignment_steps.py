@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
 
+from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
 
 COURSE = {"id": 42, "name": "CS 4300"}
@@ -45,12 +46,12 @@ def prepare_student(context, assignments):
     context.add_cleanup(configured.disable)
 
     context.user = get_user_model().objects.create_user(username="canvas-student")
-    connection = CanvasConnection(
+    context.connection = CanvasConnection(
         user=context.user,
         canvas_url="https://canvas.example.edu",
     )
-    connection.set_token(TOKEN)
-    connection.save()
+    context.connection.set_token(TOKEN)
+    context.connection.save()
 
     context.client = Client()
     context.client.force_login(context.user)
@@ -130,3 +131,47 @@ def step_revised_due_date_is_visible(context, revised, original):
     html = context.response.content.decode()
     assert revised in html
     assert original not in html
+
+
+@given("I am a signed-in student without a Canvas connection")
+def step_student_without_canvas_connection(context):
+    prepare_student(context, [])
+    context.connection.delete()
+
+
+@given("my saved Canvas token is rejected while loading assignments")
+def step_saved_token_rejected_for_assignments(context):
+    prepare_student(context, [])
+    context.canvas_courses.side_effect = CanvasAuthenticationError("Rejected")
+
+
+@given("Canvas is temporarily unavailable while loading assignments")
+def step_canvas_unavailable_for_assignments(context):
+    prepare_student(context, [])
+    context.canvas_assignments.side_effect = CanvasAPIError("Canvas unavailable")
+
+
+@then("I see the Canvas connection prompt instead of the empty state")
+def step_connection_prompt_not_empty_state(context):
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    assert "Connect Canvas to see your upcoming assignments." in html
+    assert 'href="/accounts/connect-canvas/"' in html
+    assert "No upcoming assignments" not in html
+
+
+@then("I see the expired Canvas connection message and reconnect link")
+def step_expired_connection_message(context):
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    assert "Your Canvas connection has expired." in html
+    assert 'href="/accounts/connect-canvas/"' in html
+    assert "No upcoming assignments" not in html
+
+
+@then("I see the assignments unavailable message instead of the empty state")
+def step_assignments_unavailable_not_empty_state(context):
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    assert "Unable to load upcoming assignments. Please try again." in html
+    assert "No upcoming assignments" not in html
