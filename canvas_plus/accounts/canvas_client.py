@@ -127,10 +127,13 @@ def _normalize_assignment(assignment, course_name):
     if (not isinstance(assignment, dict)
             or not isinstance(assignment.get("name"), str)
             or (assignment.get("due_at") is not None
-                and not isinstance(assignment["due_at"], str))
-            or (assignment.get("id") is not None
-                and (isinstance(assignment["id"], bool)
-                     or not isinstance(assignment["id"], int)))):
+                and not isinstance(assignment["due_at"], str))):
+        raise CanvasAPIError(
+            "Canvas returned unexpected assignment data. Please try again."
+        )
+    if (assignment.get("id") is not None
+            and (isinstance(assignment["id"], bool)
+                 or not isinstance(assignment["id"], int))):
         raise CanvasAPIError(
             "Canvas returned unexpected assignment data. Please try again."
         )
