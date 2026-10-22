@@ -127,7 +127,10 @@ def _normalize_assignment(assignment, course_name):
     if (not isinstance(assignment, dict)
             or not isinstance(assignment.get("name"), str)
             or (assignment.get("due_at") is not None
-                and not isinstance(assignment["due_at"], str))):
+                and not isinstance(assignment["due_at"], str))
+            or (assignment.get("id") is not None
+                and (isinstance(assignment["id"], bool)
+                     or not isinstance(assignment["id"], int)))):
         raise CanvasAPIError(
             "Canvas returned unexpected assignment data. Please try again."
         )
@@ -163,7 +166,7 @@ def _normalize_assignment(assignment, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_upcoming_assignments(token, course, base_url, bucket):
+def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids):
     """Fetch all assignment pages in one bucket for a validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
     params = {"bucket": bucket, "include[]": "submission"}
@@ -179,10 +182,14 @@ def _list_course_upcoming_assignments(token, course, base_url, bucket):
             "Canvas could not load upcoming assignments. Please try again.",
             "Canvas returned unexpected assignment data. Please try again.",
         )
-        assignments.extend(
-            _normalize_assignment(assignment, course["name"])
-            for assignment in page
-        )
+        for assignment in page:
+            normalized = _normalize_assignment(assignment, course["name"])
+            assignment_id = assignment.get("id")
+            if assignment_id is not None:
+                if assignment_id in seen_ids:
+                    continue
+                seen_ids.add(assignment_id)
+            assignments.append(normalized)
         params = None
     return assignments
 
@@ -192,11 +199,12 @@ def list_upcoming_assignments(token, courses):
     """Return normalized upcoming and overdue assignments with submission status."""
     base_url = canvas_base_url()
     assignments = []
+    seen_ids = set()
     for course in courses:
         _validate_assignment_course(course)
         for bucket in ("upcoming", "overdue"):
             assignments.extend(
-                _list_course_upcoming_assignments(token, course, base_url, bucket)
+                _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids)
             )
     assignments.sort(key=lambda assignment: (
         assignment["due_date"] is None,
