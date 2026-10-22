@@ -341,8 +341,9 @@ def test_equivalent_canvas_origin_preserves_connection(student_client, settings,
         connect_successfully(client)
 
     settings.CANVAS_BASE_URL = configured_url
-    with patch("accounts.connections.list_courses", return_value=COURSES) as request:
-        response = client.get("/", follow=True)
+    with patch("assignments.views.list_courses", return_value=COURSES) as request:
+        with patch("assignments.views.list_upcoming_assignments", return_value=[]):
+            response = client.get("/", follow=True)
 
     assert response.status_code == 200
     assert "Your Canvas connection expired." not in PageContent(response).text
@@ -363,9 +364,12 @@ def test_temporary_outage_does_not_expire_saved_token(student_client):
     """An outage preserves the credential and offers retry rather than expiry."""
     client, user = student_client
     connect_successfully(client)
-    with patch("accounts.connections.list_courses", side_effect=CanvasAPIError("Unavailable")):
+    with patch(
+        "assignments.views.list_courses",
+        side_effect=CanvasAPIError("Unavailable"),
+    ):
         response = client.get("/assignments/")
-    assert "Unable to check Canvas right now." in PageContent(response).text
+    assert "Unable to load upcoming assignments. Please try again." in PageContent(response).text
     assert "Your Canvas connection expired." not in PageContent(response).text
     assert CanvasConnection.objects.get(user=user).is_valid
 
