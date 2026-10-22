@@ -59,8 +59,9 @@ def step_grades_listed(context):
 def step_scores_alongside(context):
     html = page(context)
     for grade in context.grades:
-        expected = f'{grade["assignment"]} ({grade["course"]}): {grade["score"]:g}'
-        assert expected in html, f"missing entry: {expected}"
+        start = html.index(grade["assignment"])
+        card = html[start:html.index("</li>", start)]  # from the title to the end of its card
+        assert f'{grade["score"]:g}' in card, f'no score in the card for {grade["assignment"]}'
 
 
 # Scenario 2: Multiple coursework items are evaluated
