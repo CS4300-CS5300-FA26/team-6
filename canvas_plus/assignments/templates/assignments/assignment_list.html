@@ -23,15 +23,15 @@
 
   <h1>Upcoming Assignments</h1>
   {% if assignments_unavailable %}
-    <p role="status">
-      {% if canvas_connection_expired %}
-        Your Canvas connection has expired. <a href="{% url 'connect_canvas' %}">Reconnect Canvas</a> to see upcoming assignments.
-      {% elif canvas_connection_missing %}
+    {% if not canvas_connection_expired %}
+      <p role="status">
+      {% if canvas_connection_missing %}
         Connect Canvas to see your upcoming assignments. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.
       {% else %}
         {{ assignments_unavailable_message }}
       {% endif %}
-    </p>
+      </p>
+    {% endif %}
   {% elif assignments %}
     <ul class="assignment-list">
       {% for assignment in assignments %}
@@ -47,7 +47,7 @@
         </li>
       {% endfor %}
     </ul>
-  {% else %}
+  {% elif not canvas_connection_expired %}
     <p>No upcoming assignments</p>
   {% endif %}
 {% endblock %}

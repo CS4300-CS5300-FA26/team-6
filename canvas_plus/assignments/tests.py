@@ -152,14 +152,19 @@ class CanvasAssignmentsPageTests(TestCase):
         self.connection.refresh_from_db()
         self.assertFalse(self.connection.is_valid)
         self.assertEqual(first_response.status_code, 200)
-        self.assertContains(first_response, "Your Canvas connection has expired.")
+        self.assertContains(first_response, "Your Canvas connection expired. Please reconnect.")
         self.assertContains(first_response, reverse("connect_canvas"))
+        self.assertEqual(
+            first_response.content.decode().count("Your Canvas connection expired."),
+            1,
+        )
+        self.assertNotContains(first_response, "Your Canvas connection has expired.")
         self.assertNotContains(first_response, "No upcoming assignments")
 
         second_response = self.client.get(reverse("assignment_list"))
 
         self.assertEqual(second_response.status_code, 200)
-        self.assertContains(second_response, "Your Canvas connection has expired.")
+        self.assertContains(second_response, "Your Canvas connection expired. Please reconnect.")
         self.assertContains(second_response, reverse("connect_canvas"))
         self.assertNotContains(second_response, "No upcoming assignments")
         list_courses_mock.assert_called_once_with("fake-canvas-token")

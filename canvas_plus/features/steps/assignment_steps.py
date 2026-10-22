@@ -121,8 +121,9 @@ def step_assignment_due_date_is_visible(context, title, course, due_date):
 def step_exact_empty_state(context, message):
     assert context.response.status_code == 200
     html = context.response.content.decode()
-    assert message in html
-    assert "No upcoming assignments" not in html
+    assert html.count(message) == 1
+    assert "Unable to load upcoming assignments" not in html
+    assert "Your Canvas connection expired." not in html
 
 
 @then('I see the revised due date "{revised}" instead of "{original}"')
@@ -164,7 +165,7 @@ def step_connection_prompt_not_empty_state(context):
 def step_expired_connection_message(context):
     assert context.response.status_code == 200
     html = context.response.content.decode()
-    assert "Your Canvas connection has expired." in html
+    assert html.count("Your Canvas connection expired.") == 1
     assert 'href="/accounts/connect-canvas/"' in html
     assert "No upcoming assignments" not in html
 
