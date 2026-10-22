@@ -156,3 +156,7 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+# Canvas
+CANVAS_BASE_URL = env("CANVAS_BASE_URL", default="")
+CANVAS_TOKEN_ENCRYPTION_KEY = env("CANVAS_TOKEN_ENCRYPTION_KEY", default="")
