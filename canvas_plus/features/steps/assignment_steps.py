@@ -57,11 +57,13 @@ def prepare_student(context, assignments):
     context.client.force_login(context.user)
     context.canvas_courses = Mock(return_value=[COURSE])
     context.canvas_assignments = Mock(return_value=assignments)
+    context.graded_submissions = Mock(return_value=[])
 
     targets = (
         ("accounts.connections.list_courses", context.canvas_courses, False),
         ("assignments.views.list_courses", context.canvas_courses, True),
         ("assignments.views.list_upcoming_assignments", context.canvas_assignments, True),
+        ("assignments.views.list_graded_submissions", context.graded_submissions, False),
     )
     for target, replacement, create in targets:
         patcher = patch(target, replacement, create=create)

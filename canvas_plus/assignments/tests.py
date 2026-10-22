@@ -34,12 +34,14 @@ class CanvasAssignmentsPageTests(TestCase):
         self.connection.save()
         self.client.force_login(self.user)
 
+    @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True)
     @patch("assignments.views.list_upcoming_assignments", create=True)
     def test_page_renders_assignments_from_canvas(
         self,
         list_upcoming_assignments_mock,
         list_courses_mock,
+        _list_graded_submissions_mock,
     ):
         """Canvas assignment title, course name, and due date appear in the page."""
         due_date = timezone.datetime(
@@ -70,12 +72,14 @@ class CanvasAssignmentsPageTests(TestCase):
             courses,
         )
 
+    @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True, return_value=[])
     @patch("assignments.views.list_upcoming_assignments", create=True, return_value=[])
     def test_empty_canvas_result_shows_agreed_empty_message(
         self,
         _list_upcoming_assignments_mock,
         _list_courses_mock,
+        _list_graded_submissions_mock,
     ):
         """A successful empty Canvas response uses the agreed empty-state copy."""
         response = self.client.get(reverse("assignment_list"))
@@ -83,12 +87,14 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No upcoming assignments")
 
+    @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True, return_value=[])
     @patch("assignments.views.list_upcoming_assignments", create=True)
     def test_reload_fetches_current_canvas_assignment_data(
         self,
         list_upcoming_assignments_mock,
         _list_courses_mock,
+        _list_graded_submissions_mock,
     ):
         """Two requests render the latest due date returned by Canvas."""
         earlier_due_date = timezone.datetime(
@@ -211,9 +217,11 @@ class SharedTemplateTests(TestCase):
         connection.save()
         self.client.force_login(user)
 
+    @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=[])
     @patch("assignments.views.list_upcoming_assignments", return_value=[])
-    def test_every_page_uses_base_template(self, _assignments_mock, _courses_mock):
+    def test_every_page_uses_base_template(self, _assignments_mock, _courses_mock,
+                                           _graded_mock):
         """The shared base template is used across all canvas+ pages in a list"""
 
         for url in PAGES_USING_BASE_TEMPLATE:
@@ -224,9 +232,11 @@ class SharedTemplateTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertTemplateUsed(response, "base.html")
 
+    @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=[])
     @patch("assignments.views.list_upcoming_assignments", return_value=[])
-    def test_every_page_links_assignments(self, _assignments_mock, _courses_mock):
+    def test_every_page_links_assignments(self, _assignments_mock, _courses_mock,
+                                          _graded_mock):
         """The assignments list page is displayed on every page through the navigation bar"""
         assignments_url = reverse("assignment_list")
 

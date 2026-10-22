@@ -9,9 +9,24 @@ from accounts.canvas_client import (
     canvas_base_url,
     canvas_origin,
     list_courses,
+    list_graded_submissions,
     list_upcoming_assignments,
 )
 from accounts.models import CanvasConnection, SavedTokenError
+from .grades import recent_grades
+
+
+@sensitive_variables("token")
+def recently_graded_context(token, courses):
+    """Context for the Recently graded section."""
+    try:
+        submissions = list_graded_submissions(token, courses)
+    except CanvasAuthenticationError:
+        raise
+    except CanvasAPIError:
+        return {"recently_graded_error": "Unable to load recently graded work right now."}
+    else:
+        return {"show_recently_graded": True, "recently_graded": recent_grades(submissions)}
 
 
 @login_required
@@ -23,6 +38,7 @@ def assignment_list(request):
     connection_expired = False
     connection_missing = False
     connection = CanvasConnection.objects.filter(user=request.user).first()
+    graded_context = {}
 
     if connection is None:
         connection_missing = True
@@ -42,6 +58,7 @@ def assignment_list(request):
             token = connection.get_token()
             courses = list_courses(token)
             assignments = list_upcoming_assignments(token, courses)
+            graded_context = recently_graded_context(token, courses)
         except (CanvasAuthenticationError, SavedTokenError):
             connection.is_valid = False
             connection.save(update_fields=["is_valid", "updated_at"])
@@ -57,5 +74,6 @@ def assignment_list(request):
             bool(unavailable_message) or connection_expired or connection_missing
         ),
         "assignments_unavailable_message": unavailable_message,
+        **graded_context,
     }
     return render(request, "assignments/assignment_list.html", context)

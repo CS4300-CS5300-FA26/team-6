@@ -343,7 +343,8 @@ def test_equivalent_canvas_origin_preserves_connection(student_client, settings,
     settings.CANVAS_BASE_URL = configured_url
     with patch("assignments.views.list_courses", return_value=COURSES) as request:
         with patch("assignments.views.list_upcoming_assignments", return_value=[]):
-            response = client.get("/", follow=True)
+            with patch("assignments.views.list_graded_submissions", return_value=[]):
+                response = client.get("/", follow=True)
 
     assert response.status_code == 200
     assert "Your Canvas connection expired." not in PageContent(response).text

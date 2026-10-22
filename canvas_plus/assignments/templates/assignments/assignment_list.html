@@ -50,4 +50,26 @@
   {% elif not canvas_connection_expired %}
     <p>No upcoming assignments</p>
   {% endif %}
+
+  {% if show_recently_graded %}
+    <h2>Recently graded</h2>
+    {% if recently_graded %}
+      <ul class="assignment-list">
+        {% for g in recently_graded %}
+          <li class="assignment-card">
+            <span class="assignment-status">Graded</span>
+            <div class="assignment-details">
+              <h3 class="assignment-title">{{ g.assignment }}</h3>
+              <p class="assignment-course">{{ g.course }}</p>
+            </div>
+            <p class="assignment-due">Score: {{ g.score|floatformat }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No recently graded work</p>
+    {% endif %}
+  {% elif recently_graded_error %}
+    <p role="status">{{ recently_graded_error }}</p>
+  {% endif %}
 {% endblock %}

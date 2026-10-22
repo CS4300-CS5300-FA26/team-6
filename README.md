@@ -298,3 +298,9 @@ Stephen Tovar used Copilot to explain how `django.contrib.auth` provided django 
 
 Stephen Tovar used copilot to help with TDD and BDD for retrieving assignments
 Stephen Tovar used copilot to assist with Canvas API calls to retrieve assignments
+
+#### Assistance with Recently Graded feature
+
+Nathan Lucas used Claude Code to help understand Canvas API docs
+Nathan Lucas used Claude Code to write the recently graded feature's pytest and behave tests
+Nathan Lucas used Claude Code to review and make suggestions for written code
