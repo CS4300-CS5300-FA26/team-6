@@ -314,6 +314,7 @@ Nathan Lucas used Claude Code to write the recently graded feature's pytest and 
 Nathan Lucas used Claude Code to review and make suggestions for written code
 #### Dynamic priority indicators (issue 41)
 
-Joshua Douglas used Claude Code to plan the feature with him, write the design spec and implementation plan, and orchestrate and review the other agents' work
-Joshua Douglas used GLM 5.3 (via OpenCode) to implement the priority rule, the Canvas client changes, and the dashboard badge test-first
+Joshua Douglas used spec-driven development with Claude Code to write and approve a design spec and TDD implementation plan before any code was written
+Joshua Douglas used Claude Code to orchestrate the implementing agents and verify each task's tests and diffs
+Joshua Douglas used GLM 5.3 (via OpenCode) to implement the priority rule, Canvas client changes, and dashboard badge test-first
 Joshua Douglas used GPT 6.1 sol (via Codex) to write the Behave step definitions for the acceptance scenarios
