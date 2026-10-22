@@ -1,5 +1,5 @@
 """Behavior steps for upcoming coursework on the logged-in home page."""
-# pylint: disable=import-error,missing-function-docstring,not-callable
+# pylint: disable=import-error,missing-function-docstring,not-callable,duplicate-code
 
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch

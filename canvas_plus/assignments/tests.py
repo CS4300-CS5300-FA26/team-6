@@ -34,14 +34,12 @@ class CanvasAssignmentsPageTests(TestCase):
         self.connection.save()
         self.client.force_login(self.user)
 
-    @patch("assignments.views.connection_status", return_value={})
     @patch("assignments.views.list_courses", create=True)
     @patch("assignments.views.list_upcoming_assignments", create=True)
     def test_page_renders_assignments_from_canvas(
         self,
         list_upcoming_assignments_mock,
         list_courses_mock,
-        _connection_status_mock,
     ):
         """Canvas assignment title, course name, and due date appear in the page."""
         due_date = timezone.datetime(
@@ -72,14 +70,12 @@ class CanvasAssignmentsPageTests(TestCase):
             courses,
         )
 
-    @patch("assignments.views.connection_status", return_value={})
     @patch("assignments.views.list_courses", create=True, return_value=[])
     @patch("assignments.views.list_upcoming_assignments", create=True, return_value=[])
     def test_empty_canvas_result_shows_agreed_empty_message(
         self,
         _list_upcoming_assignments_mock,
         _list_courses_mock,
-        _connection_status_mock,
     ):
         """A successful empty Canvas response uses the agreed empty-state copy."""
         response = self.client.get(reverse("assignment_list"))
@@ -87,14 +83,12 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No upcoming assignments")
 
-    @patch("assignments.views.connection_status", return_value={})
     @patch("assignments.views.list_courses", create=True, return_value=[])
     @patch("assignments.views.list_upcoming_assignments", create=True)
     def test_reload_fetches_current_canvas_assignment_data(
         self,
         list_upcoming_assignments_mock,
         _list_courses_mock,
-        _connection_status_mock,
     ):
         """Two requests render the latest due date returned by Canvas."""
         earlier_due_date = timezone.datetime(
@@ -125,7 +119,6 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertEqual(second_response.context["assignments"][0]["due_date"], revised_due_date)
         self.assertEqual(list_upcoming_assignments_mock.call_count, 2)
 
-    @patch("assignments.views.connection_status", return_value={})
     @patch("assignments.views.list_courses", create=True, return_value=[])
     @patch(
         "assignments.views.list_upcoming_assignments",
@@ -136,7 +129,6 @@ class CanvasAssignmentsPageTests(TestCase):
         self,
         _list_upcoming_assignments_mock,
         _list_courses_mock,
-        _connection_status_mock,
     ):
         """An API failure produces a retry state rather than the empty state."""
         response = self.client.get(reverse("assignment_list"))

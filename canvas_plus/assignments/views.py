@@ -3,7 +3,6 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import render
 from django.views.decorators.debug import sensitive_variables
-from accounts.connections import connection_status  # pylint: disable=import-error
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,

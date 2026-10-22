@@ -170,7 +170,7 @@ def test_upcoming_assignments_combine_course_results_and_return_empty_list():
     ) as get:
         result = list_upcoming_assignments("fake-token", courses)
 
-    assert result == []
+    assert not result
     assert get.call_count == 2
     assert [call.kwargs["params"] for call in get.call_args_list] == [
         {"bucket": "upcoming"},
