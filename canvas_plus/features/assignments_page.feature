@@ -30,3 +30,31 @@ Feature: Assignments page
     Given Canvas is temporarily unavailable while loading assignments
     When I open the logged-in home page
     Then I see the assignments unavailable message instead of the empty state
+
+  Scenario: Work due within 48 hours is flagged as due soon
+    Given I am a connected student with unsubmitted coursework due in 30 hours
+    When I open the logged-in home page
+    Then I see "Canvas Project 1" marked "Due soon"
+
+  Scenario: Work with ample time is not flagged as high priority
+    Given I am a connected student with unsubmitted coursework due in 6 days
+    When I open the logged-in home page
+    Then I see "Canvas Project 1" marked "Upcoming"
+    And I see no high-priority marker
+
+  Scenario: The marker escalates once the deadline window is entered
+    Given I am a connected student with unsubmitted coursework due in 50 hours
+    And my dashboard shows "Canvas Project 1" marked "Upcoming"
+    When 3 hours pass
+    And I reload the logged-in home page
+    Then I see "Canvas Project 1" marked "Due soon"
+
+  Scenario: A missed deadline shows a past-due warning
+    Given I am a connected student with unsubmitted coursework that was due 2 hours ago
+    When I open the logged-in home page
+    Then I see "Canvas Project 1" marked "Past due"
+
+  Scenario: Submitted work is not flagged as urgent
+    Given I am a connected student who has submitted coursework due in 30 hours
+    When I open the logged-in home page
+    Then I see "Canvas Project 1" marked "Submitted"

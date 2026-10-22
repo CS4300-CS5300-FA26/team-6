@@ -116,6 +116,7 @@ def step_upcoming_assignments(context):
         "title": context.upcoming_title,
         "course_name": "Software Engineering",
         "due_date": timezone.now() + timedelta(days=7),
+        "submitted": False,
     }]
 
 

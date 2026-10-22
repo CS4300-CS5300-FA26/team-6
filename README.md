@@ -205,6 +205,14 @@ The [Canvas connection study guide](docs/canvas-connection.md) explains the requ
 flow, files, tests, deployment configuration, and limitations. Assignment importing
 is tracked separately in issue #39.
 
+## Dashboard known limitations
+
+- Overdue work stays listed for as long as the course is active, even if it is months old.
+- Overdue quizzes and external-tool or attendance assignments are not shown as **Past due**, because Canvas's `overdue` bucket excludes them.
+- An overdue assignment that is locked against late submission is not shown, because Canvas excludes work the student can no longer submit.
+- The dashboard makes three Canvas requests per course on each load: upcoming, overdue, and graded.
+- Urgency badges change only when the page is loaded or reloaded; there is no live update.
+
 ## Running tests
 
 With the virtual environment active, run the test suite from the repository root:
@@ -304,3 +312,9 @@ Stephen Tovar used copilot to assist with Canvas API calls to retrieve assignmen
 Nathan Lucas used Claude Code to help understand Canvas API docs
 Nathan Lucas used Claude Code to write the recently graded feature's pytest and behave tests
 Nathan Lucas used Claude Code to review and make suggestions for written code
+#### Dynamic priority indicators (issue 41)
+
+Joshua Douglas used spec-driven development with Claude Code to write and approve a design spec and TDD implementation plan before any code was written
+Joshua Douglas used Claude Code to orchestrate the implementing agents and verify each task's tests and diffs
+Joshua Douglas used GLM 5.3 (via OpenCode) to implement the priority rule, Canvas client changes, and dashboard badge test-first
+Joshua Douglas used GPT 6.1 sol (via Codex) to write the Behave step definitions for the acceptance scenarios

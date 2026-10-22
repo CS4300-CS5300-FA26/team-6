@@ -1,6 +1,6 @@
 """Tests for the Canvas-backed assignments page."""
 
-from datetime import timezone as datetime_timezone
+from datetime import timedelta, timezone as datetime_timezone
 from unittest.mock import patch
 
 import pytest
@@ -52,6 +52,7 @@ class CanvasAssignmentsPageTests(TestCase):
             "title": "Canvas Project 1",
             "course_name": "CS 4300",
             "due_date": due_date,
+            "submitted": False,
         }]
         list_courses_mock.return_value = courses
         list_upcoming_assignments_mock.return_value = assignments
@@ -63,13 +64,66 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertContains(response, "CS 4300")
         self.assertContains(response, "Oct 22, 2026 12:30 PM")
         self.assertContains(response, 'class="assignment-card"')
-        self.assertContains(response, 'class="assignment-status"')
+        self.assertContains(response, 'class="assignment-status assignment-status--')
         self.assertContains(response, "@media (max-width: 40rem)")
         self.assertEqual(response.context["assignments"], assignments)
         list_courses_mock.assert_called_once_with("fake-canvas-token")
         list_upcoming_assignments_mock.assert_called_once_with(
             "fake-canvas-token",
             courses,
+        )
+
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch("assignments.views.list_courses", create=True)
+    @patch("assignments.views.list_upcoming_assignments", create=True)
+    def test_each_card_shows_its_urgency_label(
+        self,
+        list_upcoming_assignments_mock,
+        list_courses_mock,
+        _list_graded_submissions_mock,
+    ):
+        """Each card's badge shows the label recomputed from its due date and submission."""
+        now = timezone.now()
+        courses = [{"id": 42, "name": "CS 4300"}]
+        assignments = [
+            {
+                "title": "Turned in",
+                "course_name": "CS 4300",
+                "due_date": now + timedelta(hours=30),
+                "submitted": True,
+            },
+            {
+                "title": "Missed",
+                "course_name": "CS 4300",
+                "due_date": now - timedelta(hours=2),
+                "submitted": False,
+            },
+            {
+                "title": "Close",
+                "course_name": "CS 4300",
+                "due_date": now + timedelta(hours=30),
+                "submitted": False,
+            },
+            {
+                "title": "Far",
+                "course_name": "CS 4300",
+                "due_date": now + timedelta(days=6),
+                "submitted": False,
+            },
+        ]
+        list_courses_mock.return_value = courses
+        list_upcoming_assignments_mock.return_value = assignments
+
+        response = self.client.get(reverse("assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'assignment-status--submitted">Submitted</span>')
+        self.assertContains(response, 'assignment-status--past-due">Past due</span>')
+        self.assertContains(response, 'assignment-status--due-soon">Due soon</span>')
+        self.assertContains(response, 'assignment-status--upcoming">Upcoming</span>')
+        self.assertEqual(
+            [assignment["priority"] for assignment in response.context["assignments"]],
+            ["Submitted", "Past due", "Due soon", "Upcoming"],
         )
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
@@ -108,11 +162,13 @@ class CanvasAssignmentsPageTests(TestCase):
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
                 "due_date": earlier_due_date,
+                "submitted": False,
             }],
             [{
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
                 "due_date": revised_due_date,
+                "submitted": False,
             }],
         ]
 

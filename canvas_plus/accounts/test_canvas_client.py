@@ -124,7 +124,7 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
     }]
     with patch(
         "accounts.canvas_client.requests.get",
-        return_value=response(assignments),
+        side_effect=[response(assignments), response([])],
     ) as get:
         result = list_upcoming_assignments("fake-token", courses)
 
@@ -132,12 +132,19 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
         "title": "Project 1",
         "course_name": "CS 4300",
         "due_date": datetime(2026, 10, 23, 0, 30, tzinfo=timezone.utc),
+        "submitted": False,
     }]
-    assert get.call_args.args == (
+    assert get.call_args_list[0].args == (
         "https://canvas.example.edu/api/v1/courses/42/assignments",
     )
-    assert get.call_args.kwargs["params"] == {"bucket": "upcoming"}
-    assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+    assert get.call_args_list[0].kwargs["params"] == {
+        "bucket": "upcoming", "include[]": "submission",
+    }
+    assert get.call_args_list[1].kwargs["params"] == {
+        "bucket": "overdue", "include[]": "submission",
+    }
+    for call in get.call_args_list:
+        assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
 
 
 @pytest.mark.unit
@@ -146,7 +153,10 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
     courses = [{"id": 42, "name": "CS 4300"}]
     with patch(
         "accounts.canvas_client.requests.get",
-        return_value=response([{"name": "Project 1", "due_at": None}]),
+        side_effect=[
+            response([{"name": "Project 1", "due_at": None}]),
+            response([]),
+        ],
     ):
         result = list_upcoming_assignments("fake-token", courses)
 
@@ -154,6 +164,7 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
         "title": "Project 1",
         "course_name": "CS 4300",
         "due_date": None,
+        "submitted": False,
     }]
 
 
@@ -207,7 +218,9 @@ def test_upcoming_assignments_are_sorted_by_due_date_across_courses():
             {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
             {"name": "No due date", "due_at": None},
         ]),
+        response([]),
         response([{"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"}]),
+        response([]),
     ]
     with patch("accounts.canvas_client.requests.get", side_effect=responses):
         result = list_upcoming_assignments("fake-token", courses)
@@ -232,10 +245,12 @@ def test_multiple_undated_assignments_sort_after_dated_in_original_order():
             {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
             {"name": "Undated B", "due_at": None},
         ]),
+        response([]),
         response([
             {"name": "Undated C", "due_at": None},
             {"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"},
         ]),
+        response([]),
     ]
     with patch("accounts.canvas_client.requests.get", side_effect=responses):
         result = list_upcoming_assignments("fake-token", courses)
@@ -254,7 +269,10 @@ def test_only_undated_assignments_keep_original_order():
     """A result set with no due dates at all sorts without error."""
     courses = [{"id": 42, "name": "CS 4300"}]
     payload = [{"name": "First", "due_at": None}, {"name": "Second", "due_at": None}]
-    with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response(payload), response([])],
+    ):
         result = list_upcoming_assignments("fake-token", courses)
 
     assert [assignment["title"] for assignment in result] == ["First", "Second"]
@@ -269,15 +287,17 @@ def test_upcoming_assignments_combine_course_results_and_return_empty_list():
     ]
     with patch(
         "accounts.canvas_client.requests.get",
-        side_effect=[response([]), response([])],
+        side_effect=[response([]), response([]), response([]), response([])],
     ) as get:
         result = list_upcoming_assignments("fake-token", courses)
 
     assert not result
-    assert get.call_count == 2
+    assert get.call_count == 4
     assert [call.kwargs["params"] for call in get.call_args_list] == [
-        {"bucket": "upcoming"},
-        {"bucket": "upcoming"},
+        {"bucket": "upcoming", "include[]": "submission"},
+        {"bucket": "overdue", "include[]": "submission"},
+        {"bucket": "upcoming", "include[]": "submission"},
+        {"bucket": "overdue", "include[]": "submission"},
     ]
 
 
@@ -291,14 +311,20 @@ def test_upcoming_assignments_follow_pagination_without_repeating_query_params()
         side_effect=[
             response([{"name": "Project 1", "due_at": None}], next_url=next_url),
             response([{"name": "Project 2", "due_at": None}]),
+            response([]),
         ],
     ) as get:
         result = list_upcoming_assignments("fake-token", courses)
 
     assert [assignment["title"] for assignment in result] == ["Project 1", "Project 2"]
     assert get.call_args_list[1].args == (next_url,)
-    assert get.call_args_list[0].kwargs["params"] == {"bucket": "upcoming"}
+    assert get.call_args_list[0].kwargs["params"] == {
+        "bucket": "upcoming", "include[]": "submission",
+    }
     assert get.call_args_list[1].kwargs["params"] is None
+    assert get.call_args_list[2].kwargs["params"] == {
+        "bucket": "overdue", "include[]": "submission",
+    }
     for call in get.call_args_list:
         assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
         assert call.kwargs["timeout"] == 10
@@ -347,7 +373,13 @@ def test_upcoming_assignments_raise_api_error_for_other_http_failures(status):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("payload", [{"error": "bad"}, ["not an assignment"], [{}]])
+@pytest.mark.parametrize("payload", [
+    {"error": "bad"},
+    ["not an assignment"],
+    [{}],
+    [{"id": ["7"], "name": "x", "due_at": None}],
+    [{"id": True, "name": "x", "due_at": None}],
+])
 def test_malformed_upcoming_assignment_data_raises_api_error(payload):
     """Malformed payloads cannot silently become assignment records."""
     courses = [{"id": 42, "name": "CS 4300"}]
@@ -357,3 +389,140 @@ def test_malformed_upcoming_assignment_data_raises_api_error(payload):
     ):
         with pytest.raises(CanvasAPIError):
             list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+def test_overdue_assignments_are_included_and_sorted_first():
+    """Overdue work from the second bucket sorts ahead of upcoming work."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{"name": "Soon", "due_at": "2026-10-23T18:30:00Z"}]),
+            response([{"name": "Late", "due_at": "2026-10-20T18:30:00Z"}]),
+        ],
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["Late", "Soon"]
+
+
+@pytest.mark.unit
+def test_assignment_returned_by_both_buckets_appears_once():
+    """The same assignment id in both buckets yields a single card."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{"id": 7, "name": "Race", "due_at": "2026-10-22T05:59:00Z"}]),
+            response([{"id": 7, "name": "Race", "due_at": "2026-10-22T05:59:00Z"}]),
+        ],
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["Race"]
+
+
+@pytest.mark.unit
+def test_distinct_assignment_ids_are_all_kept():
+    """Different assignment ids from both buckets are all kept."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{"id": 7, "name": "A", "due_at": "2026-10-22T05:59:00Z"}]),
+            response([{"id": 8, "name": "B", "due_at": "2026-10-21T05:59:00Z"}]),
+        ],
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["B", "A"]
+
+
+ABSENT = object()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("submission, submitted", [
+    (ABSENT, False),
+    (None, False),
+    ({"workflow_state": "unsubmitted", "submitted_at": None}, False),
+    ({"workflow_state": "unsubmitted", "submitted_at": None, "excused": False}, False),
+    ({"workflow_state": "unsubmitted", "submitted_at": None, "excused": True}, True),
+    ({"workflow_state": "submitted", "submitted_at": "2026-10-21T10:00:00Z"}, True),
+    ({"workflow_state": "graded", "submitted_at": None}, True),
+])
+def test_submission_status_is_normalized(submission, submitted):
+    """A missing, unsubmitted, submitted, or graded submission sets the flag."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    assignment = {"name": "Project 1", "due_at": None}
+    if submission is not ABSENT:
+        assignment["submission"] = submission
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response([assignment]), response([])],
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert result == [{
+        "title": "Project 1",
+        "course_name": "CS 4300",
+        "due_date": None,
+        "submitted": submitted,
+    }]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("submission", ["submitted", ["x"], 42])
+def test_malformed_submission_raises_api_error(submission):
+    """A submission that is neither absent, None, nor a dict is an error."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response([
+            {"name": "Project 1", "due_at": None, "submission": submission},
+        ]),
+    ):
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+def test_overdue_request_failure_raises_api_error():
+    """A failed overdue request surfaces as an error, not a partial list."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response([]), response({}, status=500)],
+    ):
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+def test_overdue_request_rejected_token_raises_authentication_error():
+    """A token rejected on the overdue call expires the connection."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response([]), response({}, status=401)],
+    ):
+        with pytest.raises(CanvasAuthenticationError):
+            list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+def test_overdue_pagination_rejects_other_origin():
+    """A next link on the overdue bucket must stay on the Canvas origin."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([]),
+            response([], next_url="https://untrusted.example/api/v1/assignments"),
+        ],
+    ) as get:
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", courses)
+
+    assert get.call_count == 2
