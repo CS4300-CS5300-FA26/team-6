@@ -152,6 +152,7 @@ def _normalize_assignment(assignment, course_name):
     submitted = submission is not None and (
         submission.get("submitted_at") is not None
         or submission.get("workflow_state") == "graded"
+        or submission.get("excused") is True
     )
     return {
         "title": assignment["name"],
