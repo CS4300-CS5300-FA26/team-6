@@ -205,6 +205,14 @@ The [Canvas connection study guide](docs/canvas-connection.md) explains the requ
 flow, files, tests, deployment configuration, and limitations. Assignment importing
 is tracked separately in issue #39.
 
+## Dashboard known limitations
+
+- Overdue work stays listed for as long as the course is active, even if it is months old.
+- Overdue quizzes and external-tool or attendance assignments are not shown as **Past due**, because Canvas's `overdue` bucket excludes them.
+- An overdue assignment that is locked against late submission is not shown, because Canvas excludes work the student can no longer submit.
+- The dashboard makes three Canvas requests per course on each load: upcoming, overdue, and graded.
+- Urgency badges change only when the page is loaded or reloaded; there is no live update.
+
 ## Running tests
 
 With the virtual environment active, run the test suite from the repository root:

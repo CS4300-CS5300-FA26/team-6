@@ -131,6 +131,11 @@ def _normalize_assignment(assignment, course_name):
         raise CanvasAPIError(
             "Canvas returned unexpected assignment data. Please try again."
         )
+    submission = assignment.get("submission")
+    if submission is not None and not isinstance(submission, dict):
+        raise CanvasAPIError(
+            "Canvas returned unexpected assignment data. Please try again."
+        )
     due_date = None
     if assignment.get("due_at") is not None:
         try:
@@ -144,18 +149,23 @@ def _normalize_assignment(assignment, course_name):
             raise CanvasAPIError(
                 "Canvas returned an invalid assignment due date. Please try again."
             ) from None
+    submitted = submission is not None and (
+        submission.get("submitted_at") is not None
+        or submission.get("workflow_state") == "graded"
+    )
     return {
         "title": assignment["name"],
         "course_name": course_name,
         "due_date": due_date,
+        "submitted": submitted,
     }
 
 
 @sensitive_variables("token")
-def _list_course_upcoming_assignments(token, course, base_url):
-    """Fetch all upcoming assignment pages for one validated course."""
+def _list_course_upcoming_assignments(token, course, base_url, bucket):
+    """Fetch all assignment pages in one bucket for a validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
-    params = {"bucket": "upcoming"}
+    params = {"bucket": bucket, "include[]": "submission"}
     visited = set()
     assignments = []
     while next_url:
@@ -178,12 +188,15 @@ def _list_course_upcoming_assignments(token, course, base_url):
 
 @sensitive_variables("token")
 def list_upcoming_assignments(token, courses):
-    """Return normalized upcoming assignments for the supplied enrolled courses."""
+    """Return normalized upcoming and overdue assignments with submission status."""
     base_url = canvas_base_url()
     assignments = []
     for course in courses:
         _validate_assignment_course(course)
-        assignments.extend(_list_course_upcoming_assignments(token, course, base_url))
+        for bucket in ("upcoming", "overdue"):
+            assignments.extend(
+                _list_course_upcoming_assignments(token, course, base_url, bucket)
+            )
     assignments.sort(key=lambda assignment: (
         assignment["due_date"] is None,
         assignment["due_date"],
