@@ -158,6 +158,44 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(("due_at", "message"), [
+    ("not-a-date", "invalid assignment due date"),
+    ("2026-10-22T18:30:00", "invalid assignment due date"),
+    (123, "unexpected assignment data"),
+    (True, "unexpected assignment data"),
+])
+def test_upcoming_assignments_reject_malformed_due_dates(due_at, message):
+    """Malformed or timezone-naive due_at values cannot enter normalized data."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response([{"name": "Project 1", "due_at": due_at}]),
+    ):
+        with pytest.raises(CanvasAPIError, match=message):
+            list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("course", [
+    "not a course",
+    {},
+    {"id": True, "name": "CS 4300"},
+    {"id": "42", "name": "CS 4300"},
+    {"id": 0, "name": "CS 4300"},
+    {"id": -1, "name": "CS 4300"},
+    {"id": 42, "name": None},
+    {"id": 42, "name": 4300},
+])
+def test_upcoming_assignments_reject_invalid_course_records_before_request(course):
+    """Invalid course records fail before their data can form a request URL."""
+    with patch("accounts.canvas_client.requests.get") as get:
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", [course])
+
+    get.assert_not_called()
+
+
+@pytest.mark.unit
 def test_upcoming_assignments_are_sorted_by_due_date_across_courses():
     """Assignments sort by due date, with assignments lacking dates last."""
     courses = [
