@@ -1,7 +1,7 @@
 """Behavior steps for upcoming coursework on the logged-in home page."""
 # pylint: disable=import-error,missing-function-docstring,not-callable,duplicate-code
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
@@ -9,6 +9,9 @@ from behave import given, when, then
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
+from django.utils import timezone as django_timezone
+from django.utils.html import escape
+from django.utils.text import slugify
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
@@ -74,6 +77,14 @@ def prepare_student(context, assignments):
 
 def get_assignment_for_date(value):
     return [assignment_result(parse_due_date(value))]
+
+
+def prepare_relative_coursework(context, due_in, submitted=False):
+    """Anchor coursework to the current time so scenarios do not age."""
+    context.dashboard_now = django_timezone.now()
+    assignment = assignment_result(context.dashboard_now + due_in)
+    assignment["submitted"] = submitted
+    prepare_student(context, [assignment])
 
 
 @given('I am a connected student with upcoming coursework due on "{due_date}"')
@@ -178,3 +189,67 @@ def step_assignments_unavailable_not_empty_state(context):
     html = context.response.content.decode()
     assert "Unable to load upcoming assignments. Please try again." in html
     assert "No upcoming assignments" not in html
+
+
+@given("I am a connected student with unsubmitted coursework due in {amount:d} {unit}")
+def step_unsubmitted_coursework_due(context, amount, unit):
+    prepare_relative_coursework(context, timedelta(**{unit: amount}))
+
+
+@given("I am a connected student with unsubmitted coursework that was due {hours:d} hours ago")
+def step_unsubmitted_coursework_past_due(context, hours):
+    prepare_relative_coursework(context, timedelta(hours=-hours))
+
+
+@given("I am a connected student who has submitted coursework due in {hours:d} hours")
+def step_submitted_coursework_due(context, hours):
+    prepare_relative_coursework(context, timedelta(hours=hours), submitted=True)
+
+
+@given('my dashboard shows "{title}" marked "{label}"')
+def step_dashboard_shows_priority(context, title, label):
+    step_open_logged_in_home(context)
+    step_assignment_marked(context, title, label)
+
+
+@when("{hours:d} hours pass")
+def step_hours_pass(context, hours):
+    context.dashboard_now += timedelta(hours=hours)
+    clock = patch("django.utils.timezone.now", return_value=context.dashboard_now)
+    clock.start()
+    context.add_cleanup(clock.stop)
+
+
+@then('I see "{title}" marked "{label}"')
+def step_assignment_marked(context, title, label):
+    assert context.response.status_code == 200
+    assignments = [
+        assignment for assignment in context.response.context["assignments"]
+        if assignment["title"] == title
+    ]
+    assert len(assignments) == 1, f'Expected one assignment titled "{title}"'
+    actual = assignments[0]["priority"]
+    assert actual == label, f'Expected "{title}" marked "{label}", got "{actual}"'
+
+    html = context.response.content.decode()
+    heading = f'<h2 class="assignment-title">{escape(title)}</h2>'
+    cards = [
+        fragment.split("</li>", 1)[0]
+        for fragment in html.split('<li class="assignment-card">')[1:]
+    ]
+    matching_cards = [card for card in cards if heading in card]
+    assert len(matching_cards) == 1, f'Expected one card titled "{title}"'
+    badge = (
+        f'<span class="assignment-status assignment-status--{slugify(label)}">'
+        f'{escape(label)}</span>'
+    )
+    assert badge in matching_cards[0], f'Card for "{title}" has no "{label}" badge'
+
+
+@then("I see no high-priority marker")
+def step_no_high_priority_marker(context):
+    assert context.response.status_code == 200
+    html = context.response.content.decode()
+    for slug in ("due-soon", "past-due"):
+        # The CSS defines both classes even when no card carries either marker.
+        assert f'assignment-status--{slug}">' not in html
