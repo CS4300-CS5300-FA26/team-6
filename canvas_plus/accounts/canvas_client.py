@@ -82,7 +82,7 @@ def _fetch_page(next_url, token, params, failure_message, invalid_response_messa
     return page, response.links.get("next", {}).get("url")
 
 
-@sensitive_variables("token", "response")
+@sensitive_variables("token")
 def list_courses(token):
     """Return all active student courses, following same-origin pagination only."""
     base_url = canvas_base_url()
@@ -151,6 +151,7 @@ def _normalize_assignment(assignment, course_name):
     }
 
 
+@sensitive_variables("token")
 def _list_course_upcoming_assignments(token, course, base_url):
     """Fetch all upcoming assignment pages for one validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
