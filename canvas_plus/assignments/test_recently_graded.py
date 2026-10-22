@@ -77,7 +77,7 @@ class RecentlyGradedSectionTests(TestCase):
 
         self.connection.refresh_from_db()
         self.assertFalse(self.connection.is_valid)
-        self.assertContains(response, "Your Canvas connection has expired.")
+        self.assertContains(response, "Your Canvas connection expired. Please reconnect.")
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=COURSES)
