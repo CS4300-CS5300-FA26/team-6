@@ -135,7 +135,7 @@ class CanvasAssignmentsPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Please try again")
-        self.assertNotContains(response, "You have no assignments.")
+        self.assertNotContains(response, "No upcoming assignments")
 
     @patch("assignments.views.list_courses", create=True)
     @patch("assignments.views.list_upcoming_assignments", create=True)
@@ -185,7 +185,7 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Connect Canvas to see your upcoming assignments")
         self.assertContains(response, reverse("connect_canvas"))
-        self.assertNotContains(response, "No upcoming assignments")
+        self.assertNotContains(response, "No upcoming assignments.")
 
 PAGES_USING_BASE_TEMPLATE = ["/assignments/"]
 

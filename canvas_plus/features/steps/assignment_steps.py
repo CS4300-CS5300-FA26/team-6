@@ -122,7 +122,7 @@ def step_exact_empty_state(context, message):
     assert context.response.status_code == 200
     html = context.response.content.decode()
     assert message in html
-    assert "You have no assignments." not in html
+    assert "No upcoming assignments" not in html
 
 
 @then('I see the revised due date "{revised}" instead of "{original}"')
