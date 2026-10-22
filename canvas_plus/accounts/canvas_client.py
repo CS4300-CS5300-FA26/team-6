@@ -184,4 +184,8 @@ def list_upcoming_assignments(token, courses):
     for course in courses:
         _validate_assignment_course(course)
         assignments.extend(_list_course_upcoming_assignments(token, course, base_url))
+    assignments.sort(key=lambda assignment: (
+        assignment["due_date"] is None,
+        assignment["due_date"],
+    ))
     return assignments
