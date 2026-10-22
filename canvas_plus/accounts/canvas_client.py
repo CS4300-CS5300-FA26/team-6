@@ -191,7 +191,64 @@ def list_upcoming_assignments(token, courses):
     return assignments
 
 
+def _normalize_submission(submission, course_name):
+    """Validate one Canvas submission; return None when it has no published grade."""
+    invalid = "Canvas returned unexpected submission data. Please try again."
+    if (not isinstance(submission, dict)
+            or not isinstance(submission.get("assignment"), dict)
+            or not isinstance(submission["assignment"].get("name"), str)):
+        raise CanvasAPIError(invalid)
+    score = submission.get("score")
+    if score is not None and (isinstance(score, bool) or not isinstance(score, (int, float))):
+        raise CanvasAPIError(invalid)
+    if (submission.get("excused") or submission.get("posted_at") is None
+            or submission.get("graded_at") is None):
+        return None
+    try:
+        graded_at = datetime.fromisoformat(submission["graded_at"])
+        if graded_at.utcoffset() is None:
+            raise ValueError("Graded time must include a timezone.")
+    except (TypeError, ValueError):
+        raise CanvasAPIError(
+            "Canvas returned an invalid graded time. Please try again."
+        ) from None
+    return {
+        "assignment": submission["assignment"]["name"],
+        "course": course_name,
+        "score": None if score is None else float(score),
+        "graded_at": graded_at.astimezone(timezone.utc),
+    }
+
+
+@sensitive_variables("token")
+def _list_course_graded_submissions(token, course, base_url):
+    """Fetch all graded submission pages for one validated course."""
+    next_url = f"{base_url}/api/v1/courses/{course['id']}/students/submissions"
+    params = {"workflow_state": "graded", "include[]": "assignment"}
+    visited = set()
+    submissions = []
+    while next_url:
+        _validate_pagination_url(next_url, base_url, visited)
+        visited.add(next_url)
+        page, next_url = _fetch_page(
+            next_url,
+            token,
+            params,
+            "Canvas could not load graded work. Please try again.",
+            "Canvas returned unexpected submission data. Please try again.",
+        )
+        normalized = (_normalize_submission(submission, course["name"]) for submission in page)
+        submissions.extend(grade for grade in normalized if grade is not None)
+        params = None
+    return submissions
+
+
 @sensitive_variables("token")
 def list_graded_submissions(token, courses):
-    """Return the student's graded submissions as plain dicts."""
-    raise NotImplementedError("Fetching graded submissions from Canvas is not built yet.")
+    """Return the student's published, graded submissions across the supplied courses."""
+    base_url = canvas_base_url()
+    submissions = []
+    for course in courses:
+        _validate_assignment_course(course)
+        submissions.extend(_list_course_graded_submissions(token, course, base_url))
+    return submissions
