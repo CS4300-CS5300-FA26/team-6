@@ -4,17 +4,20 @@
 # pylint: disable=not-callable
 
 # Imports needed for tests and file functionality.
-from datetime import date, time
+from datetime import time, timedelta
 from behave import given, when, then
 from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
+from django.utils import timezone
 from availability.models import Availability  # pylint: disable=import-error
 
 
 @given("I am logged in as a student")
 def step_logged_in_availability_student(context):
     """Create and log in a student for the availability scenario."""
+
+    context.today = timezone.localdate()
 
     # Get the User model this project.
     user_model = get_user_model()
@@ -43,7 +46,7 @@ def step_create_valid_availability(context):
     context.response = context.client.post(
         reverse("availability:list"),
         {
-            "date": "2026-10-22",
+            "date": context.today.isoformat(),
             "start_time": "14:00",
             "end_time": "16:00",
         },
@@ -57,7 +60,7 @@ def step_valid_availability_saved(context):
     # Check the test database for the expected record.
     availability_exists = Availability.objects.filter(
         user=context.user,
-        date=date(2026, 10, 22),
+        date=context.today,
         start_time=time(14, 0),
         end_time=time(16, 0),
     ).exists()
@@ -73,7 +76,7 @@ def step_existing_availability(context):
     # Create a valid saved availability entry.
     context.availability = Availability.objects.create(
         user=context.user,
-        date=date(2026, 10, 22),
+        date=context.today,
         start_time=time(14, 0),
         end_time=time(16, 0),
     )
@@ -90,7 +93,7 @@ def step_update_availability(context):
             args=[context.availability.id],
         ),
         {
-            "date": "2026-10-23",
+            "date": (context.today + timedelta(days=1)).isoformat(),
             "start_time": "15:00",
             "end_time": "17:00",
         },
@@ -105,7 +108,7 @@ def step_updated_availability_saved(context):
     context.availability.refresh_from_db()
 
     # Confirm the saved values match the edit.
-    assert context.availability.date == date(2026, 10, 23)
+    assert context.availability.date == context.today + timedelta(days=1)
     assert context.availability.start_time == time(15, 0)
     assert context.availability.end_time == time(17, 0)
 
@@ -121,7 +124,7 @@ def step_create_invalid_availability(context):
     context.response = context.client.post(
         reverse("availability:list"),
         {
-            "date": "2026-10-22",
+            "date": context.today.isoformat(),
             "start_time": "16:00",
             "end_time": "14:00",
         },
@@ -149,3 +152,20 @@ def step_availability_error_message(context):
 
     # Confirm the form displayed the expected correction message.
     assert "End time must be later than start time." in response_text
+
+
+@when("I create an availability period for yesterday")
+def step_create_past_availability(context):
+    """Submit an otherwise valid availability period in the past."""
+    context.response = context.client.post(reverse("availability:list"), {
+        "date": (context.today - timedelta(days=1)).isoformat(),
+        "start_time": "14:00",
+        "end_time": "16:00",
+    })
+
+
+@then("I should receive a past-date correction message")
+def step_past_date_error_message(context):
+    """Verify the student sees the reason their past date was rejected."""
+    assert context.response.status_code == 200
+    assert "Availability cannot be in the past." in context.response.content.decode()

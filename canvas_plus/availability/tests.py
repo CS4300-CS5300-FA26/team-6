@@ -1,22 +1,29 @@
 """Tests for the availability application."""
 # pylint: disable=no-member
 #imports test framework, date/time, and forms
-from datetime import date, time
+from datetime import date, time, timedelta
+from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.formats import date_format
 from .forms import AvailabilityForm
 from .models import Availability
 
 # availability for test class
 class AvailabilityFormTests(TestCase):
     """test validation behavior for availability form."""
+    def setUp(self):
+        """Keep valid test dates relative to the current local day."""
+        self.today = timezone.localdate()
+
     def test_valid_availability_is_accepted(self):
         """valid start and end time should pass validation."""
         #create form data end time is after start time.
         form = AvailabilityForm(
             data={
-                "date": date(2026, 10, 20),
+                "date": self.today,
                 "start_time": time(14, 0),
                 "end_time": time(16, 0),
             }
@@ -29,7 +36,7 @@ class AvailabilityFormTests(TestCase):
         #create form data end time before start time.
         form = AvailabilityForm(
             data={
-                "date": date(2026, 10, 20),
+                "date": self.today,
                 "start_time": time(16, 0),
                 "end_time": time(14, 0),
             }
@@ -43,10 +50,51 @@ class AvailabilityFormTests(TestCase):
             form.non_field_errors(),
         )
 
+    def test_date_boundaries(self):
+        """Reject past dates while accepting today and future dates across years."""
+        cases = (
+            (date(2026, 10, 22), date(2026, 10, 21), False),
+            (date(2026, 10, 22), date(2026, 10, 22), True),
+            (date(2026, 10, 22), date(2026, 10, 23), True),
+            (date(2026, 10, 22), date(2026, 9, 30), False),
+            (date(2026, 10, 22), date(2001, 1, 1), False),
+            (date(2026, 10, 22), date(2027, 1, 1), True),
+            (date(2027, 1, 1), date(2026, 12, 31), False),
+            (date(2026, 12, 31), date(2027, 1, 1), True),
+        )
+        for today, availability_date, expected_valid in cases:
+            with self.subTest(today=today, availability_date=availability_date):
+                with patch("availability.forms.timezone.localdate", return_value=today):
+                    form = AvailabilityForm(data={
+                        "date": availability_date,
+                        "start_time": "14:00",
+                        "end_time": "16:00",
+                    })
+                    self.assertEqual(form.is_valid(), expected_valid)
+                    if not expected_valid:
+                        self.assertIn(
+                            "Availability cannot be in the past.",
+                            form.non_field_errors(),
+                        )
+
+    def test_missing_or_malformed_date_is_rejected(self):
+        """Bad dates show field errors instead of crashing validation."""
+        for value in (None, "", "not-a-date", "2026-02-30"):
+            with self.subTest(value=value):
+                form = AvailabilityForm(data={
+                    "date": value,
+                    "start_time": "14:00",
+                    "end_time": "16:00",
+                })
+                self.assertFalse(form.is_valid())
+                self.assertIn("date", form.errors)
+
+
 class AvailabilityViewTests(TestCase):
     """Test creating, viewing, and editing student availability."""
 
     def setUp(self):
+        self.today = timezone.localdate()
         #Create a user and log them in before each view test.
         # Get the User model.
         user_model = get_user_model()
@@ -69,7 +117,7 @@ class AvailabilityViewTests(TestCase):
         response = self.client.post(
             reverse("availability:list"),
             {
-                "date": "2026-10-20",
+                "date": self.today.isoformat(),
                 "start_time": "14:00",
                 "end_time": "16:00",
             },
@@ -86,7 +134,7 @@ class AvailabilityViewTests(TestCase):
 
         self.assertEqual(
             availability.date,
-            date(2026, 10, 20),
+            self.today,
         )
         self.assertEqual(
             availability.start_time,
@@ -102,7 +150,7 @@ class AvailabilityViewTests(TestCase):
         #Create an availability record in the test database.
         Availability.objects.create(
             user=self.user,
-            date=date(2026, 10, 20),
+            date=self.today,
             start_time=time(14, 0),
             end_time=time(16, 0),
         )
@@ -118,7 +166,7 @@ class AvailabilityViewTests(TestCase):
         # Confirm the saved date appears in the rendered page.
         self.assertContains(
             response,
-            "Oct. 20, 2026",
+            date_format(self.today, "DATE_FORMAT"),
         )
 
     def test_student_can_change_existing_availability(self):
@@ -126,7 +174,7 @@ class AvailabilityViewTests(TestCase):
         #Create an existing availability entry.
         availability = Availability.objects.create(
             user=self.user,
-            date=date(2026, 10, 20),
+            date=self.today,
             start_time=time(14, 0),
             end_time=time(16, 0),
         )
@@ -138,7 +186,7 @@ class AvailabilityViewTests(TestCase):
                 args=[availability.id],
             ),
             {
-                "date": "2026-10-21",
+                "date": (self.today + timedelta(days=1)).isoformat(),
                 "start_time": "15:00",
                 "end_time": "17:00",
             },
@@ -156,7 +204,7 @@ class AvailabilityViewTests(TestCase):
         # Confirm the changed values were saved.
         self.assertEqual(
             availability.date,
-            date(2026, 10, 21),
+            self.today + timedelta(days=1),
         )
         self.assertEqual(
             availability.start_time,
@@ -173,7 +221,7 @@ class AvailabilityViewTests(TestCase):
         response = self.client.post(
             reverse("availability:list"),
             {
-                "date": "2026-10-20",
+                "date": self.today.isoformat(),
                 "start_time": "16:00",
                 "end_time": "14:00",
             },
@@ -192,6 +240,38 @@ class AvailabilityViewTests(TestCase):
             response,
             "End time must be later than start time.",
         )
+
+    def test_past_availability_is_not_saved(self):
+        """A student's past date shows an error and creates no record."""
+        response = self.client.post(reverse("availability:list"), {
+            "date": (self.today - timedelta(days=1)).isoformat(),
+            "start_time": "14:00",
+            "end_time": "16:00",
+        })
+        self.assertContains(response, "Availability cannot be in the past.")
+        self.assertFalse(Availability.objects.filter(user=self.user).exists())
+
+    def test_edit_to_past_date_preserves_saved_availability(self):
+        """A rejected date change must leave the existing availability intact."""
+        availability = Availability.objects.create(
+            user=self.user,
+            date=self.today,
+            start_time=time(14, 0),
+            end_time=time(16, 0),
+        )
+        response = self.client.post(
+            reverse("availability:edit", args=[availability.id]),
+            {
+                "date": (self.today - timedelta(days=1)).isoformat(),
+                "start_time": "15:00",
+                "end_time": "17:00",
+            },
+        )
+        self.assertContains(response, "Availability cannot be in the past.")
+        availability.refresh_from_db()
+        self.assertEqual(availability.date, self.today)
+        self.assertEqual(availability.start_time, time(14, 0))
+        self.assertEqual(availability.end_time, time(16, 0))
 
     def test_anonymous_user_cannot_access_availability_page(self):
         """An anonymous user gets redirected away."""
@@ -225,7 +305,7 @@ class AvailabilityViewTests(TestCase):
         # Create availability owned by the other student.
         Availability.objects.create(
             user=other_user,
-            date=date(2026, 10, 22),
+            date=self.today + timedelta(days=2),
             start_time=time(10, 0),
             end_time=time(12, 0),
         )
@@ -241,7 +321,7 @@ class AvailabilityViewTests(TestCase):
         # Confirm the other student's availability does not appear.
         self.assertNotContains(
             response,
-            "Oct. 22, 2026",
+            date_format(self.today + timedelta(days=2), "DATE_FORMAT"),
         )
 
     def test_student_cannot_edit_another_users_availability(self):
@@ -259,7 +339,7 @@ class AvailabilityViewTests(TestCase):
         # Create availability owned by the other student.
         other_availability = Availability.objects.create(
             user=other_user,
-            date=date(2026, 10, 22),
+            date=self.today + timedelta(days=2),
             start_time=time(10, 0),
             end_time=time(12, 0),
         )
@@ -281,7 +361,7 @@ class AvailabilityViewTests(TestCase):
         # Create a valid existing availability entry.
         availability = Availability.objects.create(
             user=self.user,
-            date=date(2026, 10, 20),
+            date=self.today,
             start_time=time(14, 0),
             end_time=time(16, 0),
         )
@@ -293,7 +373,7 @@ class AvailabilityViewTests(TestCase):
                 args=[availability.id],
             ),
             {
-                "date": "2026-10-20",
+                "date": self.today.isoformat(),
                 "start_time": "16:00",
                 "end_time": "14:00",
             },

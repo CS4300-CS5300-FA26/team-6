@@ -21,3 +21,9 @@ Feature: Student availability
     When I create an availability period with an end time before the start time
     Then the invalid availability should not be saved
     And I should receive an availability correction message
+
+  Scenario: Student enters availability in the past
+    Given I am logged in as a student
+    When I create an availability period for yesterday
+    Then the invalid availability should not be saved
+    And I should receive a past-date correction message
