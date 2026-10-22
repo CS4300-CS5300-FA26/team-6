@@ -1,11 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Availability</title>
-</head>
-<body>
+{% extends "base.html" %}
 
+{% block title %}Availability{% endblock %}
+
+{% block content %}
     <!-- Page heading for the student's availability section. -->
     <h1>My Availability</h1>
 
@@ -46,6 +43,4 @@
         <!-- Show a clear message when no availability has been entered. -->
         <p>No availability entered yet.</p>
     {% endif %}
-
-</body>
-</html>
+{% endblock %}

@@ -1,11 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Edit Availability</title>
-</head>
-<body>
+{% extends "base.html" %}
 
+{% block title %}Edit Availability{% endblock %}
+
+{% block content %}
     <!-- Page heading for editing an existing availability entry. -->
     <h1>Edit Availability</h1>
 
@@ -25,6 +22,4 @@
     <a href="{% url 'availability:list' %}">
         Cancel
     </a>
-
-</body>
-</html>
+{% endblock %}

@@ -205,6 +205,8 @@ Jackson McGuire used Claude Code to help write the landing page and its pytest a
 
 ### During software development
 
+Joshua Douglas used Codex to fix both availability templates to extend the shared base layout and navigation.
+
 #### Moving navigation to the left sidebar
 
 Joshua Douglas used Codex to update the shared base template's navigation positioning and styling from a top bar to a left sidebar, preserving the existing menu items and mobile menu toggle.
