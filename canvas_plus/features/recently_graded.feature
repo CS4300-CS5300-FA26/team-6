@@ -26,3 +26,10 @@ Feature: Recently graded work on the dashboard
     Given I have a score that was graded more than 14 days ago
     When I navigate to the main dashboard
     Then I do not see that assignment
+  
+  Scenario: Recently graded work cannot be loaded right now
+    Given I have upcoming assignments
+    And Canvas cannot load my graded work right now
+    When I navigate to the main dashboard
+    Then I see "Unable to load recently graded work right now."
+    And I still see my upcoming assignments
