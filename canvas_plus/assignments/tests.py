@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.canvas_client import CanvasAPIError
+from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
 
 
@@ -197,7 +197,40 @@ class CanvasAssignmentsPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Please try again")
-        self.assertNotContains(response, "You have no assignments.")
+        self.assertNotContains(response, "No upcoming assignments")
+
+    @patch("assignments.views.list_courses", create=True)
+    @patch("assignments.views.list_upcoming_assignments", create=True)
+    def test_rejected_token_persists_expired_state_without_retrying_canvas(
+        self,
+        list_upcoming_assignments_mock,
+        list_courses_mock,
+    ):
+        """A rejected token invalidates the connection for subsequent requests."""
+        list_courses_mock.side_effect = CanvasAuthenticationError("Rejected")
+
+        first_response = self.client.get(reverse("assignment_list"))
+
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.is_valid)
+        self.assertEqual(first_response.status_code, 200)
+        self.assertContains(first_response, "Your Canvas connection expired. Please reconnect.")
+        self.assertContains(first_response, reverse("connect_canvas"))
+        self.assertEqual(
+            first_response.content.decode().count("Your Canvas connection expired."),
+            1,
+        )
+        self.assertNotContains(first_response, "Your Canvas connection has expired.")
+        self.assertNotContains(first_response, "No upcoming assignments")
+
+        second_response = self.client.get(reverse("assignment_list"))
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, "Your Canvas connection expired. Please reconnect.")
+        self.assertContains(second_response, reverse("connect_canvas"))
+        self.assertNotContains(second_response, "No upcoming assignments")
+        list_courses_mock.assert_called_once_with("fake-canvas-token")
+        list_upcoming_assignments_mock.assert_not_called()
 
     def test_anonymous_visitor_is_redirected_to_sign_in(self):
         """Only a signed-in student can access the assignments home page."""
@@ -219,7 +252,7 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Connect Canvas to see your upcoming assignments")
         self.assertContains(response, reverse("connect_canvas"))
-        self.assertNotContains(response, "No upcoming assignments")
+        self.assertNotContains(response, "No upcoming assignments.")
 
 PAGES_USING_BASE_TEMPLATE = ["/assignments/"]
 
