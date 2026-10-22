@@ -251,7 +251,7 @@ Jackson McGuire used Claude Code to plan a clean-clone check and draft the READM
 
 ### During Sprint 1
 
-Nathan Hinebaugh used ChatGPT to assist with building Behave testing, all suggested code and configuration changes were reviewed, tested locally, and adjusted before pushed into repository
+Nathan Hinebaugh used ChatGPT to assist with building Behave testing and availability application, all suggested code and configuration changes were reviewed, tested locally, and adjusted before pushed into repository
 
 #### AI code review in CI
 
@@ -266,6 +266,8 @@ Jackson McGuire used Claude Code to help add the uv.lock check to Lint and Test.
 Jackson McGuire used Claude Code to help write the landing page and its pytest and Behave tests. Jackson refined the Gherkin acceptance criteria, ran every test (red before the page existed, green after), and flip-checked the failed-login test.
 
 ### During software development
+
+Joshua Douglas used Codex to fix both availability templates to extend the shared base layout and navigation.
 
 #### Moving navigation to the left sidebar
 
