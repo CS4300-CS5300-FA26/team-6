@@ -44,6 +44,44 @@ def canvas_base_url():
     return base_url
 
 
+def _validate_pagination_url(next_url, base_url, visited):
+    """Reject unsafe, repeated, or excessive same-origin pagination links."""
+    try:
+        safe_origin = canvas_origin(next_url) == canvas_origin(base_url)
+    except ValueError:
+        safe_origin = False
+    if not safe_origin or next_url in visited or len(visited) >= MAX_COURSE_PAGES:
+        raise CanvasAPIError("Canvas returned an unsafe or repeated pagination link.")
+
+
+@sensitive_variables("token", "response")
+def _fetch_page(next_url, token, params, failure_message, invalid_response_message):
+    """Fetch a JSON list page and its next link with shared Canvas error handling."""
+    try:
+        response = requests.get(
+            next_url,
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+            timeout=10,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
+    if response.status_code == 401:
+        raise CanvasAuthenticationError("Canvas rejected the token.")
+    if response.status_code != 200:
+        raise CanvasAPIError(failure_message)
+    try:
+        page = response.json()
+    except ValueError:
+        raise CanvasAPIError(
+            "Canvas returned an unreadable response. Please try again."
+        ) from None
+    if not isinstance(page, list):
+        raise CanvasAPIError(invalid_response_message)
+    return page, response.links.get("next", {}).get("url")
+
+
 @sensitive_variables("token", "response")
 def list_courses(token):
     """Return all active student courses, following same-origin pagination only."""
@@ -55,43 +93,22 @@ def list_courses(token):
 
 
     while next_url:
-        try:
-            safe_origin = canvas_origin(next_url) == canvas_origin(base_url)
-        except ValueError:
-            safe_origin = False
-        if not safe_origin or next_url in visited or len(visited) >= MAX_COURSE_PAGES:
-            raise CanvasAPIError("Canvas returned an unsafe or repeated pagination link.")
+        _validate_pagination_url(next_url, base_url, visited)
         visited.add(next_url)
-
-        try:
-            response = requests.get(
-                next_url,
-                headers={"Authorization": f"Bearer {token}"},
-                params=params,
-                timeout=10,
-                allow_redirects=False,
-            )
-        except requests.RequestException:
-            raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
-        if response.status_code == 401:
-            raise CanvasAuthenticationError("Canvas rejected the token.")
-
-        if response.status_code != 200:
-            raise CanvasAPIError("Canvas could not load your courses. Please try again.")
-        try:
-            page = response.json()
-        except ValueError:
-            raise CanvasAPIError(
-                "Canvas returned an unreadable response. Please try again."
-            ) from None
-        if not isinstance(page, list) or any(
+        page, next_url = _fetch_page(
+            next_url,
+            token,
+            params,
+            "Canvas could not load your courses. Please try again.",
+            "Canvas returned unexpected course data. Please try again.",
+        )
+        if any(
             not isinstance(course, dict) or not isinstance(course.get("name"), str)
             for course in page
         ):
             raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
         courses.extend(page)
 
-        next_url = response.links.get("next", {}).get("url")
         params = None
 
     return courses
@@ -103,50 +120,6 @@ def _validate_assignment_course(course):
             or not isinstance(course.get("id"), int) or course["id"] <= 0
             or not isinstance(course.get("name"), str)):
         raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
-
-
-def _safe_assignment_page_url(next_url, base_url, visited):
-    """Validate origin and pagination bounds before sending the bearer token."""
-    try:
-        safe_origin = canvas_origin(next_url) == canvas_origin(base_url)
-    except ValueError:
-        safe_origin = False
-    if not safe_origin or next_url in visited or len(visited) >= MAX_COURSE_PAGES:
-        raise CanvasAPIError("Canvas returned an unsafe or repeated pagination link.")
-
-
-@sensitive_variables("token", "response")
-def _fetch_assignment_page(next_url, token, params):
-    """Fetch and validate one Canvas assignment page."""
-    try:
-        response = requests.get(
-            next_url,
-            headers={"Authorization": f"Bearer {token}"},
-            params=params,
-            timeout=10,
-            allow_redirects=False,
-        )
-    except requests.RequestException:
-        raise CanvasAPIError(
-            "Canvas is temporarily unavailable. Please try again."
-        ) from None
-    if response.status_code == 401:
-        raise CanvasAuthenticationError("Canvas rejected the token.")
-    if response.status_code != 200:
-        raise CanvasAPIError(
-            "Canvas could not load upcoming assignments. Please try again."
-        )
-    try:
-        page = response.json()
-    except ValueError:
-        raise CanvasAPIError(
-            "Canvas returned an unreadable response. Please try again."
-        ) from None
-    if not isinstance(page, list):
-        raise CanvasAPIError(
-            "Canvas returned unexpected assignment data. Please try again."
-        )
-    return page, response.links.get("next", {}).get("url")
 
 
 def _normalize_assignment(assignment, course_name):
@@ -185,9 +158,15 @@ def _list_course_upcoming_assignments(token, course, base_url):
     visited = set()
     assignments = []
     while next_url:
-        _safe_assignment_page_url(next_url, base_url, visited)
+        _validate_pagination_url(next_url, base_url, visited)
         visited.add(next_url)
-        page, next_url = _fetch_assignment_page(next_url, token, params)
+        page, next_url = _fetch_page(
+            next_url,
+            token,
+            params,
+            "Canvas could not load upcoming assignments. Please try again.",
+            "Canvas returned unexpected assignment data. Please try again.",
+        )
         assignments.extend(
             _normalize_assignment(assignment, course["name"])
             for assignment in page
