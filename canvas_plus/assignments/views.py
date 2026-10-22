@@ -54,7 +54,9 @@ def assignment_list(request):
         "assignments": assignments,
         "canvas_connection_expired": connection_expired,
         "canvas_connection_missing": connection_missing,
-        "assignments_unavailable": bool(unavailable_message) or connection_expired,
+        "assignments_unavailable": (
+            bool(unavailable_message) or connection_expired or connection_missing
+        ),
         "assignments_unavailable_message": unavailable_message,
     }
     return render(request, "assignments/assignment_list.html", context)

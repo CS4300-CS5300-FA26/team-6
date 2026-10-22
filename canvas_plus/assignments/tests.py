@@ -1,43 +1,17 @@
-"""Tests for the assignments list page (URL -> view -> model -> template)."""
+"""Tests for the Canvas-backed assignments page."""
 
-from datetime import timedelta, timezone as datetime_timezone
+from datetime import timezone as datetime_timezone
 from unittest.mock import patch
 
 import pytest
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
-from django.utils import timezone
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError
 from accounts.models import CanvasConnection
-from .models import Assignment
-
-
-@pytest.mark.integration
-class AssignmentsPageTests(TestCase):
-    """The assignments page shows assignments stored in the database."""
-
-    def test_assignments_page_shows_saved_assignment(self):
-        """An assignment saved in the database appears on the page."""
-        Assignment(
-            title="Test Assignment 123",
-            course="CS 4300",
-            due_date=timezone.now() + timedelta(days=7),
-        ).save()
-
-        response = self.client.get("/assignments/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Test Assignment 123")
-
-    def test_assignments_page_loads_with_no_assignments(self):
-        """With an empty database, the page loads and says there are no assignments."""
-        response = self.client.get("/assignments/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You have no assignments.")
 
 
 @pytest.mark.integration
@@ -179,13 +153,39 @@ class CanvasAssignmentsPageTests(TestCase):
             f"{reverse('login')}?next={reverse('assignment_list')}",
         )
 
+    def test_missing_connection_shows_connect_state_not_empty_state(self):
+        """A missing connection is distinct from a successful empty result."""
+        self.connection.delete()
+
+        response = self.client.get(reverse("assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Connect Canvas to see your upcoming assignments")
+        self.assertContains(response, reverse("connect_canvas"))
+        self.assertNotContains(response, "No upcoming assignments")
+
 PAGES_USING_BASE_TEMPLATE = ["/assignments/"]
 
 @pytest.mark.integration
 class SharedTemplateTests(TestCase):
     """The shared template is reflected across all pages listed above"""
 
-    def test_every_page_uses_base_template(self):
+    def setUp(self):
+        self.settings_override = override_settings(
+            CANVAS_BASE_URL="https://canvas.example.edu",
+            CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+        )
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+        user = get_user_model().objects.create_user(username="template-student")
+        connection = CanvasConnection(user=user, canvas_url="https://canvas.example.edu")
+        connection.set_token("template-canvas-token")
+        connection.save()
+        self.client.force_login(user)
+
+    @patch("assignments.views.list_courses", return_value=[])
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_every_page_uses_base_template(self, _assignments_mock, _courses_mock):
         """The shared base template is used across all canvas+ pages in a list"""
 
         for url in PAGES_USING_BASE_TEMPLATE:
@@ -196,7 +196,9 @@ class SharedTemplateTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertTemplateUsed(response, "base.html")
 
-    def test_every_page_links_assignments(self):
+    @patch("assignments.views.list_courses", return_value=[])
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_every_page_links_assignments(self, _assignments_mock, _courses_mock):
         """The assignments list page is displayed on every page through the navigation bar"""
         assignments_url = reverse("assignment_list")
 
