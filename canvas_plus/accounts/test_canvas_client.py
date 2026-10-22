@@ -158,6 +158,30 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
 
 
 @pytest.mark.unit
+def test_upcoming_assignments_are_sorted_by_due_date_across_courses():
+    """Assignments sort by due date, with assignments lacking dates last."""
+    courses = [
+        {"id": 42, "name": "CS 4300"},
+        {"id": 84, "name": "MATH 2250"},
+    ]
+    responses = [
+        response([
+            {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
+            {"name": "No due date", "due_at": None},
+        ]),
+        response([{"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"}]),
+    ]
+    with patch("accounts.canvas_client.requests.get", side_effect=responses):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == [
+        "Earlier",
+        "Later",
+        "No due date",
+    ]
+
+
+@pytest.mark.unit
 def test_upcoming_assignments_combine_course_results_and_return_empty_list():
     """Each supplied course is queried and a successful empty response is empty."""
     courses = [
