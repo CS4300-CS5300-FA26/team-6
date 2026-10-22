@@ -2,6 +2,7 @@
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import render
+from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from accounts.canvas_client import (
     CanvasAPIError,
@@ -14,6 +15,7 @@ from accounts.canvas_client import (
 )
 from accounts.models import CanvasConnection, SavedTokenError
 from .grades import recent_grades
+from .priority import priority
 
 
 @sensitive_variables("token")
@@ -58,6 +60,11 @@ def assignment_list(request):
             token = connection.get_token()
             courses = list_courses(token)
             assignments = list_upcoming_assignments(token, courses)
+            now = timezone.now()
+            for assignment in assignments:
+                assignment["priority"] = priority(
+                    assignment["due_date"], assignment["submitted"], now
+                )
             graded_context = recently_graded_context(token, courses)
         except (CanvasAuthenticationError, SavedTokenError):
             connection.is_valid = False

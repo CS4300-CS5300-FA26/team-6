@@ -10,6 +10,9 @@
                        background: #fff; }
     .assignment-status { padding: 0.25rem 0.5rem; border-radius: 3px; background: #e7f2ee;
                          color: #245b49; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+    .assignment-status--due-soon { background: #fdf0d5; color: #7a4b00; }
+    .assignment-status--past-due { background: #fbe3e1; color: #9b1c13; }
+    .assignment-status--submitted { background: #eceeed; color: #6b7570; }
     .assignment-details { min-width: 0; }
     .assignment-title { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
     .assignment-course { margin: 0.25rem 0 0; color: #52615c; overflow-wrap: anywhere; }
@@ -36,7 +39,7 @@
     <ul class="assignment-list">
       {% for assignment in assignments %}
         <li class="assignment-card">
-          <span class="assignment-status">Upcoming</span>
+          <span class="assignment-status assignment-status--{{ assignment.priority|slugify }}">{{ assignment.priority }}</span>
           <div class="assignment-details">
             <h2 class="assignment-title">{{ assignment.title }}</h2>
             <p class="assignment-course">{{ assignment.course_name }}</p>
