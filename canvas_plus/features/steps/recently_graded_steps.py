@@ -8,6 +8,8 @@ from unittest.mock import patch
 from behave import given, when, then
 from django.utils import timezone
 
+from accounts.canvas_client import CanvasAPIError
+
 
 def fake_graded_work(context, grades):
     """Make the dashboard receive `grades` instead of calling Canvas."""
@@ -103,3 +105,25 @@ def step_old_score(context):
 @then("I do not see that assignment")
 def step_old_score_hidden(context):
     assert context.old_grade["assignment"] not in page(context)
+
+
+# Scenario 5: Recently graded work cannot be loaded right now
+
+@given("I have upcoming assignments")
+def step_upcoming_assignments(context):
+    context.upcoming_title = "Canvas Project 1"
+    context.upcoming_assignments.return_value = [{
+        "title": context.upcoming_title,
+        "course_name": "Software Engineering",
+        "due_date": timezone.now() + timedelta(days=7),
+    }]
+
+
+@given("Canvas cannot load my graded work right now")
+def step_grades_unavailable(context):
+    context.graded_submissions.side_effect = CanvasAPIError("Canvas could not load graded work.")
+
+
+@then("I still see my upcoming assignments")
+def step_upcoming_still_shown(context):
+    assert context.upcoming_title in page(context)
