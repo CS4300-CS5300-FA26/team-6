@@ -189,3 +189,9 @@ def list_upcoming_assignments(token, courses):
         assignment["due_date"],
     ))
     return assignments
+
+
+@sensitive_variables("token")
+def list_graded_submissions(token, courses):
+    """Return the student's graded submissions as plain dicts."""
+    raise NotImplementedError("Fetching graded submissions from Canvas is not built yet.")

@@ -50,4 +50,15 @@
   {% else %}
     <p>No upcoming assignments</p>
   {% endif %}
+
+  {% if show_recently_graded %}
+    <h2>Recently graded</h2>
+    <ul>
+      {% for g in recently_graded %}
+        <li>{{ g.assignment }} ({{ g.course }}): {{ g.score|floatformat }}</li>
+      {% empty %}
+        <li>No recently graded work</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
 {% endblock %}

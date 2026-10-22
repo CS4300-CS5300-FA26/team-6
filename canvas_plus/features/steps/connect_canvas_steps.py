@@ -26,11 +26,13 @@ def prepare_student(context):
     context.add_cleanup(configured.disable)
     context.canvas = Mock(return_value=COURSES)
     context.upcoming_assignments = Mock(return_value=[])
+    context.graded_submissions = Mock(return_value=[])
     replacements = (
         ("accounts.views.list_courses", context.canvas),
         ("accounts.connections.list_courses", context.canvas),
         ("assignments.views.list_courses", context.canvas),
         ("assignments.views.list_upcoming_assignments", context.upcoming_assignments),
+        ("assignments.views.list_graded_submissions", context.graded_submissions),
     )
     for target, replacement_value in replacements:
         replacement = patch(target, replacement_value)
