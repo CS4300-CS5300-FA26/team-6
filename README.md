@@ -312,3 +312,8 @@ Stephen Tovar used copilot to assist with Canvas API calls to retrieve assignmen
 Nathan Lucas used Claude Code to help understand Canvas API docs
 Nathan Lucas used Claude Code to write the recently graded feature's pytest and behave tests
 Nathan Lucas used Claude Code to review and make suggestions for written code
+#### Dynamic priority indicators (issue 41)
+
+Joshua Douglas used Claude Code to plan the feature with him, write the design spec and implementation plan, and orchestrate and review the other agents' work
+Joshua Douglas used GLM 5.3 (via OpenCode) to implement the priority rule, the Canvas client changes, and the dashboard badge test-first
+Joshua Douglas used GPT 6.1 sol (via Codex) to write the Behave step definitions for the acceptance scenarios
