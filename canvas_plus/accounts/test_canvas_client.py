@@ -220,6 +220,47 @@ def test_upcoming_assignments_are_sorted_by_due_date_across_courses():
 
 
 @pytest.mark.unit
+def test_multiple_undated_assignments_sort_after_dated_in_original_order():
+    """Several null due dates are not compared and keep their original order."""
+    courses = [
+        {"id": 42, "name": "CS 4300"},
+        {"id": 84, "name": "MATH 2250"},
+    ]
+    responses = [
+        response([
+            {"name": "Undated A", "due_at": None},
+            {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
+            {"name": "Undated B", "due_at": None},
+        ]),
+        response([
+            {"name": "Undated C", "due_at": None},
+            {"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"},
+        ]),
+    ]
+    with patch("accounts.canvas_client.requests.get", side_effect=responses):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == [
+        "Earlier",
+        "Later",
+        "Undated A",
+        "Undated B",
+        "Undated C",
+    ]
+
+
+@pytest.mark.unit
+def test_only_undated_assignments_keep_original_order():
+    """A result set with no due dates at all sorts without error."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    payload = [{"name": "First", "due_at": None}, {"name": "Second", "due_at": None}]
+    with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["First", "Second"]
+
+
+@pytest.mark.unit
 def test_upcoming_assignments_combine_course_results_and_return_empty_list():
     """Each supplied course is queried and a successful empty response is empty."""
     courses = [
