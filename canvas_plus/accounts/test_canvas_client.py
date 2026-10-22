@@ -325,6 +325,8 @@ ABSENT = object()
     (ABSENT, False),
     (None, False),
     ({"workflow_state": "unsubmitted", "submitted_at": None}, False),
+    ({"workflow_state": "unsubmitted", "submitted_at": None, "excused": False}, False),
+    ({"workflow_state": "unsubmitted", "submitted_at": None, "excused": True}, True),
     ({"workflow_state": "submitted", "submitted_at": "2026-10-21T10:00:00Z"}, True),
     ({"workflow_state": "graded", "submitted_at": None}, True),
 ])
