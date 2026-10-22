@@ -14,9 +14,6 @@
         <!-- Required by Django for secure POST requests. -->
         {% csrf_token %}
 
-        <!-- Show validation errors, such as an invalid time range. -->
-        {{ form.non_field_errors }}
-
         <!-- Pre-filled form fields for the selected availability entry. -->
         {{ form.as_p }}
 

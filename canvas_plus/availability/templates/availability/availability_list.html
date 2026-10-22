@@ -17,10 +17,6 @@
         <!-- Django requires this token on POST forms for security. -->
         {% csrf_token %}
 
-        <!-- Display any form-wide validation errors, including
-             the start/end-time validation message. -->
-        {{ form.non_field_errors }}
-
         <!-- Render the date, start-time, and end-time fields. -->
         {{ form.as_p }}
 
