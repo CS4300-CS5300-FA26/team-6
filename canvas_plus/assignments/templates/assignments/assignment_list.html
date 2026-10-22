@@ -1,14 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %} All Assignments {% endblock %}
+{% block title %} Upcoming Assignments {% endblock %}
 
 {% block content %}
-  <h1>All Assignments</h1>
-  <ul>
-    {% for a in assignments %}
-      <li>{{ a.title }} ({{ a.course }}), due {{ a.due_date|date:"M j, Y g:i A" }}</li>
-    {% empty %}
-      <li>You have no assignments.</li>
-    {% endfor %}
-  </ul>
+  <style>
+    .assignment-list { display: grid; gap: 0.75rem; margin: 1.25rem 0; padding: 0; list-style: none; }
+    .assignment-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+                       gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #cbd5d1; border-radius: 6px;
+                       background: #fff; }
+    .assignment-status { padding: 0.25rem 0.5rem; border-radius: 3px; background: #e7f2ee;
+                         color: #245b49; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+    .assignment-details { min-width: 0; }
+    .assignment-title { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+    .assignment-course { margin: 0.25rem 0 0; color: #52615c; overflow-wrap: anywhere; }
+    .assignment-due { max-width: 12rem; margin: 0; color: #35443e; text-align: right; overflow-wrap: anywhere; }
+
+    @media (max-width: 40rem) {
+      .assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
+      .assignment-due { grid-column: 2; max-width: none; text-align: left; }
+    }
+  </style>
+
+  <h1>Upcoming Assignments</h1>
+  {% if assignments_unavailable %}
+    {% if not canvas_connection_expired %}
+      <p role="status">
+      {% if canvas_connection_missing %}
+        Connect Canvas to see your upcoming assignments. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.
+      {% else %}
+        {{ assignments_unavailable_message }}
+      {% endif %}
+      </p>
+    {% endif %}
+  {% elif assignments %}
+    <ul class="assignment-list">
+      {% for assignment in assignments %}
+        <li class="assignment-card">
+          <span class="assignment-status">Upcoming</span>
+          <div class="assignment-details">
+            <h2 class="assignment-title">{{ assignment.title }}</h2>
+            <p class="assignment-course">{{ assignment.course_name }}</p>
+          </div>
+          {% if assignment.due_date %}
+            <p class="assignment-due">Due <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y g:i A" }}</time></p>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% elif not canvas_connection_expired %}
+    <p>No upcoming assignments</p>
+  {% endif %}
 {% endblock %}

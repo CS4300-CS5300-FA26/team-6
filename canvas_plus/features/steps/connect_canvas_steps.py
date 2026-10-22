@@ -25,8 +25,15 @@ def prepare_student(context):
     configured.enable()
     context.add_cleanup(configured.disable)
     context.canvas = Mock(return_value=COURSES)
-    for target in ("accounts.views.list_courses", "accounts.connections.list_courses"):
-        replacement = patch(target, context.canvas)
+    context.upcoming_assignments = Mock(return_value=[])
+    replacements = (
+        ("accounts.views.list_courses", context.canvas),
+        ("accounts.connections.list_courses", context.canvas),
+        ("assignments.views.list_courses", context.canvas),
+        ("assignments.views.list_upcoming_assignments", context.upcoming_assignments),
+    )
+    for target, replacement_value in replacements:
+        replacement = patch(target, replacement_value)
         replacement.start()
         context.add_cleanup(replacement.stop)
     context.user = get_user_model().objects.create_user(username="canvas-student")

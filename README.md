@@ -286,8 +286,6 @@ Joshua Douglas used Codex to implement a red banner for the expired Canvas conne
 
 Stephen Tovar used ChatGPT to translate his existing knowledge of Azure DevOps pipelines into the equivalent terminology and YAML syntax used by GitHub Actions.
 
-### During Sprint 1
-
 #### Assistance with CD pipeline
 
 Stephen Tovar used Copilot to assist with the steps needed to deploy the application directly to Heroku without linking in the GitHub repo.
@@ -295,3 +293,8 @@ Stephen Tovar used Copilot to assist with the steps needed to deploy the applica
 #### Assistance with Logon and Account Registration
 
 Stephen Tovar used Copilot to explain how `django.contrib.auth` provided django user account creation.
+
+#### Retrieving assignments from Canvas
+
+Stephen Tovar used copilot to help with TDD and BDD for retrieving assignments
+Stephen Tovar used copilot to assist with Canvas API calls to retrieve assignments
