@@ -289,7 +289,13 @@ def test_upcoming_assignments_raise_api_error_for_other_http_failures(status):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("payload", [{"error": "bad"}, ["not an assignment"], [{}]])
+@pytest.mark.parametrize("payload", [
+    {"error": "bad"},
+    ["not an assignment"],
+    [{}],
+    [{"id": ["7"], "name": "x", "due_at": None}],
+    [{"id": True, "name": "x", "due_at": None}],
+])
 def test_malformed_upcoming_assignment_data_raises_api_error(payload):
     """Malformed payloads cannot silently become assignment records."""
     courses = [{"id": 42, "name": "CS 4300"}]
@@ -315,6 +321,38 @@ def test_overdue_assignments_are_included_and_sorted_first():
         result = list_upcoming_assignments("fake-token", courses)
 
     assert [assignment["title"] for assignment in result] == ["Late", "Soon"]
+
+
+@pytest.mark.unit
+def test_assignment_returned_by_both_buckets_appears_once():
+    """The same assignment id in both buckets yields a single card."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{"id": 7, "name": "Race", "due_at": "2026-10-22T05:59:00Z"}]),
+            response([{"id": 7, "name": "Race", "due_at": "2026-10-22T05:59:00Z"}]),
+        ],
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["Race"]
+
+
+@pytest.mark.unit
+def test_distinct_assignment_ids_are_all_kept():
+    """Different assignment ids from both buckets are all kept."""
+    courses = [{"id": 42, "name": "CS 4300"}]
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{"id": 7, "name": "A", "due_at": "2026-10-22T05:59:00Z"}]),
+            response([{"id": 8, "name": "B", "due_at": "2026-10-21T05:59:00Z"}]),
+        ],
+    ):
+        result = list_upcoming_assignments("fake-token", courses)
+
+    assert [assignment["title"] for assignment in result] == ["B", "A"]
 
 
 ABSENT = object()
