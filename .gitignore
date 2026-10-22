@@ -29,3 +29,4 @@ eggs/
 .eggs/
 *.egg-info/
 *.egg
+dev-env.sh
