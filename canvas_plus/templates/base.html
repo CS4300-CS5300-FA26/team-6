@@ -5,6 +5,8 @@
     <!-- viewport with width=device-width ensures the application scales properly on mobile device -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Canvas+{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/shared.css' %}">
     <style>
         * { box-sizing: border-box; }
         body { display: flex; min-height: 100vh; margin: 0; font-family: sans-serif; overflow-wrap: anywhere; }
