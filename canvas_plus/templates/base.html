@@ -7,34 +7,9 @@
     <title>{% block title %}Canvas+{% endblock %}</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/shared.css' %}">
-    <style>
-        * { box-sizing: border-box; }
-        body { display: flex; min-height: 100vh; margin: 0; font-family: sans-serif; overflow-wrap: anywhere; }
-        nav { display: flex; flex: 0 0 12rem; flex-direction: column; min-height: 100vh; padding: 1rem; background: #17324d; color: white; }
-        nav a { display: block; padding: 0.5rem; border-radius: 0.25rem; color: inherit; text-decoration: none; }
-        nav a:hover, nav a:focus-visible { background: #284b6d; text-decoration: underline; }
-        .nav-links { flex: 1; }
-        .nav-links form { margin: 0; }
-        .nav-links .logout-item { margin-top: auto; }
-        .nav-links button { width: 100%; padding: 0.5rem; border: 0; border-radius: 0.25rem; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-        .nav-links button:hover, .nav-links button:focus-visible { background: #284b6d; text-decoration: underline; }
-        .nav-links { display: flex; flex-direction: column; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
-        .menu-toggle { display: none; font: inherit; padding: 0.5rem 1rem; }
-        main { flex: 1; min-width: 0; max-width: 72rem; margin: 0 auto; padding: 1rem; }
-        .connection-alert { margin: 0 0 1rem; padding: 1rem; border: 1px solid #fca5a5;
-                            border-radius: 6px; background: #fef2f2; color: #991b1b; line-height: 1.6; }
-        .connection-alert a { color: inherit; font-weight: 600; text-decoration: underline; }
-        .connection-alert a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-
-        @media (max-width: 40rem) {
-            nav { flex-basis: 8rem; padding: 0.5rem; }
-            .menu-toggle { display: inline-block; padding: 0.5rem; }
-            .nav-links { margin-top: 1rem; }
-            .nav-links[hidden] { display: none; }
-        }
-    </style>
 </head>
 <body>
+    {% block navigation %}
     <nav aria-label="Main navigation">
         <button class="menu-toggle" type="button" aria-expanded="true" aria-controls="navigation-links">
             Menu
@@ -52,18 +27,6 @@
             {% endif %}
         </ul>
     </nav>
-    <main>
-        {% if canvas_connection_expired %}
-            <p class="connection-alert" role="alert">Your Canvas connection expired. Please reconnect.
-                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
-            </p>
-        {% elif canvas_connection_error %}
-            <p role="status">{{ canvas_connection_error }}
-                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
-            </p>
-        {% endif %}
-        {% block content %}{% endblock %}
-    </main>
     <script>
         const menuToggle = document.querySelector('.menu-toggle');
         const navigationLinks = document.getElementById('navigation-links');
@@ -78,5 +41,22 @@
         phoneScreen.addEventListener('change', () => setMenuExpanded(!phoneScreen.matches));
         menuToggle.addEventListener('click', () => setMenuExpanded(navigationLinks.hidden));
     </script>
+    {% endblock %}
+    {% block app_main_start %}
+    <main>
+    {% endblock %}
+        {% if canvas_connection_expired %}
+            <p class="connection-alert" role="alert">Your Canvas connection expired. Please reconnect.
+                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+            </p>
+        {% elif canvas_connection_error %}
+            <p role="status">{{ canvas_connection_error }}
+                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+            </p>
+        {% endif %}
+        {% block content %}{% endblock %}
+    {% block app_main_end %}
+    </main>
+    {% endblock %}
 </body>
 </html>
