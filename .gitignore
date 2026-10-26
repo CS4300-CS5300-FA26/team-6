@@ -12,6 +12,7 @@ env/
 
 # Django Specific
 db.sqlite3
+/canvas_plus/staticfiles/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
