@@ -8,7 +8,7 @@
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/shared.css' %}">
 </head>
-<body>
+<body{% block body_class %}{% endblock %}>
     {% block navigation %}
     <nav aria-label="Main navigation">
         <button class="menu-toggle" type="button" aria-expanded="true" aria-controls="navigation-links">

@@ -1,9 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Canvas+</title>
+{% extends "base.html" %}
+
+{% block title %}Canvas+{% endblock %}
+{% block body_class %} class="landing-page"{% endblock %}
+{% block navigation %}{% endblock %}
+{% block app_main_start %}{% endblock %}
+{% block app_main_end %}{% endblock %}
+
+{% block content %}
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: sans-serif; background: #17324d; color: #1f2933; }
@@ -27,8 +30,6 @@
       .brand h1 { font-size: 2.5rem; }
     }
   </style>
-</head>
-<body>
   <main class="landing">
     <section class="brand">
       <h1>Canvas+</h1>
@@ -48,5 +49,4 @@
       <p>New here? <a href="{% url 'register' %}">Register</a></p>
     </section>
   </main>
-</body>
-</html>
+{% endblock %}
