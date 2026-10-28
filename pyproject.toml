@@ -11,7 +11,9 @@ dependencies = [
     "Django==6.1.1",
     "django-environ>=0.14.0",
     "gunicorn>=26.2.0",
+    "openai>=3.41.0",
     "psycopg[binary]>=3.3.6",
+    "pydantic>=2.14.1",
     "requests>=2.34.2",
 ]
 
