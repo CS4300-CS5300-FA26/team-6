@@ -1,6 +1,7 @@
 """AI inference boundary tests; no requests reach OpenAI."""
 
 import logging
+import inspect
 from unittest.mock import Mock, patch
 
 import openai
@@ -17,6 +18,12 @@ class Answer(BaseModel):
     """Minimal structured response used by the tests."""
 
     text: str
+
+
+class CountAnswer(BaseModel):
+    """Distinct response schema used to verify per-call schema selection."""
+
+    count: int
 
 
 @pytest.fixture(autouse=True)
@@ -73,6 +80,90 @@ def test_infer_sends_authenticated_strict_structured_request():
     assert response_format["schema"] == Answer.model_json_schema()
 
 
+@pytest.mark.unit
+def test_infer_returns_json_string_parseable_by_response_model():
+    """A completed inference returns JSON accepted by the requested model."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.return_value.responses.create.return_value = complete_response(
+            "structured answer"
+        )
+
+        result = infer("Answer briefly", "content", Answer)
+
+    assert isinstance(result, str)
+    assert Answer.model_validate_json(result) == Answer(text="structured answer")
+
+
+@pytest.mark.unit
+def test_infer_supports_different_response_models():
+    """The interface rejects model selection and builds schema per response type."""
+    assert tuple(inspect.signature(infer).parameters) == (
+        "prompt",
+        "content",
+        "response_model",
+    )
+
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        create = client_class.return_value.responses.create
+        create.side_effect = [
+            complete_response(),
+            Mock(status="completed", output_text=CountAnswer(count=3).model_dump_json()),
+        ]
+
+        with pytest.raises(TypeError):
+            infer("Count", "three", Answer, model="another-model")
+        infer("Answer", "hello", Answer)
+        infer("Count", "three", CountAnswer)
+
+    assert create.call_count == 2
+    schemas = [
+        call.kwargs["text"]["format"]["schema"]
+        for call in create.call_args_list
+    ]
+    assert schemas == [Answer.model_json_schema(), CountAnswer.model_json_schema()]
+
+
+@pytest.mark.unit
+def test_invalid_token_raises_authentication_error():
+    """Provider authentication failures map cleanly without exposing the token."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.return_value.responses.create.side_effect = provider_error(
+            openai.AuthenticationError
+        )
+
+        with pytest.raises(AIInferenceError) as error:
+            infer("Say hello", "content", Answer)
+
+    assert type(error.value).__name__ == "AIAuthenticationError"
+    assert FAKE_TOKEN not in str(error.value)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("prompt", ["", "   ", "\n\t"])
+def test_blank_prompt_rejected_before_provider_call(prompt):
+    """Blank prompts are rejected without creating a provider client."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        with pytest.raises(ValueError):
+            infer(prompt, "content", Answer)
+
+    client_class.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "response_model",
+    [dict, Answer(text="not a class")],
+    ids=["non-pydantic-class", "model-instance"],
+)
+def test_non_basemodel_response_model_rejected(response_model):
+    """Only Pydantic model classes are accepted as response models."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        with pytest.raises(TypeError):
+            infer("Say hello", "content", response_model)
+
+    client_class.assert_not_called()
+
+
 def refusal_response():
     """Construct a Responses API result in which the model refused."""
     part = Mock(type="refusal", refusal="I cannot help with that.")
@@ -84,7 +175,44 @@ def provider_error(error_class):
     message = f"Incorrect API key provided: {FAKE_TOKEN}"
     if error_class is openai.AuthenticationError:
         return error_class(message, response=Mock(status_code=401, headers={}), body=None)
+    if error_class is openai.InternalServerError:
+        return error_class(message, response=Mock(status_code=500, headers={}), body=None)
     return error_class(message=message, request=Mock())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "outcome, expected_error",
+    [
+        pytest.param("refusal", "AIRefusalError", id="refusal"),
+        pytest.param("incomplete", "AIIncompleteResponseError", id="incomplete"),
+        pytest.param("provider-api", "AIProviderError", id="provider-api-error"),
+        pytest.param("provider-connection", "AIProviderError", id="provider-connection-error"),
+        pytest.param("invalid-json", "AIInvalidOutputError", id="invalid-json"),
+        pytest.param("invalid-model-output", "AIInvalidOutputError", id="invalid-model-output"),
+    ],
+)
+def test_provider_failures_raise_explicit_errors(outcome, expected_error):
+    """Provider and output failures map to explicit inference errors."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        create = client_class.return_value.responses.create
+        if outcome == "refusal":
+            create.return_value = refusal_response()
+        elif outcome == "incomplete":
+            create.return_value = Mock(status="incomplete", output_text="")
+        elif outcome == "provider-api":
+            create.side_effect = provider_error(openai.InternalServerError)
+        elif outcome == "provider-connection":
+            create.side_effect = provider_error(openai.APIConnectionError)
+        elif outcome == "invalid-json":
+            create.return_value = Mock(status="completed", output_text="not json")
+        else:
+            create.return_value = Mock(status="completed", output_text='{"text": 42}')
+
+        with pytest.raises(AIInferenceError) as error:
+            infer("Say hello", "content", Answer)
+
+    assert type(error.value).__name__ == expected_error
 
 
 @pytest.mark.unit
