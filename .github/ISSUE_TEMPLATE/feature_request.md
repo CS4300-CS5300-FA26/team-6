@@ -21,9 +21,8 @@ Scenario: `<brief description of the expected behavior>`
   And `<additional event or action if needed>`
   Then `<expected result>`
   And `<additional result, if needed>`
-
-Add one or more scenarios to cover the acceptance criteria for the story. Use multiple scenarios when the story requires distinct behaviors, conditions, or outcomes.
 ~~~
+<Add one or more scenarios to cover the acceptance criteria for the story. Use multiple scenarios when the story requires distinct behaviors, conditions, or outcomes.>
 
 **Note:** Additional information developers should be aware of.
 
