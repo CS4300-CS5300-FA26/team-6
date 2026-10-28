@@ -51,6 +51,28 @@ def test_missing_token_raises_configuration_error_without_provider_call(settings
     assert FAKE_TOKEN not in str(error.value)
 
 
+@pytest.mark.unit
+def test_infer_sends_authenticated_strict_structured_request():
+    """The request uses the fixed model and strict schema for the response type."""
+    prompt = "Answer briefly"
+    content = "What is 2 + 2?"
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.return_value.responses.create.return_value = complete_response()
+
+        infer(prompt, content, Answer)
+
+    create = client_class.return_value.responses.create
+    create.assert_called_once()
+    request = create.call_args.kwargs
+    assert request["model"] == "gpt-6-luna"
+    assert request["instructions"] == prompt
+    assert request["input"] == content
+    response_format = request["text"]["format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["strict"] is True
+    assert response_format["schema"] == Answer.model_json_schema()
+
+
 def refusal_response():
     """Construct a Responses API result in which the model refused."""
     part = Mock(type="refusal", refusal="I cannot help with that.")
