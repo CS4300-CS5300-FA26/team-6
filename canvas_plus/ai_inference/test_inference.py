@@ -26,6 +26,12 @@ class CountAnswer(BaseModel):
     count: int
 
 
+class UnsupportedSchema(BaseModel):
+    """Open-ended schema fixture for testing provider rejection handling."""
+
+    metadata: dict[str, str]
+
+
 @pytest.fixture(autouse=True)
 def ai_settings(settings):
     """Use a fixed, non-secret AI token."""
@@ -177,6 +183,8 @@ def provider_error(error_class):
         return error_class(message, response=Mock(status_code=401, headers={}), body=None)
     if error_class is openai.InternalServerError:
         return error_class(message, response=Mock(status_code=500, headers={}), body=None)
+    if error_class is openai.BadRequestError:
+        return error_class(message, response=Mock(status_code=400, headers={}), body=None)
     return error_class(message=message, request=Mock())
 
 
@@ -213,6 +221,20 @@ def test_provider_failures_raise_explicit_errors(outcome, expected_error):
             infer("Say hello", "content", Answer)
 
     assert type(error.value).__name__ == expected_error
+
+
+@pytest.mark.unit
+def test_unsupported_schema_fails_explicitly():
+    """A mocked schema rejection becomes an inference error, not a result."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.return_value.responses.create.side_effect = provider_error(
+            openai.BadRequestError
+        )
+
+        with pytest.raises(AIInferenceError) as error:
+            infer("Summarize metadata", "content", UnsupportedSchema)
+
+    assert FAKE_TOKEN not in str(error.value)
 
 
 @pytest.mark.unit
