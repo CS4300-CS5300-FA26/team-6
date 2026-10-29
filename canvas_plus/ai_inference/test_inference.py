@@ -87,17 +87,17 @@ def test_infer_sends_authenticated_strict_structured_request():
 
 
 @pytest.mark.unit
-def test_infer_returns_json_string_parseable_by_response_model():
-    """A completed inference returns JSON accepted by the requested model."""
+def test_infer_returns_validated_response_model():
+    """A completed inference returns an instance of the requested model."""
     with patch("ai_inference.inference.OpenAI") as client_class:
         client_class.return_value.responses.create.return_value = complete_response(
             "structured answer"
         )
 
-        result = infer("Answer briefly", "content", Answer)
+        answer = infer("Answer briefly", "content", Answer)
 
-    assert isinstance(result, str)
-    assert Answer.model_validate_json(result) == Answer(text="structured answer")
+    assert isinstance(answer, Answer)
+    assert answer == Answer(text="structured answer")
 
 
 @pytest.mark.unit
@@ -200,8 +200,8 @@ def provider_error(error_class):
         pytest.param("invalid-model-output", "AIInvalidOutputError", id="invalid-model-output"),
     ],
 )
-def test_provider_failures_raise_explicit_errors(outcome, expected_error):
-    """Provider and output failures map to explicit inference errors."""
+def test_provider_failures_raise_errors_without_returning_model(outcome, expected_error):
+    """Provider and output failures raise errors instead of returning a model."""
     with patch("ai_inference.inference.OpenAI") as client_class:
         create = client_class.return_value.responses.create
         if outcome == "refusal":
