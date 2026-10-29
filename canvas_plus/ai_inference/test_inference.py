@@ -10,7 +10,7 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel
 
 from .exceptions import AIConfigurationError, AIInferenceError
-from .inference import infer
+from .inference import build_content, infer
 
 FAKE_TOKEN = "fake-ai-token"
 
@@ -254,8 +254,9 @@ def test_unsupported_schema_fails_explicitly():
     pytest.param(provider_error(openai.AuthenticationError), id="authentication"),
     pytest.param(provider_error(openai.APIConnectionError), id="api-failure"),
     pytest.param("refusal", id="refusal"),
+    pytest.param("upload-failure", id="upload-failure"),
 ])
-def test_token_absent_from_logs_and_errors(outcome, caplog):
+def test_token_absent_from_logs_and_errors(outcome, caplog, tmp_path):
     """Given any outcome, neither logs nor caller-visible errors contain the token."""
     caplog.set_level(logging.DEBUG)
     with patch("ai_inference.inference.OpenAI") as client_class:
@@ -264,10 +265,21 @@ def test_token_absent_from_logs_and_errors(outcome, caplog):
             create.return_value = complete_response()
         elif outcome == "refusal":
             create.return_value = refusal_response()
+        elif outcome == "upload-failure":
+            client_class.return_value.files.create.side_effect = provider_error(
+                openai.APIConnectionError
+            )
         else:
             create.side_effect = outcome
         if outcome is None:
             infer("Say hello", "content", Answer)
+        elif outcome == "upload-failure":
+            source_file = tmp_path / "source.txt"
+            source_file.write_text("source text", encoding="utf-8")
+            with pytest.raises(AIInferenceError) as error:
+                build_content(files=[source_file])
+            assert FAKE_TOKEN not in str(error.value)
+            assert FAKE_TOKEN not in repr(error.value)
         else:
             with pytest.raises(AIInferenceError) as error:
                 infer("Say hello", "content", Answer)
