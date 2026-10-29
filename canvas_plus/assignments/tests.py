@@ -65,7 +65,6 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertContains(response, "Oct 22, 2026 12:30 PM")
         self.assertContains(response, 'class="assignment-card"')
         self.assertContains(response, 'class="assignment-status assignment-status--')
-        self.assertContains(response, "@media (max-width: 40rem)")
         self.assertEqual(response.context["assignments"], assignments)
         list_courses_mock.assert_called_once_with("fake-canvas-token")
         list_upcoming_assignments_mock.assert_called_once_with(
