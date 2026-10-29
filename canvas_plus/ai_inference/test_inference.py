@@ -301,7 +301,12 @@ def test_infer_supports_different_response_models():
         ]
 
         with pytest.raises(TypeError):
-            infer("Count", "three", Answer, model="another-model")
+            infer(  # pylint: disable=unexpected-keyword-arg
+                "Count",
+                "three",
+                Answer,
+                **{"model": "another-model"},
+            )
         infer("Answer", "hello", Answer)
         infer("Count", "three", CountAnswer)
 
@@ -415,9 +420,9 @@ def test_provider_failures_raise_errors_without_returning_model(
             if outcome == "upload-failure":
                 source_file = tmp_path / "source.txt"
                 source_file.write_text("source text", encoding="utf-8")
-                result = build_content(text="include this text", files=[source_file])
+                build_content(text="include this text", files=[source_file])
             else:
-                result = infer("Say hello", "content", Answer)
+                infer("Say hello", "content", Answer)
 
     assert type(error.value).__name__ == expected_error
     if outcome == "upload-failure":

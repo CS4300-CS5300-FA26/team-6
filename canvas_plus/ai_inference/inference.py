@@ -1,10 +1,11 @@
 """Run structured inference through OpenAI with the application's configured token."""
 
+import os
+
 from django.views.decorators.debug import sensitive_variables
 from openai import AuthenticationError, OpenAI, OpenAIError
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel
-import os
 
 from .exceptions import (
     AIConfigurationError,
