@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import openai
 import pytest
+from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel
 
 from .exceptions import AIConfigurationError, AIInferenceError
@@ -90,7 +91,7 @@ def test_infer_sends_authenticated_strict_structured_request():
     response_format = request["text"]["format"]
     assert response_format["type"] == "json_schema"
     assert response_format["strict"] is True
-    assert response_format["schema"] == Answer.model_json_schema()
+    assert response_format["schema"] == to_strict_json_schema(Answer)
 
 
 @pytest.mark.unit
@@ -133,7 +134,10 @@ def test_infer_supports_different_response_models():
         call.kwargs["text"]["format"]["schema"]
         for call in create.call_args_list
     ]
-    assert schemas == [Answer.model_json_schema(), CountAnswer.model_json_schema()]
+    assert schemas == [
+        to_strict_json_schema(Answer),
+        to_strict_json_schema(CountAnswer),
+    ]
 
 
 @pytest.mark.unit
