@@ -209,10 +209,13 @@ def provider_error(error_class):
         pytest.param("provider-connection", "AIProviderError", id="provider-connection-error"),
         pytest.param("invalid-json", "AIInvalidOutputError", id="invalid-json"),
         pytest.param("invalid-model-output", "AIInvalidOutputError", id="invalid-model-output"),
+        pytest.param("upload-failure", "AIProviderError", id="file-upload-error"),
     ],
 )
-def test_provider_failures_raise_errors_without_returning_model(outcome, expected_error):
-    """Provider and output failures raise errors instead of returning a model."""
+def test_provider_failures_raise_errors_without_returning_model(
+    outcome, expected_error, tmp_path
+):
+    """Provider, output, and upload failures never return success or partial content."""
     with patch("ai_inference.inference.OpenAI") as client_class:
         create = client_class.return_value.responses.create
         if outcome == "refusal":
@@ -225,13 +228,24 @@ def test_provider_failures_raise_errors_without_returning_model(outcome, expecte
             create.side_effect = provider_error(openai.APIConnectionError)
         elif outcome == "invalid-json":
             create.return_value = Mock(status="completed", output_text="not json")
+        elif outcome == "upload-failure":
+            client_class.return_value.files.create.side_effect = provider_error(
+                openai.APIConnectionError
+            )
         else:
             create.return_value = Mock(status="completed", output_text='{"text": 42}')
 
         with pytest.raises(AIInferenceError) as error:
-            infer("Say hello", "content", Answer)
+            if outcome == "upload-failure":
+                source_file = tmp_path / "source.txt"
+                source_file.write_text("source text", encoding="utf-8")
+                result = build_content(text="include this text", files=[source_file])
+            else:
+                result = infer("Say hello", "content", Answer)
 
     assert type(error.value).__name__ == expected_error
+    if outcome == "upload-failure":
+        client_class.return_value.files.create.assert_called_once()
 
 
 @pytest.mark.unit
