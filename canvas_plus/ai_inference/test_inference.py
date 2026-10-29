@@ -33,9 +33,9 @@ class UnsupportedSchema(BaseModel):
 
 
 @pytest.fixture(autouse=True)
-def ai_settings(settings):
-    """Use a fixed, non-secret AI token."""
-    settings.AI_API_KEY = FAKE_TOKEN
+def ai_api_key(monkeypatch):
+    """Provide a fixed, non-secret process environment key."""
+    monkeypatch.setenv("OPENAI_API_KEY", FAKE_TOKEN)
 
 
 def complete_response(text="hello"):
@@ -44,23 +44,30 @@ def complete_response(text="hello"):
 
 
 @pytest.mark.unit
-def test_token_read_from_ai_api_key_setting():
-    """Given AI_API_KEY is configured, the provider client is built with that key."""
+def test_openai_client_uses_openai_api_key_environment_variable(monkeypatch):
+    """Configured process key is left for the SDK to load automatically."""
+    monkeypatch.setenv("OPENAI_API_KEY", FAKE_TOKEN)
     with patch("ai_inference.inference.OpenAI") as client_class:
         client_class.return_value.responses.create.return_value = complete_response()
         infer("Say hello", "content", Answer)
-    client_class.assert_called_once()
-    assert client_class.call_args.kwargs["api_key"] == FAKE_TOKEN
+    client_class.assert_called_once_with()
 
 
 @pytest.mark.unit
-def test_missing_token_raises_configuration_error_without_provider_call(settings):
-    """Given no AI_API_KEY, infer fails clearly and never contacts the provider."""
-    settings.AI_API_KEY = ""
+def test_missing_openai_api_key_raises_configuration_error_without_provider_call(
+    monkeypatch,
+):
+    """Missing SDK environment credentials fail clearly before an API request."""
+    monkeypatch.delenv("OPENAI_API_KEY")
     with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.side_effect = openai.OpenAIError(
+            "The api_key client option must be set either by passing api_key "
+            "to the client or by setting the OPENAI_API_KEY environment variable"
+        )
         with pytest.raises(AIConfigurationError) as error:
             infer("Say hello", "content", Answer)
-    client_class.assert_not_called()
+    client_class.assert_called_once_with()
+    client_class.return_value.responses.create.assert_not_called()
     assert FAKE_TOKEN not in str(error.value)
 
 
