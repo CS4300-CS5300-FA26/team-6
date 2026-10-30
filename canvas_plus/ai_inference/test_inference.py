@@ -113,7 +113,7 @@ def test_infer_returns_validated_response_model():
 def test_build_content_accepts_text_only():
     """Text-only content is built without contacting the Files API."""
     with patch("ai_inference.inference.OpenAI") as client_class:
-        content = build_content(text="Summarize this text.")
+        content = build_content(prompt="Summarize this text.")
 
     assert content == [{
         "role": "user",
@@ -135,7 +135,7 @@ def test_build_content_rejects_empty_content_before_provider_call(text, files):
     """Empty content is rejected before creating the provider client."""
     with patch("ai_inference.inference.OpenAI") as client_class:
         with pytest.raises(ValueError):
-            build_content(text=text, files=files)
+            build_content(prompt=text, files=files)
 
     client_class.assert_not_called()
 
@@ -147,11 +147,14 @@ def test_build_content_accepts_named_in_memory_bytes():
     with patch("ai_inference.inference.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-memory")
 
-        content = build_content(files=[("report.txt", file_bytes)])
+        content = build_content(prompt="Placeholder", files=[("report.txt", file_bytes)])
 
     assert content == [{
         "role": "user",
-        "content": [{"type": "input_file", "file_id": "file-memory"}],
+        "content": [
+            {"type": "input_text", "text": "Placeholder"},
+            {"type": "input_file", "file_id": "file-memory"}
+            ],
     }]
     client_class.return_value.files.create.assert_called_once_with(
         file=("report.txt", file_bytes),
@@ -169,7 +172,7 @@ def test_build_content_accepts_multiple_named_byte_files():
             Mock(id="file-two"),
         ]
 
-        content = build_content(text="Compare", files=file_inputs)
+        content = build_content(prompt="Compare", files=file_inputs)
 
     assert content == [{
         "role": "user",
@@ -193,11 +196,14 @@ def test_build_content_accepts_named_binary_stream_and_preserves_ownership():
     with patch("ai_inference.inference.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-stream")
 
-        content = build_content(files=[stream])
+        content = build_content(prompt="Placeholder", files=[stream])
 
     assert content == [{
         "role": "user",
-        "content": [{"type": "input_file", "file_id": "file-stream"}],
+        "content": [
+            {"type": "input_text", "text": "Placeholder"},
+            {"type": "input_file", "file_id": "file-stream"}
+            ],
     }]
     client_class.return_value.files.create.assert_called_once_with(
         file=stream,
@@ -213,9 +219,12 @@ def test_build_content_accepts_named_pair_with_binary_stream():
     with patch("ai_inference.inference.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-db")
 
-        content = build_content(files=[("stored.pdf", stream)])
+        content = build_content(prompt="Placeholder", files=[("stored.pdf", stream)])
 
-    assert content[0]["content"] == [{"type": "input_file", "file_id": "file-db"}]
+    assert content[0]["content"] == [
+        {"type": "input_text", "text": "Placeholder"},
+        {"type": "input_file", "file_id": "file-db"}
+    ]
     client_class.return_value.files.create.assert_called_once_with(
         file=("stored.pdf", stream),
         purpose="user_data",
@@ -231,9 +240,12 @@ def test_build_content_keeps_local_path_as_convenience(tmp_path):
     with patch("ai_inference.inference.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-local")
 
-        content = build_content(files=[source_file])
+        content = build_content(prompt="Placeholder", files=[source_file])
 
-    assert content[0]["content"] == [{"type": "input_file", "file_id": "file-local"}]
+    assert content[0]["content"] == [
+        {"type": "input_text", "text": "Placeholder"},
+        {"type": "input_file", "file_id": "file-local"}
+    ]
     upload = client_class.return_value.files.create.call_args.kwargs
     assert upload["purpose"] == "user_data"
     assert upload["file"].name == str(source_file)
@@ -254,7 +266,7 @@ def test_build_content_rejects_invalid_file_inputs_before_provider_call(files):
     """Malformed, unnamed, or non-binary files are rejected locally."""
     with patch("ai_inference.inference.OpenAI") as client_class:
         with pytest.raises((TypeError, ValueError)):
-            build_content(files=files)
+            build_content(prompt="Placeholder", files=files)
 
     client_class.assert_not_called()
 
@@ -268,7 +280,7 @@ def test_build_content_stream_read_failure_raises_typed_error():
         client_class.return_value.files.create.side_effect = OSError("read failed")
 
         with pytest.raises(AIInferenceError):
-            build_content(files=[stream])
+            build_content(prompt="Placeholder", files=[stream])
 
     assert not stream.closed
 
@@ -279,7 +291,7 @@ def test_build_content_local_read_failure_raises_typed_error(tmp_path):
     missing_file = tmp_path / "missing.txt"
     with patch("ai_inference.inference.OpenAI") as client_class:
         with pytest.raises(AIInferenceError):
-            build_content(files=[missing_file])
+            build_content(prompt="Placeholder", files=[missing_file])
 
     client_class.return_value.files.create.assert_not_called()
 
@@ -288,7 +300,7 @@ def test_build_content_local_read_failure_raises_typed_error(tmp_path):
 def test_infer_supports_different_response_models():
     """The interface rejects model selection and builds schema per response type."""
     assert tuple(inspect.signature(infer).parameters) == (
-        "prompt",
+        "system_prompt",
         "content",
         "response_model",
     )
@@ -420,7 +432,7 @@ def test_provider_failures_raise_errors_without_returning_model(
             if outcome == "upload-failure":
                 source_file = tmp_path / "source.txt"
                 source_file.write_text("source text", encoding="utf-8")
-                build_content(text="include this text", files=[source_file])
+                build_content(prompt="include this text", files=[source_file])
             else:
                 infer("Say hello", "content", Answer)
 
@@ -472,7 +484,7 @@ def test_token_absent_from_logs_and_errors(outcome, caplog, tmp_path):
             source_file = tmp_path / "source.txt"
             source_file.write_text("source text", encoding="utf-8")
             with pytest.raises(AIInferenceError) as error:
-                build_content(files=[source_file])
+                build_content(prompt="Placeholder", files=[source_file])
             assert FAKE_TOKEN not in str(error.value)
             assert FAKE_TOKEN not in repr(error.value)
         else:

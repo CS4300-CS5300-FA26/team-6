@@ -19,12 +19,12 @@ from .exceptions import (
 MODEL = "gpt-6-luna"
 
 @sensitive_variables("client")
-def infer(prompt, content, response_model):
+def infer(system_prompt, content, response_model):
     """Return a validated response_model instance for the prompt and content."""
     if not isinstance(response_model, type) or not issubclass(response_model, BaseModel):
         raise TypeError("response_model must be a Pydantic BaseModel subclass")
-    if not prompt.strip():
-        raise ValueError("prompt must not be blank")
+    if not system_prompt.strip():
+        raise ValueError("system_prompt must not be blank")
 
     try:
         client = OpenAI()
@@ -36,7 +36,7 @@ def infer(prompt, content, response_model):
     try:
         response = client.responses.create(
             model=MODEL,
-            instructions=prompt,
+            instructions=system_prompt,
             input=content,
             text={
                 "format": {
@@ -72,25 +72,26 @@ def infer(prompt, content, response_model):
 
 
 @sensitive_variables("client", "uploaded_file")
-def build_content(text=None, files=()):
+def build_content(prompt, files=()):
     """Build Responses API user input from text and caller-provided files."""
-    if text is not None and not isinstance(text, str):
-        raise TypeError("text must be a string")
-    if text is not None and not text.strip():
-        text = None
+    if prompt is None:
+        raise ValueError("prompt is required")
+    if prompt is not None and not isinstance(prompt, str):
+        raise TypeError("prompt must be a string")
+    if not prompt.strip():
+        raise ValueError("prompt must not be blank")
 
     try:
         file_inputs = tuple(files)
     except TypeError:
         raise TypeError("files must be an iterable of supported file inputs") from None
-    if text is None and not file_inputs:
+    if prompt is None and not file_inputs:
         raise ValueError("content must include text or at least one file")
 
     normalized_files = [_normalize_file_input(file_input) for file_input in file_inputs]
 
     content_items = []
-    if text is not None:
-        content_items.append({"type": "input_text", "text": text})
+    content_items.append({"type": "input_text", "text": prompt})
 
     if not normalized_files:
         return [{"role": "user", "content": content_items}]
