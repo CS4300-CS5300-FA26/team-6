@@ -123,6 +123,47 @@ Provider-facing exception messages do not include the API key. A successful file
 upload does not mean inference succeeded; handle the documented exceptions from
 both `build_content()` and `infer()`.
 
+### Example Python Shell Inference
+
+This is a live smoke test: it uploads a temporary file, sends a request to OpenAI,
+and deletes the uploaded file afterward. It requires a valid `OPENAI_API_KEY` in
+`.env` and may incur API usage costs. From the repository root, activate the
+project's virtual environment and start a Python interactive shell before running
+the code. The example assumes the repository is located at
+`/coursework/Canvas_Plus`, as specified by the `.env` path in the code; if your
+checkout is elsewhere, that path must match its location.
+
+```
+from openai import OpenAI
+from pydantic import BaseModel
+from canvas_plus.ai_inference import build_content, infer, delete_uploaded_files
+from canvas_plus.ai_inference.inference import MODEL
+import environ
+
+environ.Env.read_env("/coursework/Canvas_Plus/.env")
+
+class SmokeResult(BaseModel):
+    found_phrase: bool
+    summary: str
+
+content = build_content(
+    prompt="Quote the exact contents of the attached file.",
+    files=[("smoke-test.txt", b"COPILOT-SMOKE-731")],
+)
+file_id = content[0]["content"][-1]["file_id"]
+
+try:
+    result = infer(
+        "Check the attached file for the exact phrase COPILOT-SMOKE-731.",
+        content,
+        SmokeResult,
+    )
+    print(result)
+finally:
+    # DON'T FORGET TO DELETE UPLOADED FILES
+    delete_uploaded_files(content)
+```
+
 ## Validate GitHub Actions locally
 
 Use [actionlint](https://github.com/rhysd/actionlint) to check workflow syntax and configuration. After installing it, run this from the repository root:
