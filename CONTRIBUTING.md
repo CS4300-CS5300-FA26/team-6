@@ -53,7 +53,7 @@ environment or secret manager. Never commit a real key.
 ```python
 from pydantic import BaseModel
 
-from ai_inference import build_content, delete_uploaded_files, infer
+from canvas_plus.ai_inference import build_content, delete_uploaded_files, infer
 
 
 class Answer(BaseModel):
