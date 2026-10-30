@@ -1,16 +1,21 @@
-{% comment %}
-<!-- {% extends "accounts/base.html" %} -->
-{% endcomment %}
+{% extends "base.html" %}
+
+{% block body_class %} class="landing-page"{% endblock %}
+{% block navigation %}{% endblock %}
+{% block app_main_start %}<main class="landing">{% endblock %}
 
 {% block title %}Sign in{% endblock %}
 
 {% block content %}
-  <h1>Sign in</h1>
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Sign in</button>
-    <input type="hidden" name="next" value="{{ next|default:'' }}">
-  </form>
-  <p>New here? <a href="{% url 'register' %}">Create an account</a>.</p>
+  <div class="brand"><h1>Canvas+</h1></div>
+  <section class="login-box">
+    <h2>Sign in</h2>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Sign in</button>
+      <input type="hidden" name="next" value="{{ next|default:'' }}">
+    </form>
+    <p>New here? <a href="{% url 'register' %}">Create an account</a>.</p>
+  </section>
 {% endblock %}
