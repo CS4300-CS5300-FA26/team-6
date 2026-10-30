@@ -1,9 +1,11 @@
 """Run structured inference through OpenAI with the application's configured token."""
 
 import os
+import random
+import time
 
 from django.views.decorators.debug import sensitive_variables
-from openai import AuthenticationError, OpenAI, OpenAIError
+from openai import AuthenticationError, NotFoundError, OpenAI, OpenAIError, RateLimitError
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel
 
@@ -106,7 +108,7 @@ def build_content(prompt, files=()):
             raise AIConfigurationError(
                 "Configure OPENAI_API_KEY to use AI inference."
             ) from None
-        raise AIProviderError("The provider client could not be initialized.") from None
+        raise AIAuthenticationError("The provider client could not be initialized.") from None
 
     try:
         for file_kind, file_data in normalized_files:
@@ -156,8 +158,8 @@ def delete_uploaded_file(content):
                     # Rate limit exceeded, attempt safe deletion with retries.
                     _safe_delete_file(client, file_id)
                     pass
-                except OpenAIError as e:
-                    raise AIProviderError(f"OpenAI error encountered: {e}") from None
+                except OpenAIError:
+                    raise AIProviderError("The provider file deletion failed.") from None
 
 
 def _safe_delete_file(client, file_id):
@@ -172,12 +174,14 @@ def _safe_delete_file(client, file_id):
         except RateLimitError:
             if attempt == MAX_RETRIES - 1:
                 # Max retries reached failed to delete the file due to rate limit
-                raise RateLimitError("Max retries reached for deleting the file due to rate limit.")
+                raise AIProviderError(
+                    "Max retries reached for deleting the file due to rate limit."
+                ) from None
             delay = BASE_DELAY * (2 ** attempt)
             jitter_delay = random.uniform(0, delay)
             time.sleep(jitter_delay)
-        except OpenAIError as e:
-            raise AIProviderError(f"OpenAI error encountered: {e}") from None
+        except OpenAIError:
+            raise AIProviderError("The provider file deletion failed.") from None
 
 
 def _upload_file(client, file_kind, file_data):
