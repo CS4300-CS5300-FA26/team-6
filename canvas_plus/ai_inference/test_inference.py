@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from .exceptions import AIConfigurationError, AIInferenceError
 from .inference import MAX_RETRIES, build_content, delete_uploaded_files, infer
 
+INFERENCE_MODULE = infer.__module__
+
 FAKE_TOKEN = "fake-ai-token"
 
 
@@ -49,7 +51,7 @@ def complete_response(text="hello"):
 def test_openai_client_uses_openai_api_key_environment_variable(monkeypatch):
     """Configured process key is left for the SDK to load automatically."""
     monkeypatch.setenv("OPENAI_API_KEY", FAKE_TOKEN)
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.responses.create.return_value = complete_response()
         infer("Say hello", "content", Answer)
     client_class.assert_called_once_with()
@@ -61,7 +63,7 @@ def test_missing_openai_api_key_raises_configuration_error_without_provider_call
 ):
     """Missing SDK environment credentials fail clearly before an API request."""
     monkeypatch.delenv("OPENAI_API_KEY")
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.side_effect = openai.OpenAIError(
             "The api_key client option must be set either by passing api_key "
             "to the client or by setting the OPENAI_API_KEY environment variable"
@@ -78,7 +80,7 @@ def test_infer_sends_authenticated_strict_structured_request():
     """The request uses the fixed model and strict schema for the response type."""
     prompt = "Answer briefly"
     content = "What is 2 + 2?"
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.responses.create.return_value = complete_response()
 
         infer(prompt, content, Answer)
@@ -98,7 +100,7 @@ def test_infer_sends_authenticated_strict_structured_request():
 @pytest.mark.unit
 def test_infer_returns_validated_response_model():
     """A completed inference returns an instance of the requested model."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.responses.create.return_value = complete_response(
             "structured answer"
         )
@@ -112,7 +114,7 @@ def test_infer_returns_validated_response_model():
 @pytest.mark.unit
 def test_build_content_accepts_text_only():
     """Text-only content is built without contacting the Files API."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         content = build_content(prompt="Summarize this text.")
 
     assert content == [{
@@ -133,7 +135,7 @@ def test_build_content_accepts_text_only():
 )
 def test_build_content_rejects_empty_content_before_provider_call(text, files):
     """Empty content is rejected before creating the provider client."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         with pytest.raises(ValueError):
             build_content(prompt=text, files=files)
 
@@ -144,7 +146,7 @@ def test_build_content_rejects_empty_content_before_provider_call(text, files):
 def test_build_content_accepts_named_in_memory_bytes():
     """Named byte content is uploaded without requiring a local file."""
     file_bytes = b"document contents"
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-memory")
 
         content = build_content(prompt="Placeholder", files=[("report.txt", file_bytes)])
@@ -166,7 +168,7 @@ def test_build_content_accepts_named_in_memory_bytes():
 def test_build_content_accepts_multiple_named_byte_files():
     """Multiple files from arbitrary storage can be supplied as named bytes."""
     file_inputs = [("one.txt", b"one"), ("two.txt", b"two")]
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.side_effect = [
             Mock(id="file-one"),
             Mock(id="file-two"),
@@ -193,7 +195,7 @@ def test_build_content_accepts_named_binary_stream_and_preserves_ownership():
     """Named caller-owned streams upload from their current position and stay open."""
     stream = BytesIO(b"downloaded API response")
     stream.name = "download.pdf"
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-stream")
 
         content = build_content(prompt="Placeholder", files=[stream])
@@ -216,7 +218,7 @@ def test_build_content_accepts_named_binary_stream_and_preserves_ownership():
 def test_build_content_accepts_named_pair_with_binary_stream():
     """A filename pair allows streams whose source does not provide a name."""
     stream = BytesIO(b"database blob")
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-db")
 
         content = build_content(prompt="Placeholder", files=[("stored.pdf", stream)])
@@ -237,7 +239,7 @@ def test_build_content_keeps_local_path_as_convenience(tmp_path):
     """Local paths continue to work as a convenience input source."""
     source_file = tmp_path / "source.txt"
     source_file.write_bytes(b"local file")
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.return_value = Mock(id="file-local")
 
         content = build_content(prompt="Placeholder", files=[source_file])
@@ -264,7 +266,7 @@ def test_build_content_keeps_local_path_as_convenience(tmp_path):
 )
 def test_build_content_rejects_invalid_file_inputs_before_provider_call(files):
     """Malformed, unnamed, or non-binary files are rejected locally."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         with pytest.raises((TypeError, ValueError)):
             build_content(prompt="Placeholder", files=files)
 
@@ -276,7 +278,7 @@ def test_build_content_stream_read_failure_raises_typed_error():
     """A stream read failure is translated to a typed inference error."""
     stream = BytesIO(b"content")
     stream.name = "unreadable.txt"
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.side_effect = OSError("read failed")
 
         with pytest.raises(AIInferenceError):
@@ -289,7 +291,7 @@ def test_build_content_stream_read_failure_raises_typed_error():
 def test_build_content_local_read_failure_raises_typed_error(tmp_path):
     """A missing local path is reported as an inference error."""
     missing_file = tmp_path / "missing.txt"
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         with pytest.raises(AIInferenceError):
             build_content(prompt="Placeholder", files=[missing_file])
 
@@ -305,7 +307,7 @@ def test_infer_supports_different_response_models():
         "response_model",
     )
 
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         create = client_class.return_value.responses.create
         create.side_effect = [
             complete_response(),
@@ -336,7 +338,7 @@ def test_infer_supports_different_response_models():
 @pytest.mark.unit
 def test_invalid_token_raises_authentication_error():
     """Provider authentication failures map cleanly without exposing the token."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.responses.create.side_effect = provider_error(
             openai.AuthenticationError
         )
@@ -352,7 +354,7 @@ def test_invalid_token_raises_authentication_error():
 @pytest.mark.parametrize("prompt", ["", "   ", "\n\t"])
 def test_blank_prompt_rejected_before_provider_call(prompt):
     """Blank prompts are rejected without creating a provider client."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         with pytest.raises(ValueError):
             infer(prompt, "content", Answer)
 
@@ -367,7 +369,7 @@ def test_blank_prompt_rejected_before_provider_call(prompt):
 )
 def test_non_basemodel_response_model_rejected(response_model):
     """Only Pydantic model classes are accepted as response models."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         with pytest.raises(TypeError):
             infer("Say hello", "content", response_model)
 
@@ -409,7 +411,7 @@ def test_provider_failures_raise_errors_without_returning_model(
     outcome, expected_error, tmp_path
 ):
     """Provider, output, and upload failures never return success or partial content."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         create = client_class.return_value.responses.create
         if outcome == "refusal":
             create.return_value = refusal_response()
@@ -444,7 +446,7 @@ def test_provider_failures_raise_errors_without_returning_model(
 @pytest.mark.unit
 def test_unsupported_schema_fails_explicitly():
     """A mocked schema rejection becomes an inference error, not a result."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.responses.create.side_effect = provider_error(
             openai.BadRequestError
         )
@@ -466,7 +468,7 @@ def test_unsupported_schema_fails_explicitly():
 def test_token_absent_from_logs_and_errors(outcome, caplog, tmp_path):
     """Given any outcome, neither logs nor caller-visible errors contain the token."""
     caplog.set_level(logging.DEBUG)
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         create = client_class.return_value.responses.create
         if outcome is None:
             create.return_value = complete_response()
@@ -517,8 +519,8 @@ def uploaded_content(*file_ids):
 @pytest.fixture(name="no_sleep")
 def fixture_no_sleep():
     """Disable real backoff delays and make jitter deterministic."""
-    with patch("ai_inference.inference.time.sleep") as sleep, patch(
-        "ai_inference.inference.random.uniform", side_effect=lambda low, high: high
+    with patch(f"{INFERENCE_MODULE}.time.sleep") as sleep, patch(
+        f"{INFERENCE_MODULE}.random.uniform", side_effect=lambda low, high: high
     ):
         yield sleep
 
@@ -526,7 +528,7 @@ def fixture_no_sleep():
 @pytest.mark.unit
 def test_delete_uploaded_file_deletes_every_file_in_order():
     """All input_file items are deleted by id."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete_uploaded_files(uploaded_content("file-one", "file-two"))
 
     client_class.assert_called_once_with()
@@ -538,7 +540,7 @@ def test_delete_uploaded_file_deletes_every_file_in_order():
 def test_delete_uploaded_file_text_only_makes_no_provider_call(monkeypatch):
     """Without uploaded files no client is created, even with no API key."""
     monkeypatch.delenv("OPENAI_API_KEY")
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete_uploaded_files(uploaded_content())
 
     client_class.assert_not_called()
@@ -553,7 +555,7 @@ def test_delete_uploaded_file_skips_file_items_without_id():
         {"type": "input_file", "file_id": ""},
         {"type": "input_file", "file_id": None},
     ])
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete_uploaded_files(content)
 
     client_class.return_value.files.delete.assert_called_once_with("file-one")
@@ -572,7 +574,7 @@ def test_delete_uploaded_file_skips_file_items_without_id():
 )
 def test_delete_uploaded_file_rejects_invalid_structure_before_provider_call(content):
     """Malformed content is rejected without creating a provider client."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         with pytest.raises(ValueError):
             delete_uploaded_files(content)
 
@@ -583,7 +585,7 @@ def test_delete_uploaded_file_rejects_invalid_structure_before_provider_call(con
 def test_delete_uploaded_file_missing_api_key_raises_configuration_error(monkeypatch):
     """A missing key fails clearly and no deletion is attempted."""
     monkeypatch.delenv("OPENAI_API_KEY")
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.side_effect = openai.OpenAIError(
             "The api_key client option must be set either by passing api_key "
             "to the client or by setting the OPENAI_API_KEY environment variable"
@@ -597,7 +599,7 @@ def test_delete_uploaded_file_missing_api_key_raises_configuration_error(monkeyp
 @pytest.mark.unit
 def test_delete_uploaded_file_client_init_failure_raises_authentication_error():
     """Other client initialization errors map to AIAuthenticationError."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.side_effect = openai.OpenAIError("boom")
         with pytest.raises(AIInferenceError) as error:
             delete_uploaded_files(uploaded_content("file-one"))
@@ -608,7 +610,7 @@ def test_delete_uploaded_file_client_init_failure_raises_authentication_error():
 @pytest.mark.unit
 def test_delete_uploaded_file_ignores_already_deleted_file():
     """A not-found file is treated as deleted and later files are still processed."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = [status_error(openai.NotFoundError), None]
 
@@ -620,14 +622,14 @@ def test_delete_uploaded_file_ignores_already_deleted_file():
 @pytest.mark.unit
 def test_delete_uploaded_file_rate_limit_retries_with_backoff_until_success(no_sleep):
     """A rate-limited delete is retried with jittered exponential backoff."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = [
             status_error(openai.RateLimitError),
             status_error(openai.RateLimitError),
             None,
         ]
-        with patch("ai_inference.inference.random.uniform", return_value=0.5) as uniform:
+        with patch(f"{INFERENCE_MODULE}.random.uniform", return_value=0.5) as uniform:
             delete_uploaded_files(uploaded_content("file-one"))
 
     assert delete.call_count == 3
@@ -639,7 +641,7 @@ def test_delete_uploaded_file_rate_limit_retries_with_backoff_until_success(no_s
 @pytest.mark.unit
 def test_delete_uploaded_file_rate_limit_exhaustion_raises_provider_error(no_sleep):
     """Persistent rate limiting raises a typed error after bounded retries."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = status_error(openai.RateLimitError)
 
@@ -656,7 +658,7 @@ def test_delete_uploaded_file_rate_limit_exhaustion_raises_provider_error(no_sle
 @pytest.mark.unit
 def test_delete_uploaded_file_not_found_during_retry_is_success(no_sleep):
     """A file that disappears while retrying counts as deleted."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = [
             status_error(openai.RateLimitError),
@@ -672,7 +674,7 @@ def test_delete_uploaded_file_not_found_during_retry_is_success(no_sleep):
 @pytest.mark.unit
 def test_delete_uploaded_file_provider_error_during_retry_raises_provider_error(no_sleep):
     """A non-rate-limit failure while retrying stops immediately."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = [
             status_error(openai.RateLimitError),
@@ -694,7 +696,7 @@ def test_delete_uploaded_file_provider_error_during_retry_raises_provider_error(
 )
 def test_delete_uploaded_file_other_failure_raises_provider_error_without_token(error_class):
     """Other deletion failures are typed, abort the loop, and do not leak the token."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = provider_error(error_class)
 
@@ -710,7 +712,7 @@ def test_delete_uploaded_file_other_failure_raises_provider_error_without_token(
 @pytest.mark.unit
 def test_delete_uploaded_file_cleans_up_build_content_output():
     """Integration: ids uploaded by build_content are the ones deleted."""
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         client_class.return_value.files.create.side_effect = [
             Mock(id="file-one"),
             Mock(id="file-two"),
@@ -729,7 +731,7 @@ def test_delete_uploaded_file_cleans_up_build_content_output():
 def test_delete_uploaded_file_token_absent_from_logs(caplog, no_sleep):
     """Neither success, retry, nor failure paths log the token."""
     caplog.set_level(logging.DEBUG)
-    with patch("ai_inference.inference.OpenAI") as client_class:
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
         delete = client_class.return_value.files.delete
         delete.side_effect = status_error(openai.RateLimitError)
         with pytest.raises(AIInferenceError):
