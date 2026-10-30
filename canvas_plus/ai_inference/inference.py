@@ -124,7 +124,7 @@ def build_content(prompt, files=()):
     return [{"role": "user", "content": content_items}]
 
 
-def delete_uploaded_file(content):
+def delete_uploaded_files(content):
     """Delete all uploaded files referenced in the content."""
     if not isinstance(content, list) or not content or "content" not in content[0]:
         raise ValueError("Invalid content structure")

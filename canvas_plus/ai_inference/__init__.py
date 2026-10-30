@@ -9,7 +9,7 @@ from .exceptions import (
 	AIProviderError,
 	AIRefusalError,
 )
-from .inference import build_content, infer
+from .inference import build_content, infer, delete_uploaded_files
 
 __all__ = [
 	"AIAuthenticationError",
@@ -21,4 +21,5 @@ __all__ = [
 	"AIRefusalError",
 	"build_content",
 	"infer",
+	"delete_uploaded_files",
 ]
