@@ -110,15 +110,20 @@ def build_content(prompt, files=()):
             ) from None
         raise AIAuthenticationError("The provider client could not be initialized.") from None
 
+    uploaded_ids = []
     try:
         for file_kind, file_data in normalized_files:
             uploaded = _upload_file(client, file_kind, file_data)
+            uploaded_ids.append(uploaded.id)
             content_items.append({"type": "input_file", "file_id": uploaded.id})
     except AuthenticationError:
+        _discard_uploads(client, uploaded_ids)
         raise AIAuthenticationError("The provider rejected the configured credentials.") from None
     except OpenAIError:
+        _discard_uploads(client, uploaded_ids)
         raise AIProviderError("The provider file upload failed.") from None
     except OSError:
+        _discard_uploads(client, uploaded_ids)
         raise AIProviderError("The local file could not be read.") from None
 
     return [{"role": "user", "content": content_items}]
@@ -160,6 +165,15 @@ def delete_uploaded_files(content):
                     pass
                 except OpenAIError:
                     raise AIProviderError("The provider file deletion failed.") from None
+
+
+def _discard_uploads(client, file_ids):
+    """Best-effort deletion of partial uploads so the original error is not masked."""
+    for file_id in file_ids:
+        try:
+            _safe_delete_file(client, file_id)
+        except AIProviderError:
+            pass
 
 
 def _safe_delete_file(client, file_id):

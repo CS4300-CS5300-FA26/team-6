@@ -10,7 +10,7 @@ import pytest
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel
 
-from .exceptions import AIConfigurationError, AIInferenceError
+from .exceptions import AIConfigurationError, AIInferenceError, AIProviderError
 from .inference import MAX_RETRIES, build_content, delete_uploaded_files, infer
 
 INFERENCE_MODULE = infer.__module__
@@ -296,6 +296,18 @@ def test_build_content_local_read_failure_raises_typed_error(tmp_path):
             build_content(prompt="Placeholder", files=[missing_file])
 
     client_class.return_value.files.create.assert_not_called()
+
+
+@pytest.mark.unit
+def test_build_content_deletes_earlier_uploads_when_later_upload_fails():
+    """A failed upload cleans up files already uploaded and raises a typed error."""
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
+        client = client_class.return_value
+        client.files.create.side_effect = [Mock(id="file-1"), openai.OpenAIError("boom")]
+        with pytest.raises(AIProviderError):
+            build_content(prompt="Placeholder", files=[("a.txt", b"a"), ("b.txt", b"b")])
+
+    client.files.delete.assert_called_once_with("file-1")
 
 
 @pytest.mark.unit
