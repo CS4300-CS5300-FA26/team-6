@@ -42,24 +42,33 @@ Configure `OPENAI_API_KEY` in the repository-root `.env` for local development. 
 OpenAI SDK reads it when an inference or file upload is requested; In production, set `OPENAI_API_KEY` in the deployment
 environment or secret manager. Never commit a real key.
 
-Import the shared interface and define a Pydantic model for the structured answer:
+### Workflow
+
+1. Create a response model using Pydantic's `BaseModel`. This is the JSON format that will be returned.
+2. Create a content package with `build_content()`, providing the user prompt and any necessary files. Files in the content package are uploaded to OpenAI in this step, so they must be deleted afterwards.
+3. Call `infer()` with a system prompt, the content package, and the response model.
+4. Receive the validated response and access the fields you need.
+5. Delete the uploaded files with `delete_uploaded_files()`, passing the same content package from step 2.
 
 ```python
 from pydantic import BaseModel
 
-from ai_inference import build_content, infer
+from ai_inference import build_content, delete_uploaded_files, infer
 
 
 class Answer(BaseModel):
     summary: str
 
 
-content = build_content(text="Summarize the causes of the French Revolution.")
-answer = infer("Write a concise summary.", content, Answer)
-print(answer.summary)
+content = build_content("Summarize the attached report.", files=["report.pdf"])
+try:
+    answer = infer("Write a concise summary.", content, Answer)
+    print(answer.summary)
+finally:
+    delete_uploaded_files(content)
 ```
 
-`build_content()` accepts non-empty text, files, or both. Each file can be a local
+`build_content()` requires a non-empty prompt and optional files. Each file can be a local
 path/path-like value, a `(filename, bytes_or_binary_stream)` pair, or a readable
 binary stream with a usable `.name`. Files are uploaded through the OpenAI Files API
 with `purpose="user_data"`; the returned user message contains `input_text` and/or
@@ -76,7 +85,7 @@ report_bytes = download_response.content
 report_bytes = bytes(database_row["file_data"])
 
 content = build_content(
-    text="Extract the key findings.",
+    "Extract the key findings.",
     files=[("report.pdf", report_bytes)],
 )
 answer = infer("Return the key findings.", content, Answer)
@@ -89,7 +98,7 @@ API or storage code:
 from io import BytesIO
 
 file_stream = BytesIO(report_bytes)
-content = build_content(files=[("report.pdf", file_stream)])
+content = build_content("Extract the key findings.", files=[("report.pdf", file_stream)])
 ```
 
 The builder uploads a caller-owned stream from its current position and does not
