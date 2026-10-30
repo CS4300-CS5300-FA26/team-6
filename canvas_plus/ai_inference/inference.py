@@ -119,6 +119,29 @@ def build_content(prompt, files=()):
     return [{"role": "user", "content": content_items}]
 
 
+def delete_uploaded_file(content):
+    """Delete all uploaded files referenced in the content."""
+    if not isinstance(content, list) or not content or "content" not in content[0]:
+        raise ValueError("Invalid content structure")
+    try:
+        client = OpenAI()
+    except OpenAIError as error:
+        if "OPENAI_API_KEY" in str(error):
+            raise AIConfigurationError(
+                "Configure OPENAI_API_KEY to use AI inference."
+            ) from None
+        raise AIProviderError("The provider client could not be initialized.") from None
+
+    for item in content[0].get("content", []):
+        if item.get("type") == "input_file":
+            file_id = item.get("file_id")
+            if file_id:
+                try:
+                    client.files.delete(file_id)
+                except OpenAIError:
+                    raise AIProviderError("The provider file deletion failed.") from None
+
+
 def _upload_file(client, file_kind, file_data):
     """Upload one normalized file input and return the provider file record."""
     if file_kind == "path":
