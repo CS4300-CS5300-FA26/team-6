@@ -9,3 +9,12 @@ INSTALLED_APPS = [
     *base_settings.INSTALLED_APPS,
     "behave_django",
 ]
+
+# Tests render templates without running collectstatic, so they must not depend
+# on WhiteNoise's generated staticfiles manifest.
+STORAGES = {
+    **base_settings.STORAGES,
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
