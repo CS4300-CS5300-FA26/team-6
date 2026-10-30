@@ -16,7 +16,10 @@ from .exceptions import (
     AIRefusalError,
 )
 
+
 MODEL = "gpt-6-luna"
+MAX_RETRIES = 3
+BASE_DELAY = 1  # Base delay in seconds for retry backoff
 
 @sensitive_variables("client")
 def infer(system_prompt, content, response_model):
@@ -123,6 +126,13 @@ def delete_uploaded_file(content):
     """Delete all uploaded files referenced in the content."""
     if not isinstance(content, list) or not content or "content" not in content[0]:
         raise ValueError("Invalid content structure")
+    # Determine if there are any uploaded files to delete
+    has_files = any(
+        item.get("type") == "input_file" for item in content[0].get("content", [])
+    )
+    if not has_files:
+        return
+    
     try:
         client = OpenAI()
     except OpenAIError as error:
@@ -130,16 +140,44 @@ def delete_uploaded_file(content):
             raise AIConfigurationError(
                 "Configure OPENAI_API_KEY to use AI inference."
             ) from None
-        raise AIProviderError("The provider client could not be initialized.") from None
+        raise AIAuthenticationError("The provider client could not be initialized.") from None
 
     for item in content[0].get("content", []):
         if item.get("type") == "input_file":
+            # Attempt to delete all uploaded files referenced in the content
             file_id = item.get("file_id")
             if file_id:
                 try:
                     client.files.delete(file_id)
-                except OpenAIError:
-                    raise AIProviderError("The provider file deletion failed.") from None
+                except NotFoundError:
+                    # File not found, may already be deleted.
+                    pass
+                except RateLimitError:
+                    # Rate limit exceeded, attempt safe deletion with retries.
+                    _safe_delete_file(client, file_id)
+                    pass
+                except OpenAIError as e:
+                    raise AIProviderError(f"OpenAI error encountered: {e}") from None
+
+
+def _safe_delete_file(client, file_id):
+    """Attempt to delete a file safely, ignoring not found and rate limit errors."""
+    for attempt in range(MAX_RETRIES):
+        try:
+            client.files.delete(file_id)
+            return
+        except NotFoundError:
+            # File not found, may already be deleted.
+            return
+        except RateLimitError:
+            if attempt == MAX_RETRIES - 1:
+                # Max retries reached failed to delete the file due to rate limit
+                raise RateLimitError("Max retries reached for deleting the file due to rate limit.")
+            delay = BASE_DELAY * (2 ** attempt)
+            jitter_delay = random.uniform(0, delay)
+            time.sleep(jitter_delay)
+        except OpenAIError as e:
+            raise AIProviderError(f"OpenAI error encountered: {e}") from None
 
 
 def _upload_file(client, file_kind, file_data):
