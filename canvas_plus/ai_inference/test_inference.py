@@ -704,7 +704,7 @@ def test_delete_uploaded_file_provider_error_during_retry_raises_provider_error(
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "error_class",
-    [openai.APIConnectionError, openai.InternalServerError, openai.AuthenticationError],
+    [openai.APIConnectionError, openai.InternalServerError],
 )
 def test_delete_uploaded_file_other_failure_raises_provider_error_without_token(error_class):
     """Other deletion failures are typed, abort the loop, and do not leak the token."""
@@ -719,6 +719,26 @@ def test_delete_uploaded_file_other_failure_raises_provider_error_without_token(
     assert FAKE_TOKEN not in str(error.value)
     assert FAKE_TOKEN not in repr(error.value)
     delete.assert_called_once_with("file-one")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("first_error", [None, openai.RateLimitError])
+def test_delete_uploaded_file_authentication_failure_raises_authentication_error(
+    first_error, no_sleep
+):
+    """Rejected credentials map to AIAuthenticationError, including during retries."""
+    with patch(f"{INFERENCE_MODULE}.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        auth_error = provider_error(openai.AuthenticationError)
+        delete.side_effect = (
+            [status_error(first_error), auth_error] if first_error else auth_error
+        )
+
+        with pytest.raises(AIInferenceError) as error:
+            delete_uploaded_files(uploaded_content("file-one", "file-two"))
+
+    assert type(error.value).__name__ == "AIAuthenticationError"
+    assert FAKE_TOKEN not in str(error.value)
 
 
 @pytest.mark.unit

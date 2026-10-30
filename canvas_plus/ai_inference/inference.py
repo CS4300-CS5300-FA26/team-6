@@ -162,7 +162,10 @@ def delete_uploaded_files(content):
                 except RateLimitError:
                     # Rate limit exceeded, attempt safe deletion with retries.
                     _safe_delete_file(client, file_id)
-                    pass
+                except AuthenticationError:
+                    raise AIAuthenticationError(
+                        "The provider rejected the configured credentials."
+                    ) from None
                 except OpenAIError:
                     raise AIProviderError("The provider file deletion failed.") from None
 
@@ -172,7 +175,7 @@ def _discard_uploads(client, file_ids):
     for file_id in file_ids:
         try:
             _safe_delete_file(client, file_id)
-        except AIProviderError:
+        except (AIProviderError, AIAuthenticationError):
             pass
 
 
@@ -194,6 +197,10 @@ def _safe_delete_file(client, file_id):
             delay = BASE_DELAY * (2 ** attempt)
             jitter_delay = random.uniform(0, delay)
             time.sleep(jitter_delay)
+        except AuthenticationError:
+            raise AIAuthenticationError(
+                "The provider rejected the configured credentials."
+            ) from None
         except OpenAIError:
             raise AIProviderError("The provider file deletion failed.") from None
 
