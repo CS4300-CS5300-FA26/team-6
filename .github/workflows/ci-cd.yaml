@@ -54,7 +54,7 @@ jobs:
 
       - name: Code Coverage
         run: |
-          coverage run --source=canvas_plus,src -m pytest
+          coverage run --source=canvas_plus -m pytest
           coverage report -m --fail-under=80
 
   # Sends each pull request's changes to OpenAI and posts the review as a PR comment.
