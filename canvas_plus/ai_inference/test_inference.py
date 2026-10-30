@@ -11,7 +11,7 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel
 
 from .exceptions import AIConfigurationError, AIInferenceError
-from .inference import build_content, infer
+from .inference import MAX_RETRIES, build_content, delete_uploaded_file, infer
 
 FAKE_TOKEN = "fake-ai-token"
 
@@ -492,4 +492,248 @@ def test_token_absent_from_logs_and_errors(outcome, caplog, tmp_path):
                 infer("Say hello", "content", Answer)
             assert FAKE_TOKEN not in str(error.value)
             assert FAKE_TOKEN not in repr(error.value)
+    assert FAKE_TOKEN not in caplog.text
+
+
+def status_error(error_class):
+    """Build an SDK status error whose message echoes the token."""
+    status = {openai.NotFoundError: 404, openai.RateLimitError: 429}[error_class]
+    return error_class(
+        f"Incorrect API key provided: {FAKE_TOKEN}",
+        response=Mock(status_code=status, headers={}),
+        body=None,
+    )
+
+
+def uploaded_content(*file_ids):
+    """Build user content shaped like build_content output."""
+    return [{
+        "role": "user",
+        "content": [{"type": "input_text", "text": "Placeholder"}]
+        + [{"type": "input_file", "file_id": file_id} for file_id in file_ids],
+    }]
+
+
+@pytest.fixture(name="no_sleep")
+def fixture_no_sleep():
+    """Disable real backoff delays and make jitter deterministic."""
+    with patch("ai_inference.inference.time.sleep") as sleep, patch(
+        "ai_inference.inference.random.uniform", side_effect=lambda low, high: high
+    ):
+        yield sleep
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_deletes_every_file_in_order():
+    """All input_file items are deleted by id."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete_uploaded_file(uploaded_content("file-one", "file-two"))
+
+    client_class.assert_called_once_with()
+    delete = client_class.return_value.files.delete
+    assert [call.args for call in delete.call_args_list] == [("file-one",), ("file-two",)]
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_text_only_makes_no_provider_call(monkeypatch):
+    """Without uploaded files no client is created, even with no API key."""
+    monkeypatch.delenv("OPENAI_API_KEY")
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete_uploaded_file(uploaded_content())
+
+    client_class.assert_not_called()
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_skips_file_items_without_id():
+    """File items with a missing or empty id are skipped."""
+    content = uploaded_content("file-one")
+    content[0]["content"].extend([
+        {"type": "input_file"},
+        {"type": "input_file", "file_id": ""},
+        {"type": "input_file", "file_id": None},
+    ])
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete_uploaded_file(content)
+
+    client_class.return_value.files.delete.assert_called_once_with("file-one")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(None, id="none"),
+        pytest.param("text", id="string"),
+        pytest.param({"content": []}, id="dict"),
+        pytest.param([], id="empty-list"),
+        pytest.param([{"role": "user"}], id="missing-content-key"),
+    ],
+)
+def test_delete_uploaded_file_rejects_invalid_structure_before_provider_call(content):
+    """Malformed content is rejected without creating a provider client."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        with pytest.raises(ValueError):
+            delete_uploaded_file(content)
+
+    client_class.assert_not_called()
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_missing_api_key_raises_configuration_error(monkeypatch):
+    """A missing key fails clearly and no deletion is attempted."""
+    monkeypatch.delenv("OPENAI_API_KEY")
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.side_effect = openai.OpenAIError(
+            "The api_key client option must be set either by passing api_key "
+            "to the client or by setting the OPENAI_API_KEY environment variable"
+        )
+        with pytest.raises(AIConfigurationError):
+            delete_uploaded_file(uploaded_content("file-one"))
+
+    client_class.return_value.files.delete.assert_not_called()
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_client_init_failure_raises_authentication_error():
+    """Other client initialization errors map to AIAuthenticationError."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.side_effect = openai.OpenAIError("boom")
+        with pytest.raises(AIInferenceError) as error:
+            delete_uploaded_file(uploaded_content("file-one"))
+
+    assert type(error.value).__name__ == "AIAuthenticationError"
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_ignores_already_deleted_file():
+    """A not-found file is treated as deleted and later files are still processed."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = [status_error(openai.NotFoundError), None]
+
+        delete_uploaded_file(uploaded_content("file-one", "file-two"))
+
+    assert [call.args for call in delete.call_args_list] == [("file-one",), ("file-two",)]
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_rate_limit_retries_with_backoff_until_success(no_sleep):
+    """A rate-limited delete is retried with jittered exponential backoff."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = [
+            status_error(openai.RateLimitError),
+            status_error(openai.RateLimitError),
+            None,
+        ]
+        with patch("ai_inference.inference.random.uniform", return_value=0.5) as uniform:
+            delete_uploaded_file(uploaded_content("file-one"))
+
+    assert delete.call_count == 3
+    assert [call.args for call in delete.call_args_list] == [("file-one",)] * 3
+    uniform.assert_called_once_with(0, 1)
+    no_sleep.assert_called_once_with(0.5)
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_rate_limit_exhaustion_raises_provider_error(no_sleep):
+    """Persistent rate limiting raises a typed error after bounded retries."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = status_error(openai.RateLimitError)
+
+        with pytest.raises(AIInferenceError) as error:
+            delete_uploaded_file(uploaded_content("file-one", "file-two"))
+
+    assert type(error.value).__name__ == "AIProviderError"
+    assert FAKE_TOKEN not in str(error.value)
+    # One initial attempt plus MAX_RETRIES retries; the second file is never tried.
+    assert delete.call_count == 1 + MAX_RETRIES
+    assert no_sleep.call_count == MAX_RETRIES - 1
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_not_found_during_retry_is_success(no_sleep):
+    """A file that disappears while retrying counts as deleted."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = [
+            status_error(openai.RateLimitError),
+            status_error(openai.NotFoundError),
+        ]
+
+        delete_uploaded_file(uploaded_content("file-one"))
+
+    assert delete.call_count == 2
+    no_sleep.assert_not_called()
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_provider_error_during_retry_raises_provider_error(no_sleep):
+    """A non-rate-limit failure while retrying stops immediately."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = [
+            status_error(openai.RateLimitError),
+            provider_error(openai.APIConnectionError),
+        ]
+
+        with pytest.raises(AIInferenceError) as error:
+            delete_uploaded_file(uploaded_content("file-one"))
+
+    assert type(error.value).__name__ == "AIProviderError"
+    assert FAKE_TOKEN not in str(error.value)
+    no_sleep.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "error_class",
+    [openai.APIConnectionError, openai.InternalServerError, openai.AuthenticationError],
+)
+def test_delete_uploaded_file_other_failure_raises_provider_error_without_token(error_class):
+    """Other deletion failures are typed, abort the loop, and do not leak the token."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = provider_error(error_class)
+
+        with pytest.raises(AIInferenceError) as error:
+            delete_uploaded_file(uploaded_content("file-one", "file-two"))
+
+    assert type(error.value).__name__ == "AIProviderError"
+    assert FAKE_TOKEN not in str(error.value)
+    assert FAKE_TOKEN not in repr(error.value)
+    delete.assert_called_once_with("file-one")
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_cleans_up_build_content_output():
+    """Integration: ids uploaded by build_content are the ones deleted."""
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        client_class.return_value.files.create.side_effect = [
+            Mock(id="file-one"),
+            Mock(id="file-two"),
+        ]
+        content = build_content(
+            prompt="Compare", files=[("one.txt", b"one"), ("two.txt", b"two")]
+        )
+
+        delete_uploaded_file(content)
+
+    delete = client_class.return_value.files.delete
+    assert [call.args for call in delete.call_args_list] == [("file-one",), ("file-two",)]
+
+
+@pytest.mark.unit
+def test_delete_uploaded_file_token_absent_from_logs(caplog, no_sleep):
+    """Neither success, retry, nor failure paths log the token."""
+    caplog.set_level(logging.DEBUG)
+    with patch("ai_inference.inference.OpenAI") as client_class:
+        delete = client_class.return_value.files.delete
+        delete.side_effect = status_error(openai.RateLimitError)
+        with pytest.raises(AIInferenceError):
+            delete_uploaded_file(uploaded_content("file-one"))
+
+    assert no_sleep.called
     assert FAKE_TOKEN not in caplog.text
