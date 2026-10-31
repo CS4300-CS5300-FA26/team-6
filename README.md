@@ -318,3 +318,7 @@ Joshua Douglas used spec-driven development with Claude Code to write and approv
 Joshua Douglas used Claude Code to orchestrate the implementing agents and verify each task's tests and diffs
 Joshua Douglas used GLM 5.3 (via OpenCode) to implement the priority rule, Canvas client changes, and dashboard badge test-first
 Joshua Douglas used GPT 6.1 sol (via Codex) to write the Behave step definitions for the acceptance scenarios
+
+#### AI review input limit
+
+Jackson McGuire used Claude Code to raise the AI review's input limit.

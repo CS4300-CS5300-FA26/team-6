@@ -71,7 +71,7 @@ jobs:
       # Actions > Variables), or else the default after ||. Lets us test failure cases
       # without changing code.
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-6-luna' }}
-      MAX_INPUT_CHARS: ${{ vars.MAX_INPUT_CHARS || '60000' }}
+      MAX_INPUT_CHARS: ${{ vars.MAX_INPUT_CHARS || '150000' }}
 
     steps:
       - name: Check out source
@@ -106,6 +106,7 @@ jobs:
               fi
             done < files.txt
           } > input.txt
+          echo "Review input: $(wc -c < input.txt) chars (limit $MAX_INPUT_CHARS)"
 
           # Over the limit? Keep the beginning, cut the end, and leave a note for the comment
           # in $GITHUB_ENV (later steps can read it).
