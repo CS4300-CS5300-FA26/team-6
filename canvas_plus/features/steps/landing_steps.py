@@ -1,6 +1,6 @@
 """Step definitions for landing_page.feature (card #82), grouped by scenario."""
 # The step sentence in each decorator documents the function, so no docstrings.
-# pylint: disable=not-callable,missing-function-docstring
+# pylint: disable=not-callable,missing-function-docstring,no-member
 from datetime import timedelta
 
 from behave import given, when, then
@@ -29,7 +29,11 @@ def step_not_logged_in(context):
 @given('an assignment titled "{title}" exists')
 def step_assignment_exists(_context, title):
     due = timezone.now() + timedelta(days=7)
-    Assignment.objects.create(title=title, course="CS 4300", due_date=due)
+    owner = get_user_model().objects.get_or_create(username="assignment-owner")[0]
+    Assignment.objects.create(
+        canvas_course_id=42, canvas_assignment_id=101,
+        user=owner, title=title, course="CS 4300", due_date=due,
+    )
 
 
 @when("I open the homepage")  # also used by scenario 2
