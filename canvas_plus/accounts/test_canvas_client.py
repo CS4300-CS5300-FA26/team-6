@@ -40,6 +40,7 @@ def test_courses_include_every_page_and_authenticate_each_request():
     assert get.call_count == 2
     assert get.call_args_list[1].args == (next_url,)
     assert get.call_args_list[0].kwargs["params"]["enrollment_state"] == "active"
+    assert get.call_args_list[0].kwargs["params"]["per_page"] == 100
     assert get.call_args_list[1].kwargs["params"] is None
     for call in get.call_args_list:
         assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
@@ -138,10 +139,10 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
         "https://canvas.example.edu/api/v1/courses/42/assignments",
     )
     assert get.call_args_list[0].kwargs["params"] == {
-        "bucket": "upcoming", "include[]": "submission",
+        "bucket": "upcoming", "include[]": "submission", "per_page": 100,
     }
     assert get.call_args_list[1].kwargs["params"] == {
-        "bucket": "overdue", "include[]": "submission",
+        "bucket": "overdue", "include[]": "submission", "per_page": 100,
     }
     for call in get.call_args_list:
         assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
@@ -294,10 +295,10 @@ def test_upcoming_assignments_combine_course_results_and_return_empty_list():
     assert not result
     assert get.call_count == 4
     assert [call.kwargs["params"] for call in get.call_args_list] == [
-        {"bucket": "upcoming", "include[]": "submission"},
-        {"bucket": "overdue", "include[]": "submission"},
-        {"bucket": "upcoming", "include[]": "submission"},
-        {"bucket": "overdue", "include[]": "submission"},
+        {"bucket": "upcoming", "include[]": "submission", "per_page": 100},
+        {"bucket": "overdue", "include[]": "submission", "per_page": 100},
+        {"bucket": "upcoming", "include[]": "submission", "per_page": 100},
+        {"bucket": "overdue", "include[]": "submission", "per_page": 100},
     ]
 
 
@@ -319,11 +320,11 @@ def test_upcoming_assignments_follow_pagination_without_repeating_query_params()
     assert [assignment["title"] for assignment in result] == ["Project 1", "Project 2"]
     assert get.call_args_list[1].args == (next_url,)
     assert get.call_args_list[0].kwargs["params"] == {
-        "bucket": "upcoming", "include[]": "submission",
+        "bucket": "upcoming", "include[]": "submission", "per_page": 100,
     }
     assert get.call_args_list[1].kwargs["params"] is None
     assert get.call_args_list[2].kwargs["params"] == {
-        "bucket": "overdue", "include[]": "submission",
+        "bucket": "overdue", "include[]": "submission", "per_page": 100,
     }
     for call in get.call_args_list:
         assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"

@@ -88,7 +88,7 @@ def list_courses(token):
     base_url = canvas_base_url()
     courses = []
     next_url = f"{base_url}/api/v1/courses"
-    params = {"enrollment_type": "student", "enrollment_state": "active"}
+    params = {"enrollment_type": "student", "enrollment_state": "active", "per_page": 100}
     visited = set()
 
 
@@ -172,7 +172,7 @@ def _normalize_assignment(assignment, course_name):
 def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids):
     """Fetch all assignment pages in one bucket for a validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
-    params = {"bucket": bucket, "include[]": "submission"}
+    params = {"bucket": bucket, "include[]": "submission", "per_page": 100}
     visited = set()
     assignments = []
     while next_url:
@@ -249,7 +249,7 @@ def _normalize_submission(submission, course_name):
 def _list_course_graded_submissions(token, course, base_url):
     """Fetch all graded submission pages for one validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/students/submissions"
-    params = {"workflow_state": "graded", "include[]": "assignment"}
+    params = {"workflow_state": "graded", "include[]": "assignment", "per_page": 100}
     visited = set()
     submissions = []
     while next_url:

@@ -64,6 +64,7 @@ def test_request_asks_for_the_students_graded_work_with_assignment_names():
     params = get.call_args.kwargs["params"]
     assert params["workflow_state"] == "graded"
     assert params["include[]"] == "assignment"
+    assert params["per_page"] == 100
     assert "student_ids[]" not in params
     assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer fake-token"
 
