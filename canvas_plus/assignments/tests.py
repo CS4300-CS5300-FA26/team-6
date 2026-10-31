@@ -1,10 +1,12 @@
 """Tests for the Canvas-backed assignments page."""
 
 from datetime import timedelta, timezone as datetime_timezone
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
+import requests
 from cryptography.fernet import Fernet
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -67,11 +69,73 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertContains(response, 'class="assignment-card"')
         self.assertContains(response, 'class="assignment-status assignment-status--')
         self.assertEqual(response.context["assignments"], assignments)
-        list_courses_mock.assert_called_once_with("fake-canvas-token")
+        list_courses_mock.assert_called_once_with("fake-canvas-token", session=ANY)
         list_upcoming_assignments_mock.assert_called_once_with(
             "fake-canvas-token",
             courses,
+            session=ANY,
         )
+
+    @override_settings(CACHES=settings.LOCMEM_CACHE)
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch("assignments.views.list_courses", return_value=[{"id": 42, "name": "CS 4300"}])
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_repeat_page_loads_reuse_the_course_list(
+        self, list_upcoming_assignments_mock, list_courses_mock, _list_graded_submissions_mock
+    ):
+        """A second visit skips the Canvas course request but still loads fresh assignments."""
+        self.client.get(reverse("assignment_list"))
+        self.client.get(reverse("assignment_list"))
+
+        list_courses_mock.assert_called_once()
+        self.assertEqual(list_upcoming_assignments_mock.call_count, 2)
+        self.assertEqual(
+            list_upcoming_assignments_mock.call_args.args[1], [{"id": 42, "name": "CS 4300"}]
+        )
+
+    @override_settings(CACHES=settings.LOCMEM_CACHE)
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch("assignments.views.list_courses", return_value=[])
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_reconnecting_canvas_reloads_the_course_list(
+        self, _list_upcoming_assignments_mock, list_courses_mock, _list_graded_submissions_mock
+    ):
+        """Courses cached for an old token are not shown after the student reconnects."""
+        self.client.get(reverse("assignment_list"))
+        self.connection.set_token("replacement-canvas-token")
+        self.connection.save()
+        self.client.get(reverse("assignment_list"))
+
+        self.assertEqual(list_courses_mock.call_count, 2)
+        list_courses_mock.assert_called_with("replacement-canvas-token", session=ANY)
+
+    @override_settings(CACHES=settings.LOCMEM_CACHE)
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch(
+        "assignments.views.list_courses",
+        side_effect=[CanvasAPIError("Unavailable"), []],
+    )
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_failed_course_request_is_not_cached(
+        self, _list_upcoming_assignments_mock, list_courses_mock, _list_graded_submissions_mock
+    ):
+        """A Canvas outage is retried on the next visit instead of being remembered."""
+        first = self.client.get(reverse("assignment_list"))
+        self.client.get(reverse("assignment_list"))
+
+        self.assertContains(first, "Unable to load upcoming assignments")
+        self.assertEqual(list_courses_mock.call_count, 2)
+
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch("assignments.views.list_courses", return_value=[{"id": 42, "name": "CS 4300"}])
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_page_load_reuses_one_canvas_session(self, *canvas_mocks):
+        """Every Canvas request in one page load shares a single HTTP session."""
+        self.client.get(reverse("assignment_list"))
+
+        sessions = {id(mock.call_args.kwargs["session"]) for mock in canvas_mocks}
+        self.assertEqual(len(sessions), 1)
+        self.assertIsInstance(canvas_mocks[0].call_args.kwargs["session"], requests.Session)
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True)
@@ -229,7 +293,7 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertContains(second_response, "Your Canvas connection expired. Please reconnect.")
         self.assertContains(second_response, reverse("connect_canvas"))
         self.assertNotContains(second_response, "No upcoming assignments")
-        list_courses_mock.assert_called_once_with("fake-canvas-token")
+        list_courses_mock.assert_called_once_with("fake-canvas-token", session=ANY)
         list_upcoming_assignments_mock.assert_not_called()
 
     def test_anonymous_visitor_is_redirected_to_sign_in(self):

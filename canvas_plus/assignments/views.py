@@ -1,5 +1,7 @@
 """Django views"""
+import requests
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import render
 from django.utils import timezone
@@ -14,15 +16,20 @@ from accounts.canvas_client import (
     list_upcoming_assignments,
 )
 from accounts.models import CanvasConnection, SavedTokenError
-from .grades import recent_grades
+from .grades import RECENT_WINDOW, recent_grades
 from .priority import priority
+
+# Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
+COURSE_CACHE_SECONDS = 60 * 60
 
 
 @sensitive_variables("token")
-def recently_graded_context(token, courses):
+def recently_graded_context(token, courses, session):
     """Context for the Recently graded section."""
     try:
-        submissions = list_graded_submissions(token, courses)
+        submissions = list_graded_submissions(
+            token, courses, timezone.now() - RECENT_WINDOW, session=session
+        )
     except CanvasAuthenticationError:
         raise
     except CanvasAPIError:
@@ -58,14 +65,19 @@ def assignment_list(request):
                 raise SavedTokenError("The configured Canvas host changed.")
 
             token = connection.get_token()
-            courses = list_courses(token)
-            assignments = list_upcoming_assignments(token, courses)
+            with requests.Session() as session:
+                courses_key = f"canvas-courses:{connection.pk}:{connection.updated_at.timestamp()}"
+                courses = cache.get(courses_key)
+                if courses is None:
+                    courses = list_courses(token, session=session)
+                    cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
+                assignments = list_upcoming_assignments(token, courses, session=session)
+                graded_context = recently_graded_context(token, courses, session)
             now = timezone.now()
             for assignment in assignments:
                 assignment["priority"] = priority(
                     assignment["due_date"], assignment["submitted"], now
                 )
-            graded_context = recently_graded_context(token, courses)
         except (CanvasAuthenticationError, SavedTokenError):
             connection.is_valid = False
             connection.save(update_fields=["is_valid", "updated_at"])

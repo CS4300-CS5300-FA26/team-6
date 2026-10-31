@@ -1,7 +1,7 @@
 """Tests for the Recently graded section of the assignments page."""
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 from cryptography.fernet import Fernet
@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
+from assignments.grades import RECENT_WINDOW
 
 COURSES = [{"id": 42, "name": "CS 4300"}]
 UPCOMING = [{
@@ -92,7 +93,13 @@ class RecentlyGradedSectionTests(TestCase):
         """Grades are requested with the decrypted token and the enrolled courses."""
         self.client.get(reverse("assignment_list"))
 
-        list_graded_submissions_mock.assert_called_once_with("fake-canvas-token", COURSES)
+        list_graded_submissions_mock.assert_called_once_with(
+            "fake-canvas-token", COURSES, ANY, session=ANY
+        )
+        graded_since = list_graded_submissions_mock.call_args.args[2]
+        self.assertAlmostEqual(
+            graded_since, timezone.now() - RECENT_WINDOW, delta=timedelta(minutes=1)
+        )
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=COURSES)
