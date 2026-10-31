@@ -102,11 +102,11 @@ class AvailabilityWindowPreparationTests(TestCase):
         )
 
     def test_nonexistent_spring_forward_time_shifts_to_next_valid_time(self):
-        """A Denver window starting at the skipped 2:00 time starts at 3:00."""
+        """A Denver window starting at skipped 2:30 starts at the first valid 3:00."""
         spring_forward_date = date(2026, 3, 8)
         self.test_date = spring_forward_date
         self.now = self.local_datetime(spring_forward_date, time(0))
-        self.add_window(self.user, spring_forward_date, time(2), time(4))
+        self.add_window(self.user, spring_forward_date, time(2, 30), time(4))
 
         windows = self.prepare()
 
