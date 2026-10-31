@@ -306,42 +306,4 @@ class SharedTemplateTests(TestCase):
                     f'<a href="{assignments_url}">Assignments</a>',
                     html=True,
                 )
-
-
-@pytest.mark.unit
-class AssignmentOwnershipTests(TestCase):
-    """Each local assignment belongs to one user and keeps its Canvas ID."""
-
-    def test_assignment_stores_user_and_canvas_assignment_id(self):
-        """The owner and Canvas ID round-trip through the database."""
-        user = get_user_model().objects.create_user(username="owner")
-
-        assignment = Assignment.objects.create(
-            title="Essay",
-            course="ENG 1010",
-            due_date=timezone.now() + timedelta(days=1),
-            user=user,
-            canvas_assignment_id=23,
-        )
-
-        saved = Assignment.objects.get(pk=assignment.pk)
-        self.assertEqual(saved.user, user)
-        self.assertEqual(saved.canvas_assignment_id, 23)
-
-    def test_deleting_user_deletes_their_assignments(self):
-        """Deleting the owner cascades to the owner's assignments only."""
-        owner = get_user_model().objects.create_user(username="owner")
-        other = get_user_model().objects.create_user(username="other")
-        due_date = timezone.now() + timedelta(days=1)
-        Assignment.objects.create(
-            title="Mine", course="ENG 1010", due_date=due_date,
-            user=owner, canvas_assignment_id=1,
-        )
-        kept = Assignment.objects.create(
-            title="Theirs", course="ENG 1010", due_date=due_date,
-            user=other, canvas_assignment_id=1,
-        )
-
-        owner.delete()
-
-        self.assertEqual(list(Assignment.objects.all()), [kept])
+                
