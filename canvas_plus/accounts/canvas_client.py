@@ -11,8 +11,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.views.decorators.debug import sensitive_variables
 
 MAX_COURSE_PAGES = 100
-# Stays under requests' default pool of 10 connections per host.
-MAX_CONCURRENT_REQUESTS = 8
+# Matches requests' default pool of 10 connections per host; Canvas throttles more parallelism.
+MAX_CONCURRENT_REQUESTS = 10
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
