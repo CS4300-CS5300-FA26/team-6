@@ -1,6 +1,7 @@
 """Django views"""
 import requests
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import render
 from django.utils import timezone
@@ -17,6 +18,9 @@ from accounts.canvas_client import (
 from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
 from .priority import priority
+
+# Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
+COURSE_CACHE_SECONDS = 60 * 60
 
 
 @sensitive_variables("token")
@@ -62,7 +66,11 @@ def assignment_list(request):
 
             token = connection.get_token()
             with requests.Session() as session:
-                courses = list_courses(token, session=session)
+                courses_key = f"canvas-courses:{connection.pk}:{connection.updated_at.timestamp()}"
+                courses = cache.get(courses_key)
+                if courses is None:
+                    courses = list_courses(token, session=session)
+                    cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
                 assignments = list_upcoming_assignments(token, courses, session=session)
                 graded_context = recently_graded_context(token, courses, session)
             now = timezone.now()
