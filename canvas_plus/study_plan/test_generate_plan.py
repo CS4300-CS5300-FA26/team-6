@@ -1,6 +1,6 @@
 """Integration tests for generating and persisting study plans."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -18,6 +18,78 @@ from study_plan.schema import StudySessionProposal
 
 class GeneratePlanTests(TestCase):
     """Generated sessions are validated and saved for the selected assignments."""
+
+    @patch("study_plan.generate.infer")
+    def test_long_assignment_split_into_sessions(self, mock_infer):
+        """Effort is split across windows and sub-15-minute remainder is reported."""
+        user = get_user_model().objects.create_user(username="long-plan-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        first_date = date(2026, 11, 2)
+        dates = [first_date + timedelta(days=offset) for offset in range(3)]
+        window_start = time(9)
+        window_end = time(9, 45)
+        for available_date in dates:
+            Availability.objects.create(
+                user=user,
+                date=available_date,
+                start_time=window_start,
+                end_time=window_end,
+            )
+
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=201,
+            title="Extended research paper",
+            course="Biology",
+            due_date=datetime.combine(
+                dates[-1],
+                time(10),
+                tzinfo=local_timezone,
+            ),
+            estimated_minutes=125,
+        )
+        proposal_sessions = [
+            StudySessionProposal(
+                assignment_id=assignment.id,
+                start=datetime.combine(available_date, window_start, tzinfo=local_timezone),
+                end=datetime.combine(available_date, proposed_end, tzinfo=local_timezone),
+                late=False,
+            )
+            for available_date, proposed_end in zip(
+                dates,
+                (window_end, window_end, time(9, 30)),
+            )
+        ]
+        mock_infer.return_value = StudyPlanResponse(sessions=proposal_sessions)
+
+        plan = generate_plan(user, [assignment.id])
+
+        sessions = list(plan.sessions.filter(assignment=assignment).order_by("start"))
+        self.assertEqual(len(sessions), 3)
+        self.assertEqual(
+            sum(int((session.end - session.start).total_seconds() // 60) for session in sessions),
+            120,
+        )
+        for session in sessions:
+            with self.subTest(start=session.start):
+                duration_minutes = int(
+                    (session.end - session.start).total_seconds() // 60
+                )
+                self.assertGreater(duration_minutes, 0)
+                self.assertEqual(duration_minutes % 15, 0)
+                self.assertGreaterEqual(session.start.time(), window_start)
+                self.assertLessEqual(session.end.time(), window_end)
+                self.assertLessEqual(session.end, assignment.due_date)
+
+        self.assertTrue(
+            any(
+                assignment.title in notice and "5" in notice
+                for notice in plan.notices
+            ),
+            f"Expected a notice naming {assignment.title!r} and its 5-minute remainder; "
+            f"got {plan.notices!r}",
+        )
 
     @patch("study_plan.generate.infer")
     def test_generates_plan_for_multiple_assignments(self, mock_infer):
