@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'assignments.apps.AssignmentsConfig',
     'accounts.apps.AccountsConfig',
     'availability',
+    'study_plan.apps.StudyPlanConfig',
 ]
 
 MIDDLEWARE = [
