@@ -1,6 +1,8 @@
 """Read enrolled courses and assignments from Canvas without exposing tokens."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from functools import partial
 from urllib.parse import urlsplit
 
 import requests
@@ -9,6 +11,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.views.decorators.debug import sensitive_variables
 
 MAX_COURSE_PAGES = 100
+# Stays under requests' default pool of 10 connections per host.
+MAX_CONCURRENT_REQUESTS = 8
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -172,8 +176,8 @@ def _normalize_assignment(assignment, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids, session):
-    """Fetch all assignment pages in one bucket for a validated course."""
+def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
+    """Fetch all (assignment, id) pairs in one bucket for a validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
     params = {"bucket": bucket, "include[]": "submission", "per_page": 100}
     visited = set()
@@ -189,14 +193,10 @@ def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids,
             "Canvas returned unexpected assignment data. Please try again.",
             session,
         )
-        for assignment in page:
-            normalized = _normalize_assignment(assignment, course["name"])
-            assignment_id = assignment.get("id")
-            if assignment_id is not None:
-                if assignment_id in seen_ids:
-                    continue
-                seen_ids.add(assignment_id)
-            assignments.append(normalized)
+        assignments.extend(
+            (_normalize_assignment(assignment, course["name"]), assignment.get("id"))
+            for assignment in page
+        )
         params = None
     return assignments
 
@@ -205,16 +205,25 @@ def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids,
 def list_upcoming_assignments(token, courses, session=None):
     """Return normalized upcoming and overdue assignments with submission status."""
     base_url = canvas_base_url()
-    assignments = []
-    seen_ids = set()
     for course in courses:
         _validate_assignment_course(course)
-        for bucket in ("upcoming", "overdue"):
-            assignments.extend(
-                _list_course_upcoming_assignments(
-                    token, course, base_url, bucket, seen_ids, session
-                )
-            )
+    buckets = ("upcoming", "overdue")
+    with ThreadPoolExecutor(MAX_CONCURRENT_REQUESTS) as pool:
+        # map yields in input order and re-raises the first failure in that order.
+        pages = list(pool.map(
+            partial(_list_course_upcoming_assignments, token, base_url=base_url, session=session),
+            [course for course in courses for _ in buckets],
+            buckets * len(courses),
+        ))
+    assignments = []
+    seen_ids = set()
+    for page in pages:
+        for assignment, assignment_id in page:
+            if assignment_id is not None:
+                if assignment_id in seen_ids:
+                    continue
+                seen_ids.add(assignment_id)
+            assignments.append(assignment)
     assignments.sort(key=lambda assignment: (
         assignment["due_date"] is None,
         assignment["due_date"],
@@ -279,8 +288,11 @@ def _list_course_graded_submissions(token, course, base_url, session):
 def list_graded_submissions(token, courses, session=None):
     """Return the student's published, graded submissions across the supplied courses."""
     base_url = canvas_base_url()
-    submissions = []
     for course in courses:
         _validate_assignment_course(course)
-        submissions.extend(_list_course_graded_submissions(token, course, base_url, session))
-    return submissions
+    with ThreadPoolExecutor(MAX_CONCURRENT_REQUESTS) as pool:
+        pages = pool.map(
+            partial(_list_course_graded_submissions, token, base_url=base_url, session=session),
+            courses,
+        )
+        return [submission for page in pages for submission in page]

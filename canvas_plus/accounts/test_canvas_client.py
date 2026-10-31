@@ -1,5 +1,6 @@
 """Canvas HTTP boundary tests; no requests reach a real Canvas server."""
 
+import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
@@ -18,6 +19,12 @@ from .canvas_client import (
 def canvas_settings(settings):
     """Use a fixed, non-secret Canvas origin."""
     settings.CANVAS_BASE_URL = "https://canvas.example.edu/"
+
+
+@pytest.fixture(autouse=True)
+def sequential_canvas_requests(monkeypatch):
+    """One worker keeps mocked responses in call order; concurrency tests opt back in."""
+    monkeypatch.setattr("accounts.canvas_client.MAX_CONCURRENT_REQUESTS", 1)
 
 
 def response(courses, *, status=200, next_url=None):
@@ -345,7 +352,8 @@ def test_upcoming_assignments_reject_unauthorized_pagination_links():
         with pytest.raises(CanvasAPIError):
             list_upcoming_assignments("fake-token", courses)
 
-    assert get.call_count == 1
+    assert get.call_count >= 1
+    assert all(call.args[0].startswith("https://canvas.example.edu/") for call in get.call_args_list)
 
 
 @pytest.mark.unit
@@ -544,3 +552,43 @@ def test_requests_reuse_the_supplied_session():
 
     get.assert_not_called()
     assert session.get.call_count == 3
+
+
+@pytest.mark.unit
+def test_course_requests_run_concurrently(monkeypatch):
+    """Every course and bucket request is in flight at once instead of one at a time."""
+    monkeypatch.undo()  # opt back in to real concurrency
+    courses = [{"id": 42, "name": "CS 4300"}, {"id": 84, "name": "MATH 2250"}]
+    all_in_flight = threading.Barrier(4, timeout=2)
+
+    def get(*_args, **_kwargs):
+        all_in_flight.wait()  # breaks, failing the test, if requests run sequentially
+        return response([])
+
+    with patch("accounts.canvas_client.requests.get", side_effect=get):
+        assert not list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+def test_one_failing_course_fails_a_concurrent_load(monkeypatch):
+    """A Canvas failure for one of several courses is an outage, not an expired token."""
+    monkeypatch.undo()  # opt back in to real concurrency
+    courses = [{"id": course_id, "name": f"Course {course_id}"} for course_id in (41, 42, 43)]
+
+    def get(url, **_kwargs):
+        return response({}, status=500) if "/courses/42/" in url else response([])
+
+    with patch("accounts.canvas_client.requests.get", side_effect=get):
+        with pytest.raises(CanvasAPIError) as error:
+            list_upcoming_assignments("fake-token", courses)
+    assert error.type is CanvasAPIError
+
+
+@pytest.mark.unit
+def test_rejected_token_during_a_concurrent_load(monkeypatch):
+    """A revoked token is still reported as an authentication failure."""
+    monkeypatch.undo()  # opt back in to real concurrency
+    courses = [{"id": course_id, "name": f"Course {course_id}"} for course_id in (41, 42, 43)]
+    with patch("accounts.canvas_client.requests.get", return_value=response({}, status=401)):
+        with pytest.raises(CanvasAuthenticationError):
+            list_upcoming_assignments("fake-token", courses)

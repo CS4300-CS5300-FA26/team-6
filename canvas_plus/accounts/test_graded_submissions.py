@@ -1,5 +1,6 @@
 """Canvas HTTP boundary tests for graded submissions; no request reaches Canvas."""
 
+import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
@@ -15,6 +16,12 @@ URL = "https://canvas.example.edu/api/v1/courses/7/students/submissions"
 def canvas_settings(settings):
     """Use a fixed, non-secret Canvas origin."""
     settings.CANVAS_BASE_URL = "https://canvas.example.edu"
+
+
+@pytest.fixture(autouse=True)
+def sequential_canvas_requests(monkeypatch):
+    """One worker keeps mocked responses in call order; concurrency tests opt back in."""
+    monkeypatch.setattr("accounts.canvas_client.MAX_CONCURRENT_REQUESTS", 1)
 
 
 def response(payload, *, status=200, next_url=None):
@@ -181,3 +188,18 @@ def test_requests_reuse_the_supplied_session():
 
     get.assert_not_called()
     assert titles(result) == ["Sprint 1 Retrospective"]
+
+
+@pytest.mark.unit
+def test_course_requests_run_concurrently(monkeypatch):
+    """Every course's graded work is requested at once instead of one at a time."""
+    monkeypatch.undo()  # opt back in to real concurrency
+    courses = [COURSE, {"id": 8, "name": "Databases"}]
+    all_in_flight = threading.Barrier(2, timeout=2)
+
+    def get(*_args, **_kwargs):
+        all_in_flight.wait()  # breaks, failing the test, if requests run sequentially
+        return response([])
+
+    with patch("accounts.canvas_client.requests.get", side_effect=get):
+        assert not list_graded_submissions("fake-token", courses)
