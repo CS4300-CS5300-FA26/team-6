@@ -55,10 +55,12 @@ def _validate_pagination_url(next_url, base_url, visited):
 
 
 @sensitive_variables("token", "response")
-def _fetch_page(next_url, token, params, failure_message, invalid_response_message):
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments  # each is a distinct request input
+def _fetch_page(next_url, token, params, failure_message, invalid_response_message, session):
     """Fetch a JSON list page and its next link with shared Canvas error handling."""
     try:
-        response = requests.get(
+        # requests.get and Session.get share a signature; a session reuses connections.
+        response = (session or requests).get(
             next_url,
             headers={"Authorization": f"Bearer {token}"},
             params=params,
@@ -83,7 +85,7 @@ def _fetch_page(next_url, token, params, failure_message, invalid_response_messa
 
 
 @sensitive_variables("token")
-def list_courses(token):
+def list_courses(token, session=None):
     """Return all active student courses, following same-origin pagination only."""
     base_url = canvas_base_url()
     courses = []
@@ -101,6 +103,7 @@ def list_courses(token):
             params,
             "Canvas could not load your courses. Please try again.",
             "Canvas returned unexpected course data. Please try again.",
+            session,
         )
         if any(
             not isinstance(course, dict) or not isinstance(course.get("name"), str)
@@ -169,7 +172,7 @@ def _normalize_assignment(assignment, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids):
+def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids, session):
     """Fetch all assignment pages in one bucket for a validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
     params = {"bucket": bucket, "include[]": "submission", "per_page": 100}
@@ -184,6 +187,7 @@ def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids)
             params,
             "Canvas could not load upcoming assignments. Please try again.",
             "Canvas returned unexpected assignment data. Please try again.",
+            session,
         )
         for assignment in page:
             normalized = _normalize_assignment(assignment, course["name"])
@@ -198,7 +202,7 @@ def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids)
 
 
 @sensitive_variables("token")
-def list_upcoming_assignments(token, courses):
+def list_upcoming_assignments(token, courses, session=None):
     """Return normalized upcoming and overdue assignments with submission status."""
     base_url = canvas_base_url()
     assignments = []
@@ -207,7 +211,9 @@ def list_upcoming_assignments(token, courses):
         _validate_assignment_course(course)
         for bucket in ("upcoming", "overdue"):
             assignments.extend(
-                _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids)
+                _list_course_upcoming_assignments(
+                    token, course, base_url, bucket, seen_ids, session
+                )
             )
     assignments.sort(key=lambda assignment: (
         assignment["due_date"] is None,
@@ -246,7 +252,7 @@ def _normalize_submission(submission, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_graded_submissions(token, course, base_url):
+def _list_course_graded_submissions(token, course, base_url, session):
     """Fetch all graded submission pages for one validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/students/submissions"
     params = {"workflow_state": "graded", "include[]": "assignment", "per_page": 100}
@@ -261,6 +267,7 @@ def _list_course_graded_submissions(token, course, base_url):
             params,
             "Canvas could not load graded work. Please try again.",
             "Canvas returned unexpected submission data. Please try again.",
+            session,
         )
         normalized = (_normalize_submission(submission, course["name"]) for submission in page)
         submissions.extend(grade for grade in normalized if grade is not None)
@@ -269,11 +276,11 @@ def _list_course_graded_submissions(token, course, base_url):
 
 
 @sensitive_variables("token")
-def list_graded_submissions(token, courses):
+def list_graded_submissions(token, courses, session=None):
     """Return the student's published, graded submissions across the supplied courses."""
     base_url = canvas_base_url()
     submissions = []
     for course in courses:
         _validate_assignment_course(course)
-        submissions.extend(_list_course_graded_submissions(token, course, base_url))
+        submissions.extend(_list_course_graded_submissions(token, course, base_url, session))
     return submissions

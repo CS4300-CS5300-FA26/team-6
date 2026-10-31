@@ -1,4 +1,5 @@
 """Django views"""
+import requests
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import render
@@ -19,10 +20,10 @@ from .priority import priority
 
 
 @sensitive_variables("token")
-def recently_graded_context(token, courses):
+def recently_graded_context(token, courses, session):
     """Context for the Recently graded section."""
     try:
-        submissions = list_graded_submissions(token, courses)
+        submissions = list_graded_submissions(token, courses, session=session)
     except CanvasAuthenticationError:
         raise
     except CanvasAPIError:
@@ -58,14 +59,15 @@ def assignment_list(request):
                 raise SavedTokenError("The configured Canvas host changed.")
 
             token = connection.get_token()
-            courses = list_courses(token)
-            assignments = list_upcoming_assignments(token, courses)
+            with requests.Session() as session:
+                courses = list_courses(token, session=session)
+                assignments = list_upcoming_assignments(token, courses, session=session)
+                graded_context = recently_graded_context(token, courses, session)
             now = timezone.now()
             for assignment in assignments:
                 assignment["priority"] = priority(
                     assignment["due_date"], assignment["submitted"], now
                 )
-            graded_context = recently_graded_context(token, courses)
         except (CanvasAuthenticationError, SavedTokenError):
             connection.is_valid = False
             connection.save(update_fields=["is_valid", "updated_at"])

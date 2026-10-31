@@ -1,7 +1,7 @@
 """Tests for the Recently graded section of the assignments page."""
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 from cryptography.fernet import Fernet
@@ -92,7 +92,9 @@ class RecentlyGradedSectionTests(TestCase):
         """Grades are requested with the decrypted token and the enrolled courses."""
         self.client.get(reverse("assignment_list"))
 
-        list_graded_submissions_mock.assert_called_once_with("fake-canvas-token", COURSES)
+        list_graded_submissions_mock.assert_called_once_with(
+            "fake-canvas-token", COURSES, session=ANY
+        )
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=COURSES)

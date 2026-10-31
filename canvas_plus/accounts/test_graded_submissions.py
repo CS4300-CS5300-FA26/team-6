@@ -169,3 +169,15 @@ def test_malformed_submission_raises_api_error(payload):
     with patch("accounts.canvas_client.requests.get", return_value=response([payload])):
         with pytest.raises(CanvasAPIError):
             list_graded_submissions("fake-token", [COURSE])
+
+
+@pytest.mark.unit
+def test_requests_reuse_the_supplied_session():
+    """Graded work is fetched through the caller's session instead of a new connection."""
+    session = Mock()
+    session.get.return_value = response([submission()])
+    with patch("accounts.canvas_client.requests.get") as get:
+        result = list_graded_submissions("fake-token", [COURSE], session=session)
+
+    get.assert_not_called()
+    assert titles(result) == ["Sprint 1 Retrospective"]

@@ -527,3 +527,20 @@ def test_overdue_pagination_rejects_other_origin():
             list_upcoming_assignments("fake-token", courses)
 
     assert get.call_count == 2
+
+
+@pytest.mark.unit
+def test_requests_reuse_the_supplied_session():
+    """Courses and assignments share the caller's session instead of new connections."""
+    session = Mock()
+    session.get.side_effect = [
+        response([{"id": 42, "name": "CS 4300"}]),
+        response([]),
+        response([]),
+    ]
+    with patch("accounts.canvas_client.requests.get") as get:
+        courses = list_courses("fake-token", session=session)
+        list_upcoming_assignments("fake-token", courses, session=session)
+
+    get.assert_not_called()
+    assert session.get.call_count == 3

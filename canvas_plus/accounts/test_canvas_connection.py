@@ -14,7 +14,7 @@ HTTP is used only for this loopback test server; production must use HTTPS.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -348,7 +348,7 @@ def test_equivalent_canvas_origin_preserves_connection(student_client, settings,
 
     assert response.status_code == 200
     assert "Your Canvas connection expired." not in PageContent(response).text
-    request.assert_called_once_with(VALID_TOKEN)
+    request.assert_called_once_with(VALID_TOKEN, session=ANY)
     assert CanvasConnection.objects.get(user=user).is_valid
 
 
