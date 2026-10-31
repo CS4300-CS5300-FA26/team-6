@@ -106,7 +106,7 @@ jobs:
               fi
             done < files.txt
           } > input.txt
-          echo "Review input: $(wc -c < input.txt) chars (limit $MAX_INPUT_CHARS)"
+          echo "Review input: $(wc -c < input.txt) bytes (limit $MAX_INPUT_CHARS)"
 
           # Over the limit? Keep the beginning, cut the end, and leave a note for the comment
           # in $GITHUB_ENV (later steps can read it).
