@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
+from assignments.grades import RECENT_WINDOW
 
 COURSES = [{"id": 42, "name": "CS 4300"}]
 UPCOMING = [{
@@ -93,7 +94,11 @@ class RecentlyGradedSectionTests(TestCase):
         self.client.get(reverse("assignment_list"))
 
         list_graded_submissions_mock.assert_called_once_with(
-            "fake-canvas-token", COURSES, session=ANY
+            "fake-canvas-token", COURSES, ANY, session=ANY
+        )
+        graded_since = list_graded_submissions_mock.call_args.args[2]
+        self.assertAlmostEqual(
+            graded_since, timezone.now() - RECENT_WINDOW, delta=timedelta(minutes=1)
         )
 
     @patch("assignments.views.list_graded_submissions", return_value=[])

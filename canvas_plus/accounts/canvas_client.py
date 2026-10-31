@@ -261,10 +261,15 @@ def _normalize_submission(submission, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_graded_submissions(token, course, base_url, session):
-    """Fetch all graded submission pages for one validated course."""
+def _list_course_graded_submissions(token, course, graded_since, base_url, session):
+    """Fetch all pages of work graded since a cutoff for one validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/students/submissions"
-    params = {"workflow_state": "graded", "include[]": "assignment", "per_page": 100}
+    params = {
+        "workflow_state": "graded",
+        "include[]": "assignment",
+        "per_page": 100,
+        "graded_since": graded_since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
     visited = set()
     submissions = []
     while next_url:
@@ -285,8 +290,8 @@ def _list_course_graded_submissions(token, course, base_url, session):
 
 
 @sensitive_variables("token")
-def list_graded_submissions(token, courses, session=None):
-    """Return the student's published, graded submissions across the supplied courses."""
+def list_graded_submissions(token, courses, graded_since, session=None):
+    """Return the student's published submissions graded since a cutoff across the courses."""
     base_url = canvas_base_url()
     for course in courses:
         _validate_assignment_course(course)
@@ -294,5 +299,6 @@ def list_graded_submissions(token, courses, session=None):
         pages = pool.map(
             partial(_list_course_graded_submissions, token, base_url=base_url, session=session),
             courses,
+            [graded_since] * len(courses),
         )
         return [submission for page in pages for submission in page]

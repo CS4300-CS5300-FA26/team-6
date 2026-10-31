@@ -15,7 +15,7 @@ from accounts.canvas_client import (
     list_upcoming_assignments,
 )
 from accounts.models import CanvasConnection, SavedTokenError
-from .grades import recent_grades
+from .grades import RECENT_WINDOW, recent_grades
 from .priority import priority
 
 
@@ -23,7 +23,9 @@ from .priority import priority
 def recently_graded_context(token, courses, session):
     """Context for the Recently graded section."""
     try:
-        submissions = list_graded_submissions(token, courses, session=session)
+        submissions = list_graded_submissions(
+            token, courses, timezone.now() - RECENT_WINDOW, session=session
+        )
     except CanvasAuthenticationError:
         raise
     except CanvasAPIError:
