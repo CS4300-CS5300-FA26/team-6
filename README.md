@@ -274,7 +274,6 @@ Jackson McGuire used Claude Code to help add the uv.lock check to Lint and Test.
 Jackson McGuire used Claude Code to help write the landing page and its pytest and Behave tests. Jackson refined the Gherkin acceptance criteria, ran every test (red before the page existed, green after), and flip-checked the failed-login test.
 
 ### During software development
-
 Joshua Douglas used Codex to fix both availability templates to extend the shared base layout and navigation.
 
 #### Moving navigation to the left sidebar
@@ -322,3 +321,10 @@ Joshua Douglas used GPT 6.1 sol (via Codex) to write the Behave step definitions
 #### AI review input limit
 
 Jackson McGuire used Claude Code to raise the AI review's input limit.
+
+#### AI inference interface
+
+Stephen used AI was used to assist with documenting the AI inference interface,
+including credential configuration, usage examples, and failure behavior.
+
+Stephen used AI to assist with creating the inference function, content builder, and tests

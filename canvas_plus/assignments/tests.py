@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
+from assignments.models import Assignment
 
 
 @pytest.mark.integration
@@ -305,3 +306,4 @@ class SharedTemplateTests(TestCase):
                     f'<a href="{assignments_url}">Assignments</a>',
                     html=True,
                 )
+                
