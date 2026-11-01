@@ -48,6 +48,14 @@ def test_courses_include_every_page_and_authenticate_each_request():
 
 
 @pytest.mark.unit
+def test_course_list_request_includes_each_course_term():
+    """Courses come back with their term so ended semesters can be hidden."""
+    with patch("accounts.canvas_client.requests.get", return_value=response([])) as get:
+        list_courses("fake-token")
+    assert get.call_args.kwargs["params"]["include[]"] == "term"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("next_url", [
     "https://untrusted.example/api/v1/courses",
     "http://canvas.example.edu/api/v1/courses",
