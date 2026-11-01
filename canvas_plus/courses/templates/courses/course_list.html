@@ -9,9 +9,9 @@
   {% elif courses_unavailable_message %}
     <p role="status">{{ courses_unavailable_message }}</p>
   {% elif courses %}
-    <ul>
+    <ul class="course-list">
       {% for course in courses %}
-        <li>{{ course.name }}</li>
+        <li class="course-card">{{ course.name }}</li>
       {% endfor %}
     </ul>
   {% elif not canvas_connection_expired %}
