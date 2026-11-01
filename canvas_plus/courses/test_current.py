@@ -29,3 +29,10 @@ def test_course_whose_term_has_ended_is_not_current():
 def test_course_without_term_end_date_is_current():
     """A course with no term dates, like advising, stays in the list."""
     assert is_current(course_with_term_end(None), NOW)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("end_at", ["not a date", "2027-01-09T07:00:00"])
+def test_course_with_unreadable_term_end_date_is_current(end_at):
+    """A broken or timezone-less date can't prove the term ended, so the course stays."""
+    assert is_current(course_with_term_end(end_at), NOW)
