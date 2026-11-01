@@ -7,4 +7,7 @@ def is_current(course, now):
     term_end = (course.get("term") or {}).get("end_at")
     if term_end is None:
         return True
-    return datetime.fromisoformat(term_end) > now
+    try:
+        return datetime.fromisoformat(term_end) > now
+    except (TypeError, ValueError):
+        return True  # an unreadable date can't prove the term ended
