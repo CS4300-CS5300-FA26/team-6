@@ -1,6 +1,8 @@
 """Read enrolled courses and assignments from Canvas without exposing tokens."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from functools import partial
 from urllib.parse import urlsplit
 
 import requests
@@ -9,6 +11,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.views.decorators.debug import sensitive_variables
 
 MAX_COURSE_PAGES = 100
+# Matches requests' default pool of 10 connections per host; Canvas throttles more parallelism.
+MAX_CONCURRENT_REQUESTS = 10
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -55,10 +59,12 @@ def _validate_pagination_url(next_url, base_url, visited):
 
 
 @sensitive_variables("token", "response")
-def _fetch_page(next_url, token, params, failure_message, invalid_response_message):
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments  # each is a distinct request input
+def _fetch_page(next_url, token, params, failure_message, invalid_response_message, session):
     """Fetch a JSON list page and its next link with shared Canvas error handling."""
     try:
-        response = requests.get(
+        # requests.get and Session.get share a signature; a session reuses connections.
+        response = (session or requests).get(
             next_url,
             headers={"Authorization": f"Bearer {token}"},
             params=params,
@@ -83,12 +89,12 @@ def _fetch_page(next_url, token, params, failure_message, invalid_response_messa
 
 
 @sensitive_variables("token")
-def list_courses(token):
+def list_courses(token, session=None):
     """Return all active student courses, following same-origin pagination only."""
     base_url = canvas_base_url()
     courses = []
     next_url = f"{base_url}/api/v1/courses"
-    params = {"enrollment_type": "student", "enrollment_state": "active"}
+    params = {"enrollment_type": "student", "enrollment_state": "active", "per_page": 100}
     visited = set()
 
 
@@ -101,6 +107,7 @@ def list_courses(token):
             params,
             "Canvas could not load your courses. Please try again.",
             "Canvas returned unexpected course data. Please try again.",
+            session,
         )
         if any(
             not isinstance(course, dict) or not isinstance(course.get("name"), str)
@@ -169,10 +176,10 @@ def _normalize_assignment(assignment, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids):
-    """Fetch all assignment pages in one bucket for a validated course."""
+def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
+    """Fetch all (assignment, id) pairs in one bucket for a validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
-    params = {"bucket": bucket, "include[]": "submission"}
+    params = {"bucket": bucket, "include[]": "submission", "per_page": 100}
     visited = set()
     assignments = []
     while next_url:
@@ -184,31 +191,39 @@ def _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids)
             params,
             "Canvas could not load upcoming assignments. Please try again.",
             "Canvas returned unexpected assignment data. Please try again.",
+            session,
         )
-        for assignment in page:
-            normalized = _normalize_assignment(assignment, course["name"])
-            assignment_id = assignment.get("id")
-            if assignment_id is not None:
-                if assignment_id in seen_ids:
-                    continue
-                seen_ids.add(assignment_id)
-            assignments.append(normalized)
+        assignments.extend(
+            (_normalize_assignment(assignment, course["name"]), assignment.get("id"))
+            for assignment in page
+        )
         params = None
     return assignments
 
 
 @sensitive_variables("token")
-def list_upcoming_assignments(token, courses):
+def list_upcoming_assignments(token, courses, session=None):
     """Return normalized upcoming and overdue assignments with submission status."""
     base_url = canvas_base_url()
-    assignments = []
-    seen_ids = set()
     for course in courses:
         _validate_assignment_course(course)
-        for bucket in ("upcoming", "overdue"):
-            assignments.extend(
-                _list_course_upcoming_assignments(token, course, base_url, bucket, seen_ids)
-            )
+    buckets = ("upcoming", "overdue")
+    with ThreadPoolExecutor(MAX_CONCURRENT_REQUESTS) as pool:
+        # map yields in input order and re-raises the first failure in that order.
+        pages = list(pool.map(
+            partial(_list_course_upcoming_assignments, token, base_url=base_url, session=session),
+            [course for course in courses for _ in buckets],
+            buckets * len(courses),
+        ))
+    assignments = []
+    seen_ids = set()
+    for page in pages:
+        for assignment, assignment_id in page:
+            if assignment_id is not None:
+                if assignment_id in seen_ids:
+                    continue
+                seen_ids.add(assignment_id)
+            assignments.append(assignment)
     assignments.sort(key=lambda assignment: (
         assignment["due_date"] is None,
         assignment["due_date"],
@@ -246,10 +261,15 @@ def _normalize_submission(submission, course_name):
 
 
 @sensitive_variables("token")
-def _list_course_graded_submissions(token, course, base_url):
-    """Fetch all graded submission pages for one validated course."""
+def _list_course_graded_submissions(token, course, graded_since, base_url, session):
+    """Fetch all pages of work graded since a cutoff for one validated course."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/students/submissions"
-    params = {"workflow_state": "graded", "include[]": "assignment"}
+    params = {
+        "workflow_state": "graded",
+        "include[]": "assignment",
+        "per_page": 100,
+        "graded_since": graded_since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
     visited = set()
     submissions = []
     while next_url:
@@ -261,6 +281,7 @@ def _list_course_graded_submissions(token, course, base_url):
             params,
             "Canvas could not load graded work. Please try again.",
             "Canvas returned unexpected submission data. Please try again.",
+            session,
         )
         normalized = (_normalize_submission(submission, course["name"]) for submission in page)
         submissions.extend(grade for grade in normalized if grade is not None)
@@ -269,11 +290,15 @@ def _list_course_graded_submissions(token, course, base_url):
 
 
 @sensitive_variables("token")
-def list_graded_submissions(token, courses):
-    """Return the student's published, graded submissions across the supplied courses."""
+def list_graded_submissions(token, courses, graded_since, session=None):
+    """Return the student's published submissions graded since a cutoff across the courses."""
     base_url = canvas_base_url()
-    submissions = []
     for course in courses:
         _validate_assignment_course(course)
-        submissions.extend(_list_course_graded_submissions(token, course, base_url))
-    return submissions
+    with ThreadPoolExecutor(MAX_CONCURRENT_REQUESTS) as pool:
+        pages = pool.map(
+            partial(_list_course_graded_submissions, token, base_url=base_url, session=session),
+            courses,
+            [graded_since] * len(courses),
+        )
+        return [submission for page in pages for submission in page]
