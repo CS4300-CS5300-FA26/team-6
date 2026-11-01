@@ -17,6 +17,7 @@
         <ul class="nav-links" id="navigation-links">
             <li><a href="{% url 'assignment_list' %}">Assignments</a></li>
             {% if user.is_authenticated %}
+                <li><a href="{% url 'course_list' %}">Courses</a></li>
                 <li><a href="{% url 'connect_canvas' %}">Connect Canvas</a></li>
                 <li class="logout-item">
                     <form method="post" action="{% url 'logout' %}">
