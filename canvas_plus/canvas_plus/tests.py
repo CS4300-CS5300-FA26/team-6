@@ -27,9 +27,11 @@ class LandingPageTests(TestCase):
     def test_logged_out_visitor_sees_landing_page(self):
         """Scenario 1: name, login form, register link, and no course data."""
         Assignment(
+            canvas_course_id=42, canvas_assignment_id=101,
             title="Private Homework",
             course="CS 4300",
             due_date=timezone.now() + timedelta(days=7),
+            user=self.user,
         ).save()
 
         response = self.client.get("/")

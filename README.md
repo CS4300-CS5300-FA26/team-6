@@ -216,6 +216,10 @@ The [Canvas connection study guide](docs/canvas-connection.md) explains the requ
 flow, files, tests, deployment configuration, and limitations. Assignment importing
 is tracked separately in issue #39.
 
+The [assignment model guide](docs/assignment-models.md) describes the user-owned
+assignment, reusable file, and attachment schema for #42, including migration
+preconditions and the contract for #49 estimates.
+
 ## Dashboard known limitations
 
 - Overdue work stays listed for as long as the course is active, even if it is months old.
