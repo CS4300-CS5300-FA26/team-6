@@ -164,6 +164,13 @@ settings load `.env` automatically for local runs. `.env` is ignored by Git; do
 not commit it or use the example secret in production. Configure production
 secrets through the server's environment variables instead.
 
+Leave all four `BUCKETEER_*` entries empty locally: uploaded files are stored in
+the Git-ignored `canvas_plus/media/` directory. Tests also use filesystem storage.
+Production must set all four entries to persist private uploads in Bucketeer;
+partial configuration prevents startup. See the
+[assignment upload guide](docs/assignment-models.md#upload-storage) for the storage
+options and quotas. Uploaded files have no public media route.
+
 ## Running the application
 
 From the repository root, enter the Django project directory and apply the database migrations:
