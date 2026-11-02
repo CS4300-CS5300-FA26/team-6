@@ -18,3 +18,7 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
+
+# Cached Canvas data must not leak between tests; caching tests opt in to LOCMEM_CACHE.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
