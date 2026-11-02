@@ -115,6 +115,7 @@ def step_upcoming_assignments(context):
     context.upcoming_assignments.return_value = [{
         "title": context.upcoming_title,
         "course_name": "Software Engineering",
+        "canvas_assignment_id": 101, "canvas_course_id": 42,
         "due_date": timezone.now() + timedelta(days=7),
         "submitted": False,
     }]

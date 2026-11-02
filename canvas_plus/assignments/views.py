@@ -20,6 +20,7 @@ from accounts.canvas_client import (
 )
 from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
+from .models import Attachment
 from .priority import priority
 from .uploads import save_attachments, validate_batch
 
@@ -104,6 +105,21 @@ def load_canvas_context(user):
 def assignment_list(request):
     """Show the signed-in student's current upcoming Canvas assignments."""
     context = load_canvas_context(request.user)
+    if not context["assignments_unavailable"]:
+        assignments_by_id = {
+            item["canvas_assignment_id"]: item for item in context["assignments"]
+        }
+        for assignment in assignments_by_id.values():
+            assignment["attachments"] = []
+        # Django supplies model managers dynamically.
+        attachments = Attachment.objects.filter(  # pylint: disable=no-member
+            user=request.user,
+            assignment__canvas_assignment_id__in=assignments_by_id,
+        ).select_related("study_file", "assignment").order_by("study_file__uploaded_at")
+        for attachment in attachments:
+            assignments_by_id[attachment.assignment.canvas_assignment_id]["attachments"].append(
+                attachment
+            )
     return render(request, "assignments/assignment_list.html", context)
 
 
