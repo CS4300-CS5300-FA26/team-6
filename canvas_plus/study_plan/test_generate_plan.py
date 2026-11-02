@@ -24,10 +24,10 @@ class GeneratePlanTests(TestCase):
         """Effort is split across windows and sub-15-minute remainder is reported."""
         user = get_user_model().objects.create_user(username="long-plan-student")
         local_timezone = ZoneInfo(settings.TIME_ZONE)
-        first_date = date(2026, 11, 2)
+        first_date = date.today() + timedelta(days=1)
         dates = [first_date + timedelta(days=offset) for offset in range(3)]
         window_start = time(9)
-        window_end = time(9, 45)
+        window_end = time(10, 15)
         for available_date in dates:
             Availability.objects.create(
                 user=user,
@@ -57,8 +57,8 @@ class GeneratePlanTests(TestCase):
                 late=False,
             )
             for available_date, proposed_end in zip(
-                dates,
-                (window_end, window_end, time(9, 30)),
+                dates[:2],
+                (window_end, window_end),
             )
         ]
         mock_infer.return_value = StudyPlanResponse(sessions=proposal_sessions)
@@ -66,10 +66,13 @@ class GeneratePlanTests(TestCase):
         plan = generate_plan(user, [assignment.id])
 
         sessions = list(plan.sessions.filter(assignment=assignment).order_by("start"))
-        self.assertEqual(len(sessions), 3)
+        self.assertEqual(len(sessions), 2)
         self.assertEqual(
             sum(int((session.end - session.start).total_seconds() // 60) for session in sessions),
-            120,
+            150,
+        )
+        self.assertTrue(
+            any(session.end - session.start > timedelta(minutes=60) for session in sessions)
         )
         for session in sessions:
             with self.subTest(start=session.start):
