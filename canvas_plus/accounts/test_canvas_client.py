@@ -372,7 +372,9 @@ def test_upcoming_assignments_reject_unauthorized_pagination_links():
             list_upcoming_assignments("fake-token", courses)
 
     assert get.call_count >= 1
-    assert all(call.args[0].startswith("https://canvas.example.edu/") for call in get.call_args_list)
+    assert all(
+        call.args[0].startswith("https://canvas.example.edu/") for call in get.call_args_list
+    )
 
 
 @pytest.mark.unit

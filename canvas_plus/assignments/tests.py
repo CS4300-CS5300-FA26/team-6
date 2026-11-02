@@ -1,5 +1,8 @@
 """Tests for the Canvas-backed assignments page."""
 
+# Independent request test classes deliberately repeat connection setup.
+# pylint: disable=duplicate-code
+
 from datetime import timedelta, timezone as datetime_timezone
 from unittest.mock import ANY, patch
 
@@ -14,7 +17,6 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
-from assignments.models import Assignment
 
 
 @pytest.mark.integration
@@ -377,4 +379,3 @@ class SharedTemplateTests(TestCase):
                     f'<a href="{assignments_url}">Assignments</a>',
                     html=True,
                 )
-                
