@@ -134,26 +134,21 @@ def _validate_assignment_course(course):
         raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
 
 
-def _normalize_assignment(assignment, course_name):
+def _normalize_assignment(assignment, course):
     """Validate and normalize one Canvas assignment result."""
+    invalid = "Canvas returned unexpected assignment data. Please try again."
     if (not isinstance(assignment, dict)
-            or not isinstance(assignment.get("name"), str)
+            or isinstance(assignment.get("id"), bool)
+            or not isinstance(assignment.get("id"), int)
+            or assignment["id"] <= 0):
+        raise CanvasAPIError(invalid)
+    if (not isinstance(assignment.get("name"), str)
             or (assignment.get("due_at") is not None
                 and not isinstance(assignment["due_at"], str))):
-        raise CanvasAPIError(
-            "Canvas returned unexpected assignment data. Please try again."
-        )
-    if (assignment.get("id") is not None
-            and (isinstance(assignment["id"], bool)
-                 or not isinstance(assignment["id"], int))):
-        raise CanvasAPIError(
-            "Canvas returned unexpected assignment data. Please try again."
-        )
+        raise CanvasAPIError(invalid)
     submission = assignment.get("submission")
     if submission is not None and not isinstance(submission, dict):
-        raise CanvasAPIError(
-            "Canvas returned unexpected assignment data. Please try again."
-        )
+        raise CanvasAPIError(invalid)
     due_date = None
     if assignment.get("due_at") is not None:
         try:
@@ -173,8 +168,10 @@ def _normalize_assignment(assignment, course_name):
         or submission.get("excused") is True
     )
     return {
+        "canvas_assignment_id": assignment["id"],
+        "canvas_course_id": course["id"],
         "title": assignment["name"],
-        "course_name": course_name,
+        "course_name": course["name"],
         "due_date": due_date,
         "submitted": submitted,
     }
@@ -199,9 +196,10 @@ def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
             session,
         )
         assignments.extend(
-            (_normalize_assignment(assignment, course["name"]), assignment.get("id"))
+            (_normalize_assignment(assignment, course), assignment.get("id"))
             for assignment in page
         )
+
         params = None
     return assignments
 
