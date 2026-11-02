@@ -1,11 +1,14 @@
 """Django views"""
 import requests
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.core.exceptions import ImproperlyConfigured
-from django.shortcuts import render
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.http import Http404
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
+from django.views.decorators.http import require_POST
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -18,6 +21,7 @@ from accounts.canvas_client import (
 from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
 from .priority import priority
+from .uploads import save_attachments, validate_batch
 
 # Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
 COURSE_CACHE_SECONDS = 60 * 60
@@ -101,3 +105,37 @@ def assignment_list(request):
     """Show the signed-in student's current upcoming Canvas assignments."""
     context = load_canvas_context(request.user)
     return render(request, "assignments/assignment_list.html", context)
+
+
+@login_required
+@require_POST
+def upload_attachments(request, course_id, assignment_id):
+    """Attach a validated file batch to the student's live Canvas assignment."""
+    files = request.FILES.getlist("files")
+    try:
+        validate_batch(files)
+    except ValidationError as error:
+        messages.error(request, error.messages[0])
+        return redirect("assignment_list")
+
+    context = load_canvas_context(request.user)
+    if context["assignments_unavailable"]:
+        messages.error(request, "Unable to load Canvas assignments. Please reconnect or try again.")
+        return redirect("assignment_list")
+
+    assignment = next((
+        item for item in context["assignments"]
+        if item["canvas_assignment_id"] == assignment_id
+        and item["canvas_course_id"] == course_id
+    ), None)
+    if assignment is None:
+        raise Http404("Assignment not found")
+
+    try:
+        save_attachments(request.user, assignment, files)
+    # Production S3 storage raises botocore errors beyond OSError.
+    except Exception:  # pylint: disable=broad-exception-caught
+        messages.error(request, "Unable to upload files. Please try again.")
+    else:
+        messages.success(request, "Files attached successfully.")
+    return redirect("assignment_list")
