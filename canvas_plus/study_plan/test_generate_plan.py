@@ -10,6 +10,8 @@ from django.test import TestCase
 
 from assignments.models import Assignment
 from availability.models import Availability
+from ai_inference.exceptions import AIProviderError
+from study_plan.exceptions import StudyPlanRetriesExhaustedError
 from study_plan.generate import generate_plan
 from study_plan.models import StudyPlan as PersistedStudyPlan
 from study_plan.schema import StudyPlan as StudyPlanResponse
@@ -18,6 +20,50 @@ from study_plan.schema import StudySessionProposal
 
 class GeneratePlanTests(TestCase):
     """Generated sessions are validated and saved for the selected assignments."""
+
+    def create_retry_case(self, username):
+        """Create one eligible assignment and a future availability window."""
+        user = get_user_model().objects.create_user(username=username)
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(10),
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=401,
+            title="Retry test assignment",
+            course="Biology",
+            due_date=datetime.combine(
+                available_date + timedelta(days=1),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            estimated_minutes=30,
+        )
+        valid_plan = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+            ],
+        )
+        return user, assignment, valid_plan
 
     @patch("study_plan.generate.infer")
     def test_long_assignment_split_into_sessions(self, mock_infer):
@@ -280,3 +326,50 @@ class GeneratePlanTests(TestCase):
         self.assertIn(f"{available_date.isoformat()}T09:00", inference_text)
         self.assertIn(f"{available_date.isoformat()}T11:00", inference_text)
         self.assertNotIn(f"{available_date.isoformat()}T09:30", inference_text)
+
+    @patch("study_plan.generate.infer")
+    def test_retries_once_then_fails(self, mock_infer):
+        """Provider errors and empty proposals are retried once before success."""
+        user, assignment, valid_plan = self.create_retry_case("provider-retry-student")
+        mock_infer.side_effect = [AIProviderError("temporary provider failure"), valid_plan]
+
+        plan = generate_plan(user, [assignment.id])
+
+        self.assertEqual(mock_infer.call_count, 2)
+        self.assertEqual(plan.sessions.count(), 1)
+        self.assertEqual(PersistedStudyPlan.objects.filter(user=user).count(), 1)
+
+        mock_infer.reset_mock()
+        user, assignment, valid_plan = self.create_retry_case("empty-retry-student")
+        invalid_plan = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=valid_plan.sessions[0].end,
+                    end=valid_plan.sessions[0].end + timedelta(minutes=30),
+                    late=False,
+                ),
+            ],
+        )
+        mock_infer.side_effect = [invalid_plan, valid_plan]
+
+        plan = generate_plan(user, [assignment.id])
+
+        self.assertEqual(mock_infer.call_count, 2)
+        self.assertEqual(plan.sessions.count(), 1)
+        self.assertEqual(PersistedStudyPlan.objects.filter(user=user).count(), 1)
+
+    @patch("study_plan.generate.infer")
+    def test_retry_exhaustion_does_not_persist_plan(self, mock_infer):
+        """Two failed inference attempts raise a domain error without persistence."""
+        user, assignment, _ = self.create_retry_case("retry-exhausted-student")
+        mock_infer.side_effect = [
+            AIProviderError("first provider failure"),
+            AIProviderError("second provider failure"),
+        ]
+
+        with self.assertRaises(StudyPlanRetriesExhaustedError):
+            generate_plan(user, [assignment.id])
+
+        self.assertEqual(mock_infer.call_count, 2)
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=user).exists())
