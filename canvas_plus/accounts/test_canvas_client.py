@@ -10,6 +10,7 @@ import requests
 from .canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
+    get_course_syllabus,
     list_courses,
     list_upcoming_assignments,
 )
@@ -61,6 +62,16 @@ def test_course_list_request_includes_each_course_term():
     with patch("accounts.canvas_client.requests.get", return_value=response([])) as get:
         list_courses("fake-token")
     assert get.call_args.kwargs["params"]["include[]"] == "term"
+
+
+@pytest.mark.unit
+def test_course_syllabus_request_returns_syllabus_html():
+    """The course request asks Canvas for the syllabus body and returns it."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=response({"id": 7, "syllabus_body": "<h4>Grading</h4>"})) as get:
+        assert get_course_syllabus("fake-token", 7) == "<h4>Grading</h4>"
+    assert get.call_args.args == ("https://canvas.example.edu/api/v1/courses/7",)
+    assert get.call_args.kwargs["params"] == {"include[]": "syllabus_body"}
 
 
 @pytest.mark.unit
