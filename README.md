@@ -47,13 +47,24 @@ team-6/
 │   │   ├── urls.py
 │   │   ├── views.py
 │   │   └── wsgi.py
+│   ├── courses/                        # Current course list
+│   │   ├── templates/courses/
+│   │   │   └── course_list.html
+│   │   ├── apps.py
+│   │   ├── current.py                  # Which courses count as current
+│   │   ├── test_current.py
+│   │   ├── tests.py
+│   │   ├── urls.py
+│   │   └── views.py
 │   ├── features/                       # Executable Gherkin acceptance scenarios
 │   │   ├── steps/
 │   │   │   ├── assignment_steps.py
 │   │   │   ├── connect_canvas_steps.py
+│   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
 │   │   ├── connect_canvas.feature
+│   │   ├── courses.feature
 │   │   └── landing_page.feature
 │   ├── templates/                      # Shared layout and landing page
 │   │   ├── base.html
@@ -205,6 +216,10 @@ The [Canvas connection study guide](docs/canvas-connection.md) explains the requ
 flow, files, tests, deployment configuration, and limitations. Assignment importing
 is tracked separately in issue #39.
 
+The [assignment model guide](docs/assignment-models.md) describes the user-owned
+assignment, reusable file, and attachment schema for #42, including migration
+preconditions and the contract for #49 estimates.
+
 ## Dashboard known limitations
 
 - Overdue work stays listed for as long as the course is active, even if it is months old.
@@ -328,3 +343,7 @@ Stephen used AI was used to assist with documenting the AI inference interface,
 including credential configuration, usage examples, and failure behavior.
 
 Stephen used AI to assist with creating the inference function, content builder, and tests
+
+#### Current course list
+
+Jackson McGuire used Claude Code to help build the course list. Jackson ran every test red and green himself and verified the page against his real Canvas courses on a local server.
