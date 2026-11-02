@@ -188,3 +188,95 @@ class GeneratePlanTests(TestCase):
                 self.assertLessEqual(session.end, availability_end)
                 self.assertLessEqual(session.end, deadlines[session.assignment_id])
                 self.assertFalse(session.late)
+
+    @patch("study_plan.generate.infer")
+    def test_inference_input_is_deadline_ordered(self, mock_infer):
+        """Inference receives deadline-ordered assignments and merged free time."""
+        user = get_user_model().objects.create_user(username="ordered-plan-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        availability_start = datetime.combine(
+            available_date,
+            time(9),
+            tzinfo=local_timezone,
+        )
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(10),
+        )
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9, 30),
+            end_time=time(11),
+        )
+
+        later_assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=301,
+            title="Later deadline report",
+            course="Biology",
+            due_date=datetime.combine(
+                available_date + timedelta(days=3),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            estimated_minutes=30,
+        )
+        earlier_assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=12,
+            canvas_assignment_id=302,
+            title="Earlier deadline review",
+            course="Chemistry",
+            due_date=datetime.combine(
+                available_date + timedelta(days=2),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            estimated_minutes=30,
+        )
+        mock_infer.return_value = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=earlier_assignment.id,
+                    start=availability_start,
+                    end=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+                StudySessionProposal(
+                    assignment_id=later_assignment.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(10),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+            ],
+        )
+
+        generate_plan(user, [later_assignment.id, earlier_assignment.id])
+
+        inference_call = mock_infer.call_args
+        self.assertIs(inference_call.args[2], StudyPlanResponse)
+        inference_text = f"{inference_call.args[0]}\n{inference_call.args[1]}"
+        self.assertLess(
+            inference_text.index(earlier_assignment.title),
+            inference_text.index(later_assignment.title),
+        )
+        self.assertIn(f"{available_date.isoformat()}T09:00", inference_text)
+        self.assertIn(f"{available_date.isoformat()}T11:00", inference_text)
+        self.assertNotIn(f"{available_date.isoformat()}T09:30", inference_text)
