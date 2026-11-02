@@ -150,6 +150,10 @@ local data uses the Canvas assignment ID and the signed-in user.
 ## Boundaries (deliberately out of scope here)
 
 - Upload endpoints, the 25 MB limit, and storage configuration: later #42 work.
+  Production storage is the Heroku Bucketeer add-on on the **Hobbyist** plan
+  (~$0.007/hour, max $5/month): **5 GB storage**, **5 GB bandwidth**, and
+  **0 days data retention**. Upgrade (Micro, max $15/month) before either
+  quota is reached.
 - Category choices and picker UX: issue #44; the field stays a free 50-character string.
 - Estimate fields on Assignment: issue #49.
 - Physical file deletion when a StudyFile row goes away: no delete logic exists
