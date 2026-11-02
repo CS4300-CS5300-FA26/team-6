@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'assignments.apps.AssignmentsConfig',
     'accounts.apps.AccountsConfig',
+    'courses.apps.CoursesConfig',
     'availability',
     'study_plan.apps.StudyPlanConfig',
 ]

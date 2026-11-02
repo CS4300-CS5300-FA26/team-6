@@ -94,7 +94,12 @@ def list_courses(token, session=None):
     base_url = canvas_base_url()
     courses = []
     next_url = f"{base_url}/api/v1/courses"
-    params = {"enrollment_type": "student", "enrollment_state": "active", "per_page": 100}
+    params = {
+        "enrollment_type": "student",
+        "enrollment_state": "active",
+        "per_page": 100,
+        "include[]": "term",
+    }
     visited = set()
 
 
