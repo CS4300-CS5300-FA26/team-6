@@ -59,13 +59,12 @@ def _validate_pagination_url(next_url, base_url, visited):
 
 
 @sensitive_variables("token", "response")
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments  # each is a distinct request input
-def _fetch_page(next_url, token, params, failure_message, invalid_response_message, session):
-    """Fetch a JSON list page and its next link with shared Canvas error handling."""
+def _get_json(url, token, params, failure_message, session):
+    """Request one Canvas URL and return its JSON and response, with shared error handling."""
     try:
         # requests.get and Session.get share a signature; a session reuses connections.
         response = (session or requests).get(
-            next_url,
+            url,
             headers={"Authorization": f"Bearer {token}"},
             params=params,
             timeout=10,
@@ -78,11 +77,18 @@ def _fetch_page(next_url, token, params, failure_message, invalid_response_messa
     if response.status_code != 200:
         raise CanvasAPIError(failure_message)
     try:
-        page = response.json()
+        return response.json(), response
     except ValueError:
         raise CanvasAPIError(
             "Canvas returned an unreadable response. Please try again."
         ) from None
+
+
+@sensitive_variables("token", "response")
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments  # each is a distinct request input
+def _fetch_page(next_url, token, params, failure_message, invalid_response_message, session):
+    """Fetch a JSON list page and its next link with shared Canvas error handling."""
+    page, response = _get_json(next_url, token, params, failure_message, session)
     if not isinstance(page, list):
         raise CanvasAPIError(invalid_response_message)
     return page, response.links.get("next", {}).get("url")
