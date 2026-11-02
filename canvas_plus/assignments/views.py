@@ -38,15 +38,14 @@ def recently_graded_context(token, courses, session):
         return {"show_recently_graded": True, "recently_graded": recent_grades(submissions)}
 
 
-@login_required
 @sensitive_variables("token")
-def assignment_list(request):
-    """Show the signed-in student's current upcoming Canvas assignments."""
+def load_canvas_context(user):
+    """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
     connection_expired = False
     connection_missing = False
-    connection = CanvasConnection.objects.filter(user=request.user).first()
+    connection = CanvasConnection.objects.filter(user=user).first()
     graded_context = {}
 
     if connection is None:
@@ -85,7 +84,7 @@ def assignment_list(request):
         except (CanvasAPIError, ImproperlyConfigured):
             unavailable_message = "Unable to load upcoming assignments. Please try again."
 
-    context = {
+    return {
         "assignments": assignments,
         "canvas_connection_expired": connection_expired,
         "canvas_connection_missing": connection_missing,
@@ -95,4 +94,10 @@ def assignment_list(request):
         "assignments_unavailable_message": unavailable_message,
         **graded_context,
     }
+
+
+@login_required
+def assignment_list(request):
+    """Show the signed-in student's current upcoming Canvas assignments."""
+    context = load_canvas_context(request.user)
     return render(request, "assignments/assignment_list.html", context)
