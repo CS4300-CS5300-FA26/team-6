@@ -104,6 +104,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "beautifulsoup4" },
     { name = "behave-django" },
     { name = "pylint" },
     { name = "pytest" },
@@ -113,6 +114,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beautifulsoup4", marker = "extra == 'dev'", specifier = "==4.15.0" },
     { name = "behave-django", marker = "extra == 'dev'" },
     { name = "cryptography", specifier = ">=50.0.2" },
     { name = "django", specifier = "==6.1.1" },
