@@ -132,6 +132,21 @@ def list_courses(token, session=None):
     return courses
 
 
+@sensitive_variables("token")
+def get_course_syllabus(token, course_id):
+    """Return one course's syllabus HTML, or None when it has none."""
+    course, _ = _get_json(
+        f"{canvas_base_url()}/api/v1/courses/{course_id}",
+        token,
+        {"include[]": "syllabus_body"},
+        "Canvas could not load this course. Please try again.",
+        None,
+    )
+    if not isinstance(course, dict):
+        raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
+    return course.get("syllabus_body")
+
+
 def _validate_assignment_course(course):
     """Reject malformed course results before constructing a Canvas URL."""
     if (not isinstance(course, dict) or isinstance(course.get("id"), bool)
