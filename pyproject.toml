@@ -10,6 +10,7 @@ dependencies = [
     "cryptography>=50.0.2",
     "Django==6.1.1",
     "django-environ>=0.14.0",
+    "django-storages[s3]>=1.14.6",
     "gunicorn>=26.2.0",
     "openai>=3.41.0",
     "psycopg[binary]>=3.3.6",

@@ -12,8 +12,12 @@ INSTALLED_APPS = [
 
 # Tests render templates without running collectstatic, so they must not depend
 # on WhiteNoise's generated staticfiles manifest.
+# Upload tests must stay on disk even when production bucket settings are present.
 STORAGES = {
     **base_settings.STORAGES,
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
