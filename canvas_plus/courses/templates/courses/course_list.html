@@ -11,7 +11,7 @@
   {% elif courses %}
     <ul class="course-list">
       {% for course in courses %}
-        <li class="course-card">{{ course.name }}</li>
+        <li class="course-card"><a href="{% url 'course_detail' course.id %}">{{ course.name }}</a></li>
       {% endfor %}
     </ul>
   {% elif not canvas_connection_expired %}
