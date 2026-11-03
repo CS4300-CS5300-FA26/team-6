@@ -168,6 +168,27 @@ class CoursePageTests(ConnectedStudentTestCase):
         self.assertContains(response, "Course not found", status_code=404)
         get_course_syllabus.assert_not_called()
 
+    @patch("courses.views.get_course_syllabus")
+    def test_missing_connection_asks_to_connect(self, get_course_syllabus, list_courses):
+        """Without a saved connection, the course page asks to connect and Canvas is never asked."""
+        self.connection.delete()
+
+        response = self.open_course()
+
+        self.assertContains(response, "Connect Canvas to see your courses")
+        list_courses.assert_not_called()
+        get_course_syllabus.assert_not_called()
+
+    def test_expired_connection_asks_to_reconnect(self, list_courses):
+        """A rejected token is saved as expired and the student is told to reconnect."""
+        list_courses.side_effect = CanvasAuthenticationError("Rejected")
+
+        response = self.open_course()
+
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.is_valid)
+        self.assertContains(response, "Your Canvas connection expired. Please reconnect.")
+
     @patch("courses.views.get_course_syllabus", side_effect=CanvasAPIError("Down"))
     def test_canvas_outage_asks_to_try_again(self, _syllabus, _list_courses):
         """A Canvas outage is not shown as a missing syllabus."""
