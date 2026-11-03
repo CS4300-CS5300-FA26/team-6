@@ -202,6 +202,54 @@ class GeneratePlanTests(TestCase):
         )
 
     @patch("study_plan.generate.infer")
+    def test_late_sessions_flagged(self, mock_infer):
+        """An opted-in session after its deadline persists with late=True."""
+        user = get_user_model().objects.create_user(username="late-session-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        deadline = datetime.combine(
+            available_date,
+            time(10),
+            tzinfo=local_timezone,
+        )
+        late_end = datetime.combine(
+            available_date,
+            time(10, 30),
+            tzinfo=local_timezone,
+        )
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(10, 30),
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=106,
+            title="Late-eligible assignment",
+            course="Biology",
+            due_date=deadline,
+            estimated_effort_minutes=30,
+        )
+        mock_infer.return_value = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=deadline,
+                    end=late_end,
+                    late=True,
+                ),
+            ],
+        )
+
+        plan = generate_plan(user, [assignment.id], allow_late=True)
+
+        session = plan.sessions.get(assignment=assignment)
+        self.assertGreater(session.end, assignment.due_date)
+        self.assertTrue(session.late)
+
+    @patch("study_plan.generate.infer")
     def test_generates_plan_for_multiple_assignments(self, mock_infer):
         """One generation request persists on-time sessions for each assignment."""
         user = get_user_model().objects.create_user(username="plan-student")
