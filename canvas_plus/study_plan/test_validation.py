@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from study_plan.validation import PlanValidationError, validate_plan
+from study_plan.validation import (
+    PlanValidationError,
+    validate_estimated_effort,
+    validate_plan,
+)
 
 
 UTC = timezone.utc
@@ -201,3 +205,18 @@ def test_late_session_with_opt_in_and_late_flag_is_accepted():
 
     assert result.sessions == [proposed]
     assert result.sessions[0].late is True
+
+
+@pytest.mark.unit
+def test_estimated_effort_rejects_proposals_over_assignment_estimate():
+    """The total proposed minutes for an assignment cannot exceed its estimate."""
+    assignment = SimpleNamespace(id=42, estimated_minutes=30)
+    matching_plan = make_plan(make_session(end=START + timedelta(minutes=30)))
+    validate_estimated_effort(matching_plan, [assignment])
+
+    overestimated_plan = make_plan(
+        make_session(end=START + timedelta(minutes=30)),
+        make_session(start=START + timedelta(minutes=30), end=START + timedelta(minutes=45)),
+    )
+    with pytest.raises(PlanValidationError, match="assignment estimate"):
+        validate_estimated_effort(overestimated_plan, [assignment])

@@ -14,6 +14,7 @@ class Assignment(models.Model):
     title = models.CharField(max_length=200)
     course = models.CharField(max_length=100)
     due_date = models.DateTimeField(null=True, blank=True)
+    estimated_minutes = models.PositiveIntegerField(null=True, blank=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

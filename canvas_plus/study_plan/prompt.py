@@ -2,7 +2,7 @@
 
 import json
 
-from canvas_plus.ai_inference import build_content
+from ai_inference import build_content
 
 
 SYSTEM_PROMPT = """Create a study plan using the supplied assignments and free windows.

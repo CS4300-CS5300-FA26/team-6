@@ -93,7 +93,7 @@ class GeneratePlanTests(TestCase):
                 time(10),
                 tzinfo=local_timezone,
             ),
-            estimated_minutes=125,
+            estimated_minutes=155,
         )
         proposal_sessions = [
             StudySessionProposal(
@@ -145,7 +145,7 @@ class GeneratePlanTests(TestCase):
         """One generation request persists on-time sessions for each assignment."""
         user = get_user_model().objects.create_user(username="plan-student")
         local_timezone = ZoneInfo(settings.TIME_ZONE)
-        available_date = date(2026, 11, 2)
+        available_date = date.today() + timedelta(days=1)
         availability_start = datetime.combine(
             available_date,
             time(9),
@@ -329,7 +329,7 @@ class GeneratePlanTests(TestCase):
 
     @patch("study_plan.generate.infer")
     def test_retries_once_then_fails(self, mock_infer):
-        """Provider errors and empty proposals are retried once before success."""
+        """Provider errors and invalid proposals are retried before success."""
         user, assignment, valid_plan = self.create_retry_case("provider-retry-student")
         mock_infer.side_effect = [AIProviderError("temporary provider failure"), valid_plan]
 
@@ -345,8 +345,8 @@ class GeneratePlanTests(TestCase):
             sessions=[
                 StudySessionProposal(
                     assignment_id=assignment.id,
-                    start=valid_plan.sessions[0].end,
-                    end=valid_plan.sessions[0].end + timedelta(minutes=30),
+                    start=valid_plan.sessions[0].end + timedelta(minutes=30),
+                    end=valid_plan.sessions[0].end + timedelta(minutes=60),
                     late=False,
                 ),
             ],

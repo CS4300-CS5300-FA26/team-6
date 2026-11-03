@@ -87,6 +87,26 @@ def validate_plan(
     return plan
 
 
+def validate_estimated_effort(plan, assignments):
+    """Reject proposals that schedule more time than an assignment estimate."""
+    estimates = {
+        assignment.id: assignment.estimated_minutes
+        for assignment in assignments
+    }
+    scheduled_minutes = {}
+    for session in plan.sessions:
+        duration = session.end - session.start
+        scheduled_minutes[session.assignment_id] = (
+            scheduled_minutes.get(session.assignment_id, 0)
+            + int(duration.total_seconds() // 60)
+        )
+    for assignment_id, minutes in scheduled_minutes.items():
+        if minutes > estimates[assignment_id]:
+            raise PlanValidationError(
+                "A proposal schedules more time than the assignment estimate."
+            )
+
+
 def _is_aware_datetime(value):
     """Return whether value is an aware datetime without raising on wrong types."""
     return isinstance(value, datetime) and not timezone.is_naive(value)
