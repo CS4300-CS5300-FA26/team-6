@@ -49,6 +49,21 @@ class ConnectedStudentTestCase(TestCase):
 
 
 @pytest.mark.integration
+class CourseAccessTests(ConnectedStudentTestCase):
+    """Course pages are only for signed-in students."""
+
+    def test_signed_out_visitor_is_sent_to_sign_in(self):
+        """Both course pages send a signed-out visitor to sign in first."""
+        self.client.logout()
+
+        for url in (reverse("course_list"), reverse("course_detail", args=[1])):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+
+                self.assertRedirects(response, f"{reverse('login')}?next={url}")
+
+
+@pytest.mark.integration
 class CourseListPageTests(ConnectedStudentTestCase):
     """The Courses page lists the student's current Canvas courses."""
 
