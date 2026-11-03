@@ -1,7 +1,9 @@
 {% if assignment.attachments %}
   <ul class="assignment-attachments">
     {% for attachment in assignment.attachments %}
-      <li>{{ attachment.study_file.original_name }}</li>
+      <li>
+        <a id="attachment-name-{{ attachment.pk }}" href="{% url 'open_attachment' attachment_id=attachment.pk %}">{{ attachment.study_file.original_name }}</a>
+      </li>
     {% endfor %}
   </ul>
 {% endif %}

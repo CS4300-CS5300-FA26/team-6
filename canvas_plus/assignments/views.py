@@ -1,14 +1,16 @@
 """Django views"""
+import logging
+
 import requests
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.http import Http404
-from django.shortcuts import redirect, render
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -26,6 +28,7 @@ from .uploads import save_attachments, validate_batch
 
 # Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
 COURSE_CACHE_SECONDS = 60 * 60
+logger = logging.getLogger(__name__)
 
 
 @sensitive_variables("token")
@@ -155,3 +158,23 @@ def upload_attachments(request, course_id, assignment_id):
     else:
         messages.success(request, "Files attached successfully.")
     return redirect("assignment_list")
+
+
+@login_required
+@require_GET
+def open_attachment(request, attachment_id):
+    """Download an owned attachment without exposing a public storage URL."""
+    attachment = get_object_or_404(Attachment, pk=attachment_id, user=request.user)
+    study_file = attachment.study_file
+    try:
+        # S3 opens lazily, so check for a missing object before starting a response.
+        if not study_file.file.storage.exists(study_file.file.name):
+            raise FileNotFoundError("Stored attachment is missing")
+        stored_file = study_file.file.open("rb")
+    # Storage backends raise provider-specific exceptions beyond OSError.
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("Unable to open attachment %s", attachment_id)
+        messages.error(request, "Unable to open file. Please try again.")
+        return redirect("assignment_list")
+    # ponytail: The dyno streams the bytes (max 25 MiB); signed URLs are the upgrade if needed.
+    return FileResponse(stored_file, as_attachment=True, filename=study_file.original_name)
