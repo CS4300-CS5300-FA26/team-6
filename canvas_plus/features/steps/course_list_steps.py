@@ -97,3 +97,108 @@ def step_see_current_course(context):
 @then("I don't see the past semester's course")
 def step_not_see_past_course(context):
     assert ENDED_COURSE["name"] not in context.response.content.decode()
+
+
+# Course page with syllabus
+
+FORMATTED_SYLLABUS = (
+    "<h4>Grading</h4><ul><li>Quizzes 10%</li></ul><table><tr><td>Week 1</td></tr></table>"
+)
+FILE_SYLLABUS = (
+    '<p>Syllabus: <a class="instructure_file_link" '
+    'href="https://canvas.example.edu/courses/1/files/9?wrap=1">syllabus.pdf</a></p>'
+)
+SCRIPT_SYLLABUS = "<p>Grading policy</p><script>alert('x')</script>"
+
+
+def course_with_syllabus(context, syllabus):
+    """A connected student enrolled in one current course whose syllabus Canvas returns."""
+    connect_student(context)
+    context.canvas_courses.return_value = [CURRENT_COURSE]
+    patcher = patch("courses.views.get_course_syllabus", Mock(return_value=syllabus))
+    patcher.start()
+    context.add_cleanup(patcher.stop)
+
+
+def page(context):
+    return context.response.content.decode()
+
+
+@given("my course has a syllabus with headings, lists, and tables")
+def step_formatted_syllabus(context):
+    course_with_syllabus(context, FORMATTED_SYLLABUS)
+
+
+@given("my course syllabus links to a file in Canvas")
+def step_file_syllabus(context):
+    course_with_syllabus(context, FILE_SYLLABUS)
+
+
+@given("my course has no syllabus in Canvas")
+def step_no_syllabus(context):
+    course_with_syllabus(context, None)
+
+
+@given("my course has a blank syllabus")
+def step_blank_syllabus(context):
+    course_with_syllabus(context, "<p>&nbsp;</p>")
+
+
+@given("a course syllabus in Canvas contains a script")
+def step_script_syllabus(context):
+    course_with_syllabus(context, SCRIPT_SYLLABUS)
+
+
+@given("I am not enrolled in that course")
+def step_not_enrolled(context):
+    course_with_syllabus(context, FORMATTED_SYLLABUS)
+    context.course_id = 999
+
+
+@when("I select that course from my course list")
+def step_select_course(context):
+    url = reverse("course_detail", args=[CURRENT_COURSE["id"]])
+    assert f'href="{url}"' in context.client.get(reverse("course_list")).content.decode()
+    context.response = context.client.get(url)
+
+
+@when("I open that course")
+def step_open_course(context):
+    course_id = getattr(context, "course_id", CURRENT_COURSE["id"])
+    context.response = context.client.get(reverse("course_detail", args=[course_id]))
+
+
+@then("I see a page titled with the course name")
+def step_course_title(context):
+    assert f"<h1>{CURRENT_COURSE['name']}</h1>" in page(context)
+
+
+@then("I see the syllabus with its headings, lists, and tables")
+def step_formatted_syllabus_shown(context):
+    for part in ("<h4>Grading</h4>", "<li>Quizzes 10%</li>", "<td>Week 1</td>"):
+        assert part in page(context)
+
+
+@then("I can go back to my course list")
+def step_back_link(context):
+    assert f'<a href="{reverse("course_list")}">← All courses</a>' in page(context)
+
+
+@then("I see the file's name")
+def step_file_name(context):
+    assert "syllabus.pdf" in page(context)
+
+
+@then("nothing on the page takes me to Canvas")
+def step_no_canvas_links(context):
+    assert 'href="https://canvas.example.edu' not in page(context)
+
+
+@then("I see the syllabus text")
+def step_syllabus_text(context):
+    assert "Grading policy" in page(context)
+
+
+@then("the script does not run")
+def step_script_removed(context):
+    assert "alert(" not in page(context)  # the sidebar has its own <script>, so check the payload

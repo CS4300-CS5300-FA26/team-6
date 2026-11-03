@@ -1,4 +1,4 @@
-"""Integration tests for the current course list page."""
+"""Integration tests for the course list and course pages."""
 from unittest.mock import patch
 
 import pytest
@@ -21,11 +21,18 @@ ENDED_COURSE = {
     "name": "Programming with UNIX",
     "term": {"end_at": "2000-01-01T00:00:00Z"},
 }
+FORMATTED_SYLLABUS = (
+    "<h4>Grading</h4><ul><li>Quizzes 10%</li></ul>"
+    "<table><tr><td>Week 1</td></tr></table><script>alert('x')</script>"
+)
+FILE_SYLLABUS = (
+    '<p>Syllabus: <a class="instructure_file_link" '
+    'href="https://canvas.example.edu/courses/1/files/9?wrap=1">syllabus.pdf</a></p>'
+)
 
 
-@pytest.mark.integration
-class CourseListPageTests(TestCase):
-    """The Courses page lists the student's current Canvas courses."""
+class ConnectedStudentTestCase(TestCase):
+    """A signed-in student with a saved Canvas connection."""
 
     def setUp(self):
         settings_override = override_settings(
@@ -40,6 +47,11 @@ class CourseListPageTests(TestCase):
         self.connection.save()
         self.client.force_login(self.user)
 
+
+@pytest.mark.integration
+class CourseListPageTests(ConnectedStudentTestCase):
+    """The Courses page lists the student's current Canvas courses."""
+
     @patch("courses.views.list_courses", return_value=[CURRENT_COURSE, ENDED_COURSE])
     def test_course_list_shows_only_current_courses(self, _list_courses):
         """A course from an ended semester is left out of the list."""
@@ -47,6 +59,13 @@ class CourseListPageTests(TestCase):
 
         self.assertContains(response, "Operating Systems I")
         self.assertNotContains(response, "Programming with UNIX")
+
+    @patch("courses.views.list_courses", return_value=[CURRENT_COURSE])
+    def test_course_list_links_to_each_course_page(self, _list_courses):
+        """Each listed course opens its own course page."""
+        response = self.client.get(reverse("course_list"))
+
+        self.assertContains(response, f'href="{reverse("course_detail", args=[1])}"')
 
     @patch("courses.views.list_courses", return_value=[ENDED_COURSE])
     def test_no_current_courses_shows_message(self, _list_courses):
@@ -81,3 +100,63 @@ class CourseListPageTests(TestCase):
 
         self.assertContains(response, "Unable to load your courses. Please try again.")
         self.assertNotContains(response, "No current courses found")
+
+
+@pytest.mark.integration
+@patch("courses.views.list_courses", return_value=[CURRENT_COURSE])
+class CoursePageTests(ConnectedStudentTestCase):
+    """A course page shows that course's syllabus from Canvas."""
+
+    def open_course(self, course_id=1):
+        """Open one course page as the signed-in student."""
+        return self.client.get(reverse("course_detail", args=[course_id]))
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_course_page_shows_cleaned_syllabus(self, _syllabus, _list_courses):
+        """The course name heads a syllabus that keeps its formatting but not its script."""
+        response = self.open_course()
+
+        self.assertContains(response, "<h1>Operating Systems I</h1>", html=True)
+        self.assertContains(response, "<h4>Grading</h4>")
+        self.assertContains(response, "<li>Quizzes 10%</li>")
+        self.assertContains(response, "<td>Week 1</td>")
+        self.assertNotContains(response, "alert(")
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_course_page_links_back_to_course_list(self, _syllabus, _list_courses):
+        """A student can return to the list of their courses."""
+        response = self.open_course()
+
+        self.assertContains(response, f'<a href="{reverse("course_list")}">← All courses</a>')
+
+    @patch("courses.views.get_course_syllabus", return_value=FILE_SYLLABUS)
+    def test_syllabus_with_files_shows_preview_notice(self, _syllabus, _list_courses):
+        """File names stay readable, a notice explains previews, and nothing links to Canvas."""
+        response = self.open_course()
+
+        self.assertContains(response, "syllabus.pdf")
+        self.assertContains(response, "File previews are coming soon")
+        self.assertNotContains(response, 'href="https://canvas.example.edu')
+
+    @patch("courses.views.get_course_syllabus", return_value=None)
+    def test_missing_syllabus_shows_message(self, _syllabus, _list_courses):
+        """A course without a syllabus says so instead of showing an empty box."""
+        response = self.open_course()
+
+        self.assertContains(response, "No syllabus posted in Canvas for this course")
+
+    @patch("courses.views.get_course_syllabus")
+    def test_course_not_in_my_list_is_not_found(self, get_course_syllabus, _list_courses):
+        """Only the student's own current courses open, and Canvas is never asked about others."""
+        response = self.open_course(999)
+
+        self.assertContains(response, "Course not found", status_code=404)
+        get_course_syllabus.assert_not_called()
+
+    @patch("courses.views.get_course_syllabus", side_effect=CanvasAPIError("Down"))
+    def test_canvas_outage_asks_to_try_again(self, _syllabus, _list_courses):
+        """A Canvas outage is not shown as a missing syllabus."""
+        response = self.open_course()
+
+        self.assertContains(response, "Unable to load this course. Please try again.")
+        self.assertNotContains(response, "No syllabus posted")
