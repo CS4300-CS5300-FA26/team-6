@@ -110,13 +110,14 @@ def step_open_availability_for_day(context, day):
     context.response = context.client.get(reverse("availability:list"), {"date": day})
 
 
-@when("I open Availability from the sidebar")
-def step_open_availability_from_sidebar(context):
+@when("I open Study Plan from the sidebar")
+def step_open_study_plan_from_sidebar(context):
     url = reverse("availability:list")
     context.response = context.client.get(url)
     # Only the sidebar counts; the page's own "Show all days" link has the same href.
     sidebar = re.search(r"<nav[^>]*>(.*?)</nav>", context.response.content.decode(), re.S)
-    assert sidebar and f'href="{url}"' in sidebar.group(1), "sidebar has no Availability link"
+    link = f'href="{url}">Study Plan</a>'
+    assert sidebar and link in sidebar.group(1), "sidebar has no Study Plan link"
 
 
 # Thens

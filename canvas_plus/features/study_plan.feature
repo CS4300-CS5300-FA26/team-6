@@ -58,7 +58,7 @@ Feature: Study plan on the availability page
   Scenario: Student reaches their study plan from the sidebar
     Given I am logged in as a student
     And my most recent study plan has a session for "Lab 4"
-    When I open Availability from the sidebar
+    When I open Study Plan from the sidebar
     Then I see a study session for "Lab 4"
 
   Scenario: Student picks a day with nothing scheduled
