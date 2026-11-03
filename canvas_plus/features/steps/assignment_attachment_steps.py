@@ -167,3 +167,43 @@ def step_cancel_attachment_removal(context):
 def step_cancelled_attachment_remains(context):
     step_study_files_listed_on_assignment(context)
     assert Attachment.objects.filter(pk=context.target_attachment.pk).exists()
+
+
+@given("a task contains zero uploaded files")
+def step_task_without_uploaded_files(context):
+    step_viewing_attachment_deadline(context)
+    assert Assignment.objects.count() == 0
+    assert StudyFile.objects.count() == 0
+    assert Attachment.objects.count() == 0
+
+
+@when("I open the task record card")
+def step_open_task_record_card(context):
+    context.response = context.client.get(reverse("assignment_list"))
+    assert context.response.status_code == 200
+
+
+@then("I see no file attachments listed for that entry")
+def step_no_attachments_listed_on_card(context):
+    assert context.response.status_code == 200
+    page = BeautifulSoup(context.response.content, "html.parser")
+    cards = [
+        card for card in page.select("li.assignment-card")
+        if "Canvas Project 1" in card.get_text()
+    ]
+    assert len(cards) == 1, 'Expected one card for "Canvas Project 1"'
+    card = cards[0]
+    assert card.select_one(".assignment-attachments") is None, (
+        "Assignment card unexpectedly lists attachments"
+    )
+    upload_form = card.find(
+        "form",
+        action=reverse(
+            "upload_attachments", kwargs={"course_id": 42, "assignment_id": 101},
+        ),
+    )
+    assert upload_form is not None, "Upload form is missing from the assignment card"
+    assert upload_form.find("input", attrs={"name": "files"}) is not None
+    assert Assignment.objects.count() == 0, "Viewing created an Assignment row"
+    assert StudyFile.objects.count() == 0, "Viewing created a StudyFile row"
+    assert Attachment.objects.count() == 0, "Viewing created an Attachment row"

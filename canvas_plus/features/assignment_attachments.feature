@@ -33,3 +33,8 @@ Feature: Student assignment attachments
     Given a resource is saved on a calendar assignment
     When I start removing the item but dismiss the prompt
     Then the document remains present on the record card
+
+  Scenario: Assignment has no associated materials.
+    Given a task contains zero uploaded files
+    When I open the task record card
+    Then I see no file attachments listed for that entry
