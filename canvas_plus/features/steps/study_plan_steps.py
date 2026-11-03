@@ -16,6 +16,7 @@ from study_plan.models import StudyPlan, StudySession
 NO_PLAN_MESSAGE = "No study plan has been generated yet."
 INVALID_DAY_MESSAGE = "That day is not a valid date."
 EMPTY_DAY_MESSAGE = "No study sessions on this day."
+EMPTY_PLAN_MESSAGE = "This study plan has no sessions."
 DEFAULT_DAY, DEFAULT_START, DEFAULT_END = "2026-11-05", "2:00 PM", "3:00 PM"
 
 
@@ -74,6 +75,11 @@ def step_session_at(context, title, day, start, end):
 @given("my most recent study plan has a session for \"{title}\"")
 def step_session(context, title):
     add_session(my_plan(context), title)
+
+
+@given("my most recent study plan has no sessions")
+def step_plan_without_sessions(context):
+    my_plan(context)
 
 
 @given("I had an older study plan with a session for \"{title}\"")
@@ -157,3 +163,8 @@ def step_told_invalid_day(context):
 @then("I am told I have no study sessions that day")
 def step_told_empty_day(context):
     assert EMPTY_DAY_MESSAGE in context.response.content.decode(), "empty-day message not shown"
+
+
+@then("I am told my study plan has no sessions")
+def step_told_empty_plan(context):
+    assert EMPTY_PLAN_MESSAGE in context.response.content.decode(), "empty-plan message not shown"

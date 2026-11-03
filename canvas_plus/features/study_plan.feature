@@ -67,6 +67,12 @@ Feature: Study plan on the availability page
     When I open my availability page for "2026-11-10"
     Then I am told I have no study sessions that day
 
+  Scenario: Student's most recent study plan has no sessions
+    Given I am logged in as a student
+    And my most recent study plan has no sessions
+    When I open my availability page
+    Then I am told my study plan has no sessions
+
   Scenario Outline: Student asks for a day that is not a real date
     Given I am logged in as a student
     And my most recent study plan has a session for "Lab 4"
