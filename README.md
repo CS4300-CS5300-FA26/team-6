@@ -347,3 +347,7 @@ Stephen used AI to assist with creating the inference function, content builder,
 #### Current course list
 
 Jackson McGuire used Claude Code to help build the course list. Jackson ran every test red and green himself and verified the page against his real Canvas courses on a local server.
+
+#### Generating Study Sessiosn [Backend]
+
+Stephen used ai to write tests and implement code for the generate study session behavior. 
