@@ -122,13 +122,15 @@ class GeneratePlanTests(TestCase):
         )
         for session in sessions:
             with self.subTest(start=session.start):
+                local_start = session.start.astimezone(local_timezone)
+                local_end = session.end.astimezone(local_timezone)
                 duration_minutes = int(
                     (session.end - session.start).total_seconds() // 60
                 )
                 self.assertGreater(duration_minutes, 0)
                 self.assertEqual(duration_minutes % 15, 0)
-                self.assertGreaterEqual(session.start.time(), window_start)
-                self.assertLessEqual(session.end.time(), window_end)
+                self.assertGreaterEqual(local_start.time(), window_start)
+                self.assertLessEqual(local_end.time(), window_end)
                 self.assertLessEqual(session.end, assignment.due_date)
 
         self.assertTrue(
