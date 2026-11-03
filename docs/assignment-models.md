@@ -169,17 +169,16 @@ reduced with a single-assignment lookup.
 
 ## Upload storage
 
-With all four Bucketeer variables empty or absent, uploads use Django's
-FileSystemStorage in `canvas_plus/media/` (ignored by Git). Tests explicitly use
-filesystem storage. Production sets all four: `BUCKETEER_AWS_ACCESS_KEY_ID`,
-`BUCKETEER_AWS_SECRET_ACCESS_KEY`, `BUCKETEER_AWS_REGION`, and
-`BUCKETEER_BUCKET_NAME`. Partial configuration fails at startup, naming missing
-variables without disclosing their values.
+With `DEBUG=True` and all four Bucketeer variables empty or absent, uploads use
+Django's FileSystemStorage in `canvas_plus/media/` (ignored by Git). Tests
+explicitly use filesystem storage. Production sets all four:
+`BUCKETEER_AWS_ACCESS_KEY_ID`, `BUCKETEER_AWS_SECRET_ACCESS_KEY`,
+`BUCKETEER_AWS_REGION`, and `BUCKETEER_BUCKET_NAME`.
 
-The all-empty fallback also applies with `DEBUG=False`: startup checks detect
-partial configuration, not an entirely missing production configuration. Verify
-all four variables on Heroku before deploying uploads; local dyno storage is
-ephemeral and cannot preserve the uploaded bytes across restarts.
+Partial configuration always fails at startup, and with `DEBUG=False` so does
+missing configuration, naming missing variables without disclosing their values.
+Dyno storage is ephemeral, so production must not appear to accept uploads it
+cannot keep. Verify all four variables on Heroku before deploying.
 
 Complete configuration selects `storages.backends.s3.S3Storage` with private
 defaults (`default_acl=None`, `querystring_auth=True`, `file_overwrite=False`).

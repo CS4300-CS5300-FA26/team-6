@@ -3,8 +3,8 @@
 from django.core.exceptions import ImproperlyConfigured
 
 
-def storages_from_env(env):
-    """Use private Bucketeer storage only when its configuration is complete."""
+def storages_from_env(env, *, debug):
+    """Require complete Bucketeer configuration, except for all-empty local development."""
     keys = (
         "BUCKETEER_AWS_ACCESS_KEY_ID",
         "BUCKETEER_AWS_SECRET_ACCESS_KEY",
@@ -13,11 +13,11 @@ def storages_from_env(env):
     )
     missing = [key for key in keys if not env.get(key)]
     default = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
-    if len(missing) != len(keys):
-        if missing:
-            raise ImproperlyConfigured(
-                f"Missing Bucketeer configuration: {', '.join(missing)}"
-            )
+    if missing and not (debug and len(missing) == len(keys)):
+        raise ImproperlyConfigured(
+            f"Missing Bucketeer configuration: {', '.join(missing)}"
+        )
+    if not missing:
         default = {
             "BACKEND": "storages.backends.s3.S3Storage",
             "OPTIONS": {

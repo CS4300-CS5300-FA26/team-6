@@ -170,8 +170,9 @@ secrets through the server's environment variables instead.
 
 Leave all four `BUCKETEER_*` entries empty locally: uploaded files are stored in
 the Git-ignored `canvas_plus/media/` directory. Tests also use filesystem storage.
-Production must set all four entries to persist private uploads in Bucketeer;
-partial configuration prevents startup. See the
+Production must set all four entries to persist private uploads in Bucketeer:
+with `DJANGO_DEBUG=False`, missing entries prevent startup, and partial
+configuration prevents startup in every mode. See the
 [assignment upload guide](docs/assignment-models.md#upload-storage) for the storage
 options and quotas. Uploaded files have no public media route.
 
