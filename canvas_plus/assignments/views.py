@@ -171,13 +171,20 @@ def open_attachment(request, attachment_id):
         if not study_file.file.storage.exists(study_file.file.name):
             raise FileNotFoundError("Stored attachment is missing")
         stored_file = study_file.file.open("rb")
+        try:
+            # FileResponse seeks to set Content-Length, which is when S3 fetches the object.
+            # ponytail: The dyno streams the bytes (max 25 MiB); signed URLs are the upgrade.
+            return FileResponse(
+                stored_file, as_attachment=True, filename=study_file.original_name,
+            )
+        except Exception:
+            stored_file.close()
+            raise
     # Storage backends raise provider-specific exceptions beyond OSError.
     except Exception:  # pylint: disable=broad-exception-caught
         logger.exception("Unable to open attachment %s", attachment_id)
         messages.error(request, "Unable to open file. Please try again.")
         return redirect("assignment_list")
-    # ponytail: The dyno streams the bytes (max 25 MiB); signed URLs are the upgrade if needed.
-    return FileResponse(stored_file, as_attachment=True, filename=study_file.original_name)
 
 
 @login_required

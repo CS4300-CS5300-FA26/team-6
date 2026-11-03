@@ -3,7 +3,7 @@
 # pylint: disable=no-member,import-error
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from bs4 import BeautifulSoup
@@ -77,6 +77,18 @@ class AttachmentActionTests(MediaRootTestCase):
                     fetch_redirect_response=False,
                 )
                 self.assertTrue(Attachment.objects.filter(pk=self.attachment.pk).exists())
+
+    def test_lazy_storage_failure_during_response_setup_reports_retry_error(self):
+        """S3 fetches on first seek, so a failure while setting headers must not be a 500."""
+        broken = Mock(closed=False)
+        broken.seekable.return_value = True
+        broken.seek.side_effect = OSError("Storage down")
+        with patch.object(self.study_file.file.storage, "open", return_value=broken):
+            response = self.client.get(self.url("open_attachment"))
+        self.assertRedirects(response, reverse("assignment_list"))
+        self.assertEqual([str(item) for item in get_messages(response.wsgi_request)],
+                         ["Unable to open file. Please try again."])
+        broken.close.assert_called()
 
     def test_missing_object_reports_retry_error(self):
         """A missing stored file redirects with the exact error rather than a 500."""
