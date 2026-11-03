@@ -238,6 +238,69 @@ class GeneratePlanTests(TestCase):
                 self.assertFalse(session.late)
 
     @patch("study_plan.generate.infer")
+    def test_sessions_only_in_availability(self, mock_infer):
+        """Every persisted session fits within one of the student's windows."""
+        user = get_user_model().objects.create_user(username="narrow-window-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        windows = [
+            (
+                datetime.combine(available_date, time(9), tzinfo=local_timezone),
+                datetime.combine(available_date, time(9, 30), tzinfo=local_timezone),
+            ),
+            (
+                datetime.combine(available_date, time(11), tzinfo=local_timezone),
+                datetime.combine(available_date, time(11, 30), tzinfo=local_timezone),
+            ),
+        ]
+        for start, end in windows:
+            Availability.objects.create(
+                user=user,
+                date=available_date,
+                start_time=start.time(),
+                end_time=end.time(),
+            )
+
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=103,
+            title="Narrow-window assignment",
+            course="Biology",
+            due_date=datetime.combine(
+                available_date + timedelta(days=1),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            estimated_effort_minutes=60,
+        )
+        mock_infer.return_value = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=start,
+                    end=end,
+                    late=False,
+                )
+                for start, end in windows
+            ],
+        )
+
+        plan = generate_plan(user, [assignment.id])
+
+        sessions = list(plan.sessions.filter(assignment=assignment))
+        self.assertEqual(len(sessions), len(windows))
+        for session in sessions:
+            with self.subTest(start=session.start):
+                self.assertTrue(
+                    any(
+                        window_start <= session.start and session.end <= window_end
+                        for window_start, window_end in windows
+                    ),
+                    f"Session {session.start} - {session.end} does not fit an availability window.",
+                )
+
+    @patch("study_plan.generate.infer")
     def test_inference_input_is_deadline_ordered(self, mock_infer):
         """Inference receives deadline-ordered assignments and merged free time."""
         user = get_user_model().objects.create_user(username="ordered-plan-student")
