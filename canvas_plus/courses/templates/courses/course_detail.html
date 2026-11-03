@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}{% if course %}{{ course.name }}{% else %}Course{% endif %}{% endblock %}
+
+{% block content %}
+  <p><a href="{% url 'course_list' %}">← All courses</a></p>
+  {% if not_found %}
+    <h1>Course not found</h1>
+  {% elif canvas_connection_missing %}
+    <p role="status">Connect Canvas to see your courses. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.</p>
+  {% elif canvas_unavailable %}
+    <p role="status">Unable to load this course. Please try again.</p>
+  {% elif course %}
+    <h1>{{ course.name }}</h1>
+    <h2>Syllabus</h2>
+    {% if syllabus %}
+      {% if has_files %}
+        <p class="syllabus-note">File previews are coming soon.</p>
+      {% endif %}
+      {# safe only because clean_syllabus ran it through nh3's allowlist first #}
+      <div class="syllabus">{{ syllabus|safe }}</div>
+    {% else %}
+      <p>No syllabus posted in Canvas for this course</p>
+    {% endif %}
+  {% endif %}
+{% endblock %}

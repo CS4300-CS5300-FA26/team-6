@@ -157,7 +157,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # Configure Storages
-STORAGES = storages_from_env(os.environ)
+STORAGES = storages_from_env(os.environ, debug=DEBUG)
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Email

@@ -12,6 +12,7 @@ dependencies = [
     "django-environ>=0.14.0",
     "django-storages[s3]>=1.14.6",
     "gunicorn>=26.2.0",
+    "nh3>=0.3.7",
     "openai>=3.41.0",
     "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
@@ -55,4 +56,6 @@ ignore = [
     ".venv",
     "migrations"
     ]
+# nh3 is compiled (Rust); pylint must load it to see its functions.
+extension-pkg-allow-list = ["nh3"]
 
