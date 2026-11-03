@@ -2,8 +2,9 @@
 
 Issue #42 lets a student attach and manage files on their assignments. This
 implementation includes user-owned local assignment records, reusable files,
-and uploads from assignment cards. Attachments and the estimates planned in
-issue #49 can persist independently of live Canvas API calls.
+and uploads, private downloads, and unlinking from assignment cards. Attachments
+and the estimates planned in issue #49 can persist independently of live Canvas
+API calls.
 
 **User story:** As a student, I want user-owned local Canvas assignment records
 and reusable files, so attachments and future estimates can persist
@@ -167,6 +168,41 @@ Each valid upload reloads Canvas data once during the POST and once on the
 redirect to the assignment list. This is a known cost that could later be
 reduced with a single-assignment lookup.
 
+## Opening and removing attachments
+
+**User story:** As a student, I want to download or remove an attached file from
+its assignment card, so I can use my materials and keep the card relevant.
+
+Each file name links to `open_attachment` (GET
+`attachments/<attachment_id>/`). The signed-in owner receives a Django
+`FileResponse` download with the original name. All content is served as an
+attachment, including HTML and SVG, so uploaded documents cannot execute inline
+on the application's origin. Django encodes hostile names safely in the header.
+Filesystem and S3 use the same storage API, without public media or signed URLs.
+Storage existence is checked before opening because S3 opens lazily. Missing
+objects and storage failures during opening are logged and redirect to the
+assignment list with **"Unable to open file. Please try again."** The dyno
+streams the bytes (at most 25 MiB per uploaded batch); signed URLs are a future
+upgrade if streaming becomes a constraint.
+
+Each card also has an accessible Remove link to `remove_attachment` (GET/POST
+`attachments/<attachment_id>/remove/`). GET shows the file name, a CSRF-protected
+Remove button, and a Cancel link to the assignment list. GET and Cancel change
+nothing. POST deletes only that Attachment row and redirects with **"File
+removed."** The Assignment, StudyFile, stored bytes, and other attachments remain;
+a repeated POST returns 404. Unsupported methods return 405. Both endpoints
+require login and look up attachments by the signed-in user: another student's
+open, confirmation, or removal request returns 404.
+
+Removal leaves bytes in the bucket, counting against the **5 GB storage quota**,
+until a file-lifecycle decision is made. It does not reclaim storage.
+
+The request contracts are automated in `test_attachment_actions.py`, including
+ownership, exact downloads, header safety, missing/unavailable storage, CSRF,
+confirmation cancellation, and selective unlinking. The three remaining issue
+#42 scenarios run verbatim in `features/assignment_attachments.feature` using
+real requests, temporary storage, and faked Canvas results.
+
 ## Upload storage
 
 With all four Bucketeer variables empty or absent, uploads use Django's
@@ -196,7 +232,6 @@ is reached.
 
 ## Boundaries (deliberately out of scope here)
 
-- Downloads and unlinking through the UI remain later work.
 - Uploading to assignments without dashboard cards is not supported.
 - Category choices and picker UX: issue #44; the field stays a free 50-character string.
 - Estimate fields on Assignment: issue #49.
