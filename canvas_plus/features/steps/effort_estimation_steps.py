@@ -18,11 +18,14 @@ from behave import given, when, then
 from study_plan.effort_estimation import (
     estimate_assignment_effort,
     has_enough_available_time,
+    save_manual_effort_estimate,
 )
 
 # Import the structured AI response model.
 from study_plan.schema import EffortEstimate
-
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from assignments.models import Assignment
 
 @given("an assignment has enough information for an effort estimate")
 def step_complete_assignment_information(context):
@@ -147,3 +150,70 @@ def step_insufficient_time_detected(context):
 
     # False means the available study time cannot cover the estimate.
     assert context.has_enough_time is False
+
+@given("the student has an assignment with an estimated effort of 90 minutes")
+def step_assignment_has_existing_estimate(context):
+    """Create an assignment that already has an automatic effort estimate."""
+
+    # Create a student who owns the assignment.
+    user = get_user_model().objects.create_user(
+        username="behave-effort-student",
+    )
+
+    # Save the user on the Behave context so later steps can reuse it.
+    context.user = user
+
+    # Create an assignment with an existing automatic estimate.
+    context.assignment = Assignment.objects.create(
+        user=user,
+        canvas_course_id=5001,
+        canvas_assignment_id=6001,
+        title="Behave Assignment",
+        course="CS4300",
+        due_date=timezone.now(),
+        estimated_effort_minutes=90,
+        effort_estimate_source="automatic",
+    )
+
+
+@when("the student changes the effort estimate to 120 minutes")
+def step_student_changes_estimate(context):
+    """Replace the existing estimate with the student's manual value."""
+
+    # Save the student's new manual estimate.
+    save_manual_effort_estimate(
+        assignment=context.assignment,
+        estimated_minutes=120,
+    )
+
+
+@then("the new effort estimate should be saved as 120 minutes")
+def step_new_estimate_is_saved(context):
+    """Verify the student's new estimate was persisted."""
+
+    # Reload the assignment so this assertion checks the database.
+    context.assignment.refresh_from_db()
+
+    # Confirm the updated value is stored.
+    assert context.assignment.estimated_effort_minutes == 120
+
+    # Confirm the estimate is now marked as manual.
+    assert context.assignment.effort_estimate_source == "manual"
+
+
+@then("the updated effort estimate should be used for future scheduling")
+def step_updated_estimate_used_for_scheduling(context):
+    """Verify future scheduling logic uses the new persisted estimate."""
+
+    # Reload the assignment to use the persisted estimate.
+    context.assignment.refresh_from_db()
+
+    # Simulate the student having only 100 minutes of available study time.
+    enough_time = has_enough_available_time(
+        estimated_minutes=context.assignment.estimated_effort_minutes,
+        available_minutes=100,
+    )
+
+    # The new 120-minute estimate should be used, so 100 minutes is insufficient.
+    assert enough_time is False
+    

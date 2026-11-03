@@ -158,7 +158,7 @@ def _validate_assignment_course(course):
         raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
 
 
-def _normalize_assignment(assignment, course):
+def _normalize_assignment(assignment, course_name, course_id):
     """Validate and normalize one Canvas assignment result."""
     invalid = "Canvas returned unexpected assignment data. Please try again."
     if (not isinstance(assignment, dict)
@@ -198,6 +198,8 @@ def _normalize_assignment(assignment, course):
         "course_name": course["name"],
         "due_date": due_date,
         "submitted": submitted,
+        "id": assignment.get("id"),
+        "course_id": course_id,
     }
 
 
@@ -220,7 +222,7 @@ def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
             session,
         )
         assignments.extend(
-            (_normalize_assignment(assignment, course), assignment.get("id"))
+            (_normalize_assignment(assignment, course["name"], course["id"],), assignment.get("id"))
             for assignment in page
         )
 

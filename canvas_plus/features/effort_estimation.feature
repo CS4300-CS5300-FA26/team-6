@@ -21,3 +21,9 @@ Feature: Assignment effort estimation
     Given an assignment requires more effort than the student has available
     When the application compares estimated effort with available study time
     Then the student should be notified that there is not enough available study time
+
+  Scenario: Student changes estimated effort
+    Given the student has an assignment with an estimated effort of 90 minutes
+    When the student changes the effort estimate to 120 minutes
+    Then the new effort estimate should be saved as 120 minutes
+    And the updated effort estimate should be used for future scheduling

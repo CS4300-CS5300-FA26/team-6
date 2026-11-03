@@ -28,7 +28,7 @@ def estimate_assignment_effort(
     title,
     due_date,
     assignment_information,
-):
+    ):
     """Return an AI-generated effort estimate for an assignment.
 
     Returns None when the assignment does not contain enough information
@@ -81,3 +81,71 @@ def has_enough_available_time(estimated_minutes, available_minutes):
 
     # Available study time must meet or exceed the required effort.
     return available_minutes >= estimated_minutes
+
+def estimate_and_save_assignment_effort(
+    assignment,
+    assignment_information,
+    ):
+    """Generate and save an automatic effort estimate for an assignment."""
+
+    # Ask the existing estimator to evaluate the assignment.
+    # The estimator uses the project's shared AI inference layer and returns an EffortEstimate Pydantic object when successful.
+    estimate = estimate_assignment_effort(
+        title=assignment.title,
+        due_date=assignment.due_date,
+        assignment_information=assignment_information,
+    )
+
+    # None means there was not enough information to generate an automatic estimate. 
+    #The future UI can use this stat to prompt the student for a manual estimate instead.
+    if estimate is None:
+        return None
+
+    # Store the validated AI-generated estimate in minutes.
+    assignment.estimated_effort_minutes = estimate.estimated_minutes
+
+    # Record that the current value came from automatic AI inference.
+    assignment.effort_estimate_source = "automatic"
+
+    # Update only the fields changed by this operation.
+    # This avoids unnecessarily rewriting other assignment data.
+    assignment.save(
+        update_fields=[
+            "estimated_effort_minutes",
+            "effort_estimate_source",
+        ]
+    )
+
+    # Return the structured estimate so callers can also use the AI-generated reason or estimated minutes immediately.
+    return estimate
+
+
+def save_manual_effort_estimate(
+    assignment,
+    estimated_minutes,
+    ):
+    """Save a student-entered effort estimate for an assignment."""
+
+    # Reject values that are not positive whole numbers.
+    # Study-session scheduling expects effort to be stored in minutes.
+    if not isinstance(estimated_minutes, int) or estimated_minutes <= 0:
+        raise ValueError(
+            "Manual effort estimate must be a positive integer number of minutes."
+        )
+
+    # Replace any previous AI-generated or manual estimate with the student's new value.
+    assignment.estimated_effort_minutes = estimated_minutes
+
+    # Mark the estimate as manual so downstream code knows the student has overridden the automatic recommendation.
+    assignment.effort_estimate_source = "manual"
+
+    # Persist only the fields changed by the manual override.
+    assignment.save(
+        update_fields=[
+            "estimated_effort_minutes",
+            "effort_estimate_source",
+        ]
+    )
+
+    # Return the updated Assignment for convenient use by callers.
+    return assignment
