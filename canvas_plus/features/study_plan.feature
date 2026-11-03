@@ -61,6 +61,12 @@ Feature: Study plan on the availability page
     When I open Availability from the sidebar
     Then I see a study session for "Lab 4"
 
+  Scenario: Student picks a day with nothing scheduled
+    Given I am logged in as a student
+    And my most recent study plan has a session for "Lab 4"
+    When I open my availability page for "2026-11-10"
+    Then I am told I have no study sessions that day
+
   Scenario Outline: Student asks for a day that is not a real date
     Given I am logged in as a student
     And my most recent study plan has a session for "Lab 4"
