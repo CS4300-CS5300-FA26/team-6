@@ -46,7 +46,7 @@ def generate_plan(user, assignment_ids, allow_late=False):
     notices = []
     eligible_assignments = []
     for assignment in assignments:
-        estimate = getattr(assignment, "estimated_minutes", None)
+        estimate = getattr(assignment, "estimated_effort_minutes", None)
         if assignment.due_date is None:
             notices.append(f"{assignment.title} was skipped because it has no due date.")
         elif not isinstance(estimate, int) or isinstance(estimate, bool) or estimate <= 0:
@@ -129,7 +129,7 @@ def _remaining_effort_notices(proposal, assignments):
     for assignment in assignments:
         remaining_minutes = max(
             0,
-            assignment.estimated_minutes - scheduled_minutes.get(assignment.id, 0),
+            assignment.estimated_effort_minutes - scheduled_minutes.get(assignment.id, 0),
         )
         if remaining_minutes:
             notices.append(

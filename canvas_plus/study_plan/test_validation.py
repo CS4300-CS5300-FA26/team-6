@@ -210,7 +210,7 @@ def test_late_session_with_opt_in_and_late_flag_is_accepted():
 @pytest.mark.unit
 def test_estimated_effort_rejects_proposals_over_assignment_estimate():
     """The total proposed minutes for an assignment cannot exceed its estimate."""
-    assignment = SimpleNamespace(id=42, estimated_minutes=30)
+    assignment = SimpleNamespace(id=42, estimated_effort_minutes=30)
     matching_plan = make_plan(make_session(end=START + timedelta(minutes=30)))
     validate_estimated_effort(matching_plan, [assignment])
 

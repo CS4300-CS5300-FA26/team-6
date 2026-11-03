@@ -31,7 +31,11 @@ def build_plan_inference_input(assignments, free_windows, *, allow_late=False):
             "title": assignment.title,
             "course": assignment.course,
             "due_date": _isoformat(assignment.due_date),
-            "estimated_minutes": getattr(assignment, "estimated_minutes", None),
+            "estimated_effort_minutes": getattr(
+                assignment,
+                "estimated_effort_minutes",
+                None,
+            ),
         }
         for assignment in ordered_assignments
     ]

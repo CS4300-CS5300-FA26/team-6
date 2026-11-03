@@ -90,7 +90,7 @@ def validate_plan(
 def validate_estimated_effort(plan, assignments):
     """Reject proposals that schedule more time than an assignment estimate."""
     estimates = {
-        assignment.id: assignment.estimated_minutes
+        assignment.id: assignment.estimated_effort_minutes
         for assignment in assignments
     }
     scheduled_minutes = {}

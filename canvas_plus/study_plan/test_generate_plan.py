@@ -43,7 +43,7 @@ class GeneratePlanTests(TestCase):
                 time(17),
                 tzinfo=local_timezone,
             ),
-            estimated_minutes=30,
+            estimated_effort_minutes=30,
         )
         valid_plan = StudyPlanResponse(
             sessions=[
@@ -93,7 +93,7 @@ class GeneratePlanTests(TestCase):
                 time(10),
                 tzinfo=local_timezone,
             ),
-            estimated_minutes=155,
+            estimated_effort_minutes=155,
         )
         proposal_sessions = [
             StudySessionProposal(
@@ -170,7 +170,7 @@ class GeneratePlanTests(TestCase):
             title="Research outline",
             course="Biology",
             due_date=datetime(2026, 11, 3, 12, tzinfo=local_timezone),
-            estimated_minutes=60,
+            estimated_effort_minutes=60,
         )
         second_assignment = Assignment.objects.create(
             user=user,
@@ -179,7 +179,7 @@ class GeneratePlanTests(TestCase):
             title="Problem set",
             course="Chemistry",
             due_date=datetime(2026, 11, 4, 12, tzinfo=local_timezone),
-            estimated_minutes=60,
+            estimated_effort_minutes=60,
         )
         mock_infer.return_value = StudyPlanResponse(
             sessions=[
@@ -270,7 +270,7 @@ class GeneratePlanTests(TestCase):
                 time(17),
                 tzinfo=local_timezone,
             ),
-            estimated_minutes=30,
+            estimated_effort_minutes=30,
         )
         earlier_assignment = Assignment.objects.create(
             user=user,
@@ -283,7 +283,7 @@ class GeneratePlanTests(TestCase):
                 time(17),
                 tzinfo=local_timezone,
             ),
-            estimated_minutes=30,
+            estimated_effort_minutes=30,
         )
         mock_infer.return_value = StudyPlanResponse(
             sessions=[
