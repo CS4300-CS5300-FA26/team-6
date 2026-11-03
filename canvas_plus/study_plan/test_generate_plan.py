@@ -250,6 +250,100 @@ class GeneratePlanTests(TestCase):
         self.assertTrue(session.late)
 
     @patch("study_plan.generate.infer")
+    def test_invalid_assignments_skipped_with_notice(self, mock_infer):
+        """Assignments missing dates or positive effort are skipped with notices."""
+        user = get_user_model().objects.create_user(username="eligibility-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(10),
+        )
+        due_date = datetime.combine(
+            available_date + timedelta(days=1),
+            time(17),
+            tzinfo=local_timezone,
+        )
+        assignments = [
+            Assignment.objects.create(
+                user=user,
+                canvas_course_id=11,
+                canvas_assignment_id=107,
+                title="Missing due date",
+                course="Biology",
+                due_date=None,
+                estimated_effort_minutes=30,
+            ),
+            Assignment.objects.create(
+                user=user,
+                canvas_course_id=11,
+                canvas_assignment_id=108,
+                title="Missing effort estimate",
+                course="Biology",
+                due_date=due_date,
+                estimated_effort_minutes=None,
+            ),
+            Assignment.objects.create(
+                user=user,
+                canvas_course_id=11,
+                canvas_assignment_id=109,
+                title="Zero effort estimate",
+                course="Biology",
+                due_date=due_date,
+                estimated_effort_minutes=0,
+            ),
+            Assignment.objects.create(
+                user=user,
+                canvas_course_id=11,
+                canvas_assignment_id=110,
+                title="Eligible assignment",
+                course="Biology",
+                due_date=due_date,
+                estimated_effort_minutes=30,
+            ),
+        ]
+        eligible_assignment = assignments[-1]
+        mock_infer.return_value = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=eligible_assignment.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+            ],
+        )
+
+        plan = generate_plan(user, [assignment.id for assignment in assignments])
+
+        sessions = list(plan.sessions.select_related("assignment"))
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0].assignment_id, eligible_assignment.id)
+        self.assertTrue(
+            any("Missing due date" in notice and "no due date" in notice for notice in plan.notices)
+        )
+        for title in ("Missing effort estimate", "Zero effort estimate"):
+            with self.subTest(assignment=title):
+                self.assertTrue(
+                    any(title in notice and "positive effort estimate" in notice for notice in plan.notices)
+                )
+        inference_input = str(mock_infer.call_args.args[1])
+        self.assertIn("Eligible assignment", inference_input)
+        for title in ("Missing due date", "Missing effort estimate", "Zero effort estimate"):
+            with self.subTest(excluded_assignment=title):
+                self.assertNotIn(title, inference_input)
+
+    @patch("study_plan.generate.infer")
     def test_generates_plan_for_multiple_assignments(self, mock_infer):
         """One generation request persists on-time sessions for each assignment."""
         user = get_user_model().objects.create_user(username="plan-student")
