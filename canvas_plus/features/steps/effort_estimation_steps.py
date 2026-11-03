@@ -26,6 +26,7 @@ from study_plan.schema import EffortEstimate
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from assignments.models import Assignment
+from django.urls import reverse
 
 @given("an assignment has enough information for an effort estimate")
 def step_complete_assignment_information(context):
@@ -109,14 +110,37 @@ def step_no_automatic_estimate(context):
     assert context.effort_estimate is None
 
 
-@then("the student should be able to enter an estimate manually")
-def step_manual_estimate_available(context):
-    """Represent the manual-entry fallback required by the story."""
+@then("the student can enter a manual estimate of 60 minutes")
+def step_student_can_enter_manual_estimate(context):
+    """Submit a fallback estimate through the real manual-entry form."""
 
-    # The UI for persistence will be added after the shared Assignment
-    # model dependency lands. For now, confirm the estimator produced
-    # the state that tells the future UI to request manual input.
-    assert context.effort_estimate is None
+    # Create a local assignment for the fallback flow if this
+    # scenario has not already created one.
+    if not hasattr(context, "assignment"):
+        context.assignment = Assignment.objects.create(
+            user=context.user,
+            canvas_course_id=7001,
+            canvas_assignment_id=8001,
+            title="Incomplete Assignment",
+            course="CS4300",
+            due_date=timezone.now(),
+        )
+
+    # Log in as the assignment owner.
+    context.test.client.force_login(context.user)
+    # Submit the manual estimate through the real edit page.
+    context.response = context.test.client.post(
+        reverse(
+            "edit_effort_estimate",
+            args=[context.assignment.id],
+        ),
+        {
+            "estimated_effort_minutes": 60,
+        },
+    )
+
+    # A successful form submission should redirect.
+    assert context.response.status_code == 302
 
 
 @given("an assignment requires more effort than the student has available")
@@ -176,15 +200,26 @@ def step_assignment_has_existing_estimate(context):
     )
 
 
-@when("the student changes the effort estimate to 120 minutes")
-def step_student_changes_estimate(context):
-    """Replace the existing estimate with the student's manual value."""
+@when("the student changes the effort estimate to 120 minutes through the edit page")
+def step_student_changes_estimate_through_page(context):
+    """Submit the manual override through the real Django edit form."""
 
-    # Save the student's new manual estimate.
-    save_manual_effort_estimate(
-        assignment=context.assignment,
-        estimated_minutes=120,
+    # Log in as the student who owns the assignment.
+    context.test.client.force_login(context.user)
+
+    # Submit the new estimate through the actual edit page.
+    context.response = context.test.client.post(
+        reverse(
+            "edit_effort_estimate",
+            args=[context.assignment.id],
+        ),
+        {
+            "estimated_effort_minutes": 120,
+        },
     )
+
+    # A successful update should redirect back to the assignment list.
+    assert context.response.status_code == 302
 
 
 @then("the new effort estimate should be saved as 120 minutes")
@@ -217,3 +252,46 @@ def step_updated_estimate_used_for_scheduling(context):
     # The new 120-minute estimate should be used, so 100 minutes is insufficient.
     assert enough_time is False
     
+@given("the assignment is missing information needed for an effort estimate")
+def step_assignment_missing_information(context):
+    """Create an incomplete assignment state that cannot be estimated automatically."""
+
+    # Create a student for the fallback/manual-entry flow.
+    context.user = get_user_model().objects.create_user(
+        username="behave-fallback-student",
+    )
+
+    # Store incomplete assignment information.
+    # The missing due date prevents automatic estimation.
+    context.assignment_title = "Incomplete Assignment"
+    context.assignment_due_date = None
+    context.assignment_information = "Complete the assignment."
+
+
+@then("no automatic effort estimate should be created")
+def step_no_automatic_estimate_created(context):
+    """Verify incomplete assignment data did not produce an automatic estimate."""
+
+    # The estimation step should have stored its result on the context.
+    assert context.effort_estimate is None
+
+
+@then("the manual effort estimate should be saved as 60 minutes")
+def step_manual_effort_estimate_saved(context):
+    """Verify the manual fallback value was persisted through the edit form."""
+
+    # Reload the assignment from the database so we verify
+    # the values that were actually persisted.
+    context.assignment.refresh_from_db()
+
+    # Include the actual values in assertion messages so a
+    # failing Behave scenario tells us exactly what is wrong.
+    assert context.assignment.estimated_effort_minutes == 60, (
+        "Expected estimated_effort_minutes to be 60, "
+        f"but got {context.assignment.estimated_effort_minutes!r}"
+    )
+
+    assert context.assignment.effort_estimate_source == "manual", (
+        "Expected effort_estimate_source to be 'manual', "
+        f"but got {context.assignment.effort_estimate_source!r}"
+    )

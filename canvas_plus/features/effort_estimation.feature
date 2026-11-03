@@ -10,10 +10,11 @@ Feature: Assignment effort estimation
 
   # Missing assignment information should fall back to manual entry.
   Scenario: Assignment does not contain enough information for an estimate
-    Given an assignment is missing information required for effort estimation
+    Given the assignment is missing information needed for an effort estimate
     When the application attempts to estimate the assignment effort
-    Then no automatic effort estimate should be returned
-    And the student should be able to enter an estimate manually
+    Then no automatic effort estimate should be created
+    And the student can enter a manual estimate of 60 minutes
+    And the manual effort estimate should be saved as 60 minutes
 
   # The application should detect when the estimated work exceeds
   # the amount of study time currently available.
@@ -22,8 +23,9 @@ Feature: Assignment effort estimation
     When the application compares estimated effort with available study time
     Then the student should be notified that there is not enough available study time
 
-  Scenario: Student changes estimated effort
+  #Student changes the effort manually
+  Scenario: Student changes estimated effort through the manual entry form
     Given the student has an assignment with an estimated effort of 90 minutes
-    When the student changes the effort estimate to 120 minutes
+    When the student changes the effort estimate to 120 minutes through the edit page
     Then the new effort estimate should be saved as 120 minutes
     And the updated effort estimate should be used for future scheduling
