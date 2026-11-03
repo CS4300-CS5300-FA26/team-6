@@ -146,6 +146,62 @@ class GeneratePlanTests(TestCase):
         )
 
     @patch("study_plan.generate.infer")
+    def test_remaining_effort_reported(self, mock_infer):
+        """Unscheduled pre-deadline effort is reported without creating late sessions."""
+        user = get_user_model().objects.create_user(username="remaining-effort-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(12),
+        )
+        deadline = datetime.combine(
+            available_date,
+            time(10),
+            tzinfo=local_timezone,
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=105,
+            title="Deadline-limited assignment",
+            course="Biology",
+            due_date=deadline,
+            estimated_effort_minutes=120,
+        )
+        mock_infer.return_value = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9),
+                        tzinfo=local_timezone,
+                    ),
+                    end=deadline,
+                    late=False,
+                ),
+            ],
+        )
+
+        plan = generate_plan(user, [assignment.id])
+
+        sessions = list(plan.sessions.filter(assignment=assignment))
+        self.assertEqual(len(sessions), 1)
+        self.assertLessEqual(sessions[0].end, deadline)
+        self.assertFalse(any(session.late for session in sessions))
+        self.assertTrue(
+            any(
+                assignment.title in notice and "60 minutes" in notice
+                for notice in plan.notices
+            ),
+            f"Expected a notice naming {assignment.title!r} with 60 unscheduled minutes; "
+            f"got {plan.notices!r}",
+        )
+
+    @patch("study_plan.generate.infer")
     def test_generates_plan_for_multiple_assignments(self, mock_infer):
         """One generation request persists on-time sessions for each assignment."""
         user = get_user_model().objects.create_user(username="plan-student")
