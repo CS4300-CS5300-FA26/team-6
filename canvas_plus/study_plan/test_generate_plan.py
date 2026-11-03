@@ -11,7 +11,10 @@ from django.test import TestCase
 from assignments.models import Assignment
 from availability.models import Availability
 from ai_inference.exceptions import AIProviderError
-from study_plan.exceptions import StudyPlanRetriesExhaustedError
+from study_plan.exceptions import (
+    InaccessibleAssignmentError,
+    StudyPlanRetriesExhaustedError,
+)
 from study_plan.generate import generate_plan
 from study_plan.models import StudyPlan as PersistedStudyPlan
 from study_plan.schema import StudyPlan as StudyPlanResponse
@@ -331,6 +334,119 @@ class GeneratePlanTests(TestCase):
 
         self.assertEqual(mock_infer.call_count, 2)
         self.assertFalse(PersistedStudyPlan.objects.filter(user=user).exists())
+
+    @patch("study_plan.generate.infer")
+    def test_new_plan_avoids_earlier_plans(self, mock_infer):
+        """New sessions use remaining time and leave the earlier plan unchanged."""
+        user = get_user_model().objects.create_user(username="existing-plan-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(12),
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=104,
+            title="Assignment alongside existing plan",
+            course="Biology",
+            due_date=datetime.combine(
+                available_date + timedelta(days=1),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            estimated_effort_minutes=60,
+        )
+
+        earlier_plan = PersistedStudyPlan.objects.create(user=user, notices=[])
+        earlier_start = datetime.combine(
+            available_date,
+            time(10),
+            tzinfo=local_timezone,
+        )
+        earlier_end = datetime.combine(
+            available_date,
+            time(10, 30),
+            tzinfo=local_timezone,
+        )
+        earlier_session = earlier_plan.sessions.create(
+            assignment=assignment,
+            start=earlier_start,
+            end=earlier_end,
+        )
+        proposed_windows = [
+            (
+                datetime.combine(available_date, time(9), tzinfo=local_timezone),
+                datetime.combine(available_date, time(9, 30), tzinfo=local_timezone),
+            ),
+            (
+                datetime.combine(available_date, time(10, 30), tzinfo=local_timezone),
+                datetime.combine(available_date, time(11), tzinfo=local_timezone),
+            ),
+        ]
+        mock_infer.return_value = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=start,
+                    end=end,
+                    late=False,
+                )
+                for start, end in proposed_windows
+            ],
+        )
+
+        new_plan = generate_plan(user, [assignment.id])
+
+        self.assertEqual(PersistedStudyPlan.objects.filter(user=user).count(), 2)
+        earlier_session.refresh_from_db()
+        self.assertEqual(earlier_session.start, earlier_start)
+        self.assertEqual(earlier_session.end, earlier_end)
+        new_sessions = list(new_plan.sessions.filter(assignment=assignment))
+        self.assertEqual(len(new_sessions), len(proposed_windows))
+        for session in new_sessions:
+            with self.subTest(start=session.start):
+                self.assertFalse(
+                    session.start < earlier_session.end
+                    and earlier_session.start < session.end
+                )
+
+        inference_content = str(mock_infer.call_args.args[1])
+        for window_start, window_end in [
+            (
+                datetime.combine(available_date, time(9), tzinfo=local_timezone),
+                earlier_start,
+            ),
+            (
+                earlier_end,
+                datetime.combine(available_date, time(12), tzinfo=local_timezone),
+            ),
+        ]:
+            with self.subTest(window=(window_start, window_end)):
+                self.assertIn(f'"start": "{window_start.isoformat()}"', inference_content)
+                self.assertIn(f'"end": "{window_end.isoformat()}"', inference_content)
+
+    @patch("study_plan.generate.infer")
+    def test_other_users_data_rejected(self, mock_infer):
+        """A foreign assignment is rejected before inference or plan creation."""
+        requester = get_user_model().objects.create_user(username="requesting-student")
+        owner, foreign_assignment, _ = self.create_retry_case("foreign-assignment-owner")
+        Availability.objects.create(
+            user=requester,
+            date=date.today() + timedelta(days=1),
+            start_time=time(9),
+            end_time=time(10),
+        )
+
+        with self.assertRaises(InaccessibleAssignmentError):
+            generate_plan(requester, [foreign_assignment.id])
+
+        mock_infer.assert_not_called()
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=requester).exists())
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=owner).exists())
 
     @patch("study_plan.generate.infer")
     def test_inference_input_is_deadline_ordered(self, mock_infer):
