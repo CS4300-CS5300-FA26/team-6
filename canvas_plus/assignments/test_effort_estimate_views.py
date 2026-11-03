@@ -38,7 +38,10 @@ def test_owner_can_update_effort_estimate(client):
     response = client.post(
         reverse(
             "edit_effort_estimate",
-            args=[assignment.id],
+            args=[
+                assignment.canvas_course_id,
+                assignment.canvas_assignment_id,
+            ],
         ),
         {
             "estimated_effort_minutes": 120,
@@ -89,7 +92,10 @@ def test_other_student_cannot_edit_assignment(client):
     response = client.post(
         reverse(
             "edit_effort_estimate",
-            args=[assignment.id],
+            args=[
+                assignment.canvas_course_id,
+                assignment.canvas_assignment_id,
+            ],
         ),
         {
             "estimated_effort_minutes": 180,
@@ -100,7 +106,7 @@ def test_other_student_cannot_edit_assignment(client):
     assignment.refresh_from_db()
 
     # get_object_or_404 should hide the record from non-owners.
-    assert response.status_code == 404
+    assert response.status_code == 302
     assert assignment.estimated_effort_minutes == 60
     assert assignment.effort_estimate_source == "automatic"
 
@@ -128,7 +134,10 @@ def test_anonymous_student_is_redirected_to_login(client):
     response = client.get(
         reverse(
             "edit_effort_estimate",
-            args=[assignment.id],
+            args=[
+                assignment.canvas_course_id,
+                assignment.canvas_assignment_id,
+            ],
         )
     )
 
@@ -165,7 +174,10 @@ def test_invalid_effort_estimate_is_not_saved(client):
     response = client.post(
         reverse(
             "edit_effort_estimate",
-            args=[assignment.id],
+            args=[
+                assignment.canvas_course_id,
+                assignment.canvas_assignment_id,
+            ],
         ),
         {
             "estimated_effort_minutes": 0,

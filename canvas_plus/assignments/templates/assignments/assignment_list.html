@@ -42,7 +42,7 @@
           {% endif %}
 
           <!-- Allow the student to set or change the effort estimate. -->
-          <a href="{% url 'edit_effort_estimate' assignment.local_assignment_id %}">
+          <a href="{% url 'edit_effort_estimate' assignment.canvas_course_id assignment.canvas_assignment_id %}">
             Edit Effort Estimate
           </a>
         </li>

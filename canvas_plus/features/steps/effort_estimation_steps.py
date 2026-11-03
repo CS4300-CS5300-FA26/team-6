@@ -132,7 +132,10 @@ def step_student_can_enter_manual_estimate(context):
     context.response = context.test.client.post(
         reverse(
             "edit_effort_estimate",
-            args=[context.assignment.id],
+            args=[
+                context.assignment.canvas_course_id,
+                context.assignment.canvas_assignment_id,
+            ],
         ),
         {
             "estimated_effort_minutes": 60,
@@ -211,7 +214,10 @@ def step_student_changes_estimate_through_page(context):
     context.response = context.test.client.post(
         reverse(
             "edit_effort_estimate",
-            args=[context.assignment.id],
+            args=[
+                context.assignment.canvas_course_id,
+                context.assignment.canvas_assignment_id,
+            ],
         ),
         {
             "estimated_effort_minutes": 120,

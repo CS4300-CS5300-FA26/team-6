@@ -193,13 +193,11 @@ def _normalize_assignment(assignment, course_name, course_id):
     )
     return {
         "canvas_assignment_id": assignment["id"],
-        "canvas_course_id": course["id"],
+        "canvas_course_id": course_id,
         "title": assignment["name"],
-        "course_name": course["name"],
+        "course_name": course_name,
         "due_date": due_date,
         "submitted": submitted,
-        "id": assignment.get("id"),
-        "course_id": course_id,
     }
 
 

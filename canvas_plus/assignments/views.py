@@ -84,34 +84,10 @@ def load_canvas_context(user):
             now = timezone.now()
             for assignment in assignments:
                 assignment["priority"] = priority(
-                    assignment["due_date"], assignment["submitted"], now
-                )
-                # Create or update the local database record that mirrors
-                # this Canvas assignment for the signed-in student.
-                local_assignment, _created = Assignment.objects.update_or_create(
-                    user=request.user,
-                    canvas_assignment_id=assignment["id"],
-                    defaults={
-                        "canvas_course_id": assignment["course_id"],
-                        "title": assignment["title"],
-                        "course": assignment["course_name"],
-                        "due_date": assignment["due_date"],
-                    },
-                )
-
-                # Expose the local database ID to the template so local
-                # features such as effort estimation can link to this row.
-                assignment["local_assignment_id"] = local_assignment.id
-
-                # Expose the currently saved effort estimate, if one exists.
-                assignment["estimated_effort_minutes"] = (
-                    local_assignment.estimated_effort_minutes
-                )
-
-                # Expose whether the estimate was automatic or manually overridden.
-                assignment["effort_estimate_source"] = (
-                    local_assignment.effort_estimate_source
-                )
+                assignment["due_date"],
+                assignment["submitted"],
+                now,
+            )
         except (CanvasAuthenticationError, SavedTokenError):
             connection.is_valid = False
             connection.save(update_fields=["is_valid", "updated_at"])
@@ -226,54 +202,101 @@ def remove_attachment(request, attachment_id):
     return render(request, "assignments/remove_attachment.html", {"attachment": attachment})
     
 @login_required
-def edit_effort_estimate(request, assignment_id):
-    """Allow a student to manually update their own assignment effort estimate."""
+def edit_effort_estimate(request, course_id, assignment_id):
+    """Allow a student to set or update an assignment effort estimate."""
 
-    # Retrieve the requested assignment only if it belong to the currently logged-in student.
-    # Including user=request.user prevents one student from editing another student's assignment by changing the URL.
-    assignment = get_object_or_404(
-        Assignment,
-        id=assignment_id,
+    # First look for an existing local Assignment owned by this student.
+    # If one exists, we can edit it without requiring another Canvas request.
+    local_assignment = Assignment.objects.filter(
         user=request.user,
-    )
+        canvas_course_id=course_id,
+        canvas_assignment_id=assignment_id,
+    ).first()
+
+    # If the student does not already have a local Assignment row,
+    # verify the requested assignment against their live Canvas data.
+    if local_assignment is None:
+        context = load_canvas_context(request.user)
+
+        # Do not create a new local row when Canvas data cannot be loaded.
+        if context["assignments_unavailable"]:
+            messages.error(
+                request,
+                "Unable to load Canvas assignments. Please reconnect or try again.",
+            )
+            return redirect("assignment_list")
+
+        # Find the requested Canvas assignment using both stable identifiers.
+        canvas_assignment = next(
+            (
+                item
+                for item in context["assignments"]
+                if item["canvas_assignment_id"] == assignment_id
+                and item["canvas_course_id"] == course_id
+            ),
+            None,
+        )
+
+        # Reject an assignment that is not present in this student's Canvas data.
+        if canvas_assignment is None:
+            raise Http404("Assignment not found")
+
+    else:
+        # Build the display information from the existing local Assignment.
+        # This avoids requiring Canvas just to edit an already saved estimate.
+        canvas_assignment = {
+            "title": local_assignment.title,
+            "course_name": local_assignment.course,
+            "due_date": local_assignment.due_date,
+            "canvas_course_id": local_assignment.canvas_course_id,
+            "canvas_assignment_id": local_assignment.canvas_assignment_id,
+        }
 
     # Handle a submitted manual estimate.
     if request.method == "POST":
-        # Bind the submitted value to the existing Assignment record.
-        form = EffortEstimateForm(
-            request.POST,
-            instance=assignment,
-        )
 
-        # Only save if the form passes validation.
-        if form.is_valid():
-            # Do not save immediately because we also need to mark the estimate as manually entered.
-            updated_assignment = form.save(commit=False)
-
-            # Record that the student manually changed the estimate.
-            updated_assignment.effort_estimate_source = "manual"
-
-            # Save the updated estimate and source.
-            updated_assignment.save(
-                update_fields=[
-                    "estimated_effort_minutes",
-                    "effort_estimate_source",
-                ]
+        # If no local row exists yet, create an unsaved Assignment
+        # from the verified Canvas snapshot.
+        if local_assignment is None:
+            local_assignment = Assignment(
+                user=request.user,
+                canvas_course_id=course_id,
+                canvas_assignment_id=assignment_id,
+                title=canvas_assignment["title"],
+                course=canvas_assignment["course_name"],
+                due_date=canvas_assignment["due_date"],
             )
 
-            # Return the student to the assignment page/list.
+        # Bind the submitted estimate to the local Assignment.
+        form = EffortEstimateForm(
+            request.POST,
+            instance=local_assignment,
+        )
+
+        # Save a valid student-entered estimate.
+        if form.is_valid():
+            updated_assignment = form.save(commit=False)
+
+            # Record that the student manually entered or changed the value.
+            updated_assignment.effort_estimate_source = "manual"
+
+            # Save the new local row or update the existing one.
+            updated_assignment.save()
+
             return redirect("assignment_list")
 
     else:
-        # Pre-fill the form with the current effort estimate.
-        form = EffortEstimateForm(instance=assignment)
+        # Existing estimates are pre-filled.
+        # A Canvas-only assignment receives a blank form without
+        # creating a database row just from viewing the page.
+        form = EffortEstimateForm(instance=local_assignment)
 
-    # Show the edit form initially or redisplay it with validation errors after an invalid POST.
+    # Display the manual effort-estimate form.
     return render(
         request,
         "assignments/edit_effort_estimate.html",
         {
             "form": form,
-            "assignment": assignment,
+            "assignment": canvas_assignment,
         },
     )
