@@ -6,7 +6,7 @@ from unittest.mock import ANY, patch
 import pytest
 import requests
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
