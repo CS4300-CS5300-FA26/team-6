@@ -91,3 +91,79 @@ def step_study_files_listed_on_assignment(context):
     assert "project-rubric.pdf" in card.get_text()
     assert Assignment.objects.filter(user=context.user, canvas_assignment_id=101).count() == 1
     assert Attachment.objects.filter(user=context.user).count() == 2
+
+
+@given("a document is linked to an assignment block")
+@given("several files are connected to a single deadline")
+@given("a resource is saved on a calendar assignment")
+def step_saved_attachment_resources(context):
+    step_viewing_attachment_deadline(context)
+    step_attach_several_study_files(context)
+    context.target_attachment = Attachment.objects.get(
+        user=context.user, study_file__original_name="lecture-notes.txt",
+    )
+
+
+@when("I click on the document from the calendar entry")
+def step_open_attachment_from_card(context):
+    page = BeautifulSoup(context.response.content, "html.parser")
+    link = page.find("a", string="lecture-notes.txt")
+    assert link is not None
+    context.response = context.client.get(link["href"])
+
+
+@then("I can preview or download the resource immediately")
+def step_attachment_downloaded(context):
+    assert context.response.status_code == 200
+    assert context.response["Content-Disposition"] == 'attachment; filename="lecture-notes.txt"'
+    assert b"".join(context.response.streaming_content) == b"lecture notes"
+    context.response.close()
+
+
+@when("I unbind a single target resource")
+def step_remove_target_attachment(context):
+    url = reverse("remove_attachment", kwargs={"attachment_id": context.target_attachment.pk})
+    confirmation = context.client.get(url)
+    assert confirmation.status_code == 200
+    assert "lecture-notes.txt" in confirmation.content.decode()
+    context.response = context.client.post(url, follow=True)
+
+
+@then("that specific item is removed from the view")
+def step_target_attachment_removed(context):
+    assert context.response.status_code == 200
+    assert "lecture-notes.txt" not in context.response.content.decode()
+    assert not Attachment.objects.filter(pk=context.target_attachment.pk).exists()
+    study_file = StudyFile.objects.get(pk=context.target_attachment.study_file_id)
+    assert Path(study_file.file.path).read_bytes() == b"lecture notes"
+
+
+@then("all other linked materials stay attached to the task")
+def step_other_attachments_remain(context):
+    assert "project-rubric.pdf" in context.response.content.decode()
+    assert Attachment.objects.filter(
+        assignment=context.target_attachment.assignment,
+        study_file__original_name="project-rubric.pdf",
+    ).count() == 1
+    assert Assignment.objects.filter(pk=context.target_attachment.assignment_id).exists()
+
+
+@when("I start removing the item but dismiss the prompt")
+def step_cancel_attachment_removal(context):
+    page = BeautifulSoup(context.response.content, "html.parser")
+    remove = page.find("a", href=reverse(
+        "remove_attachment", kwargs={"attachment_id": context.target_attachment.pk},
+    ))
+    assert remove is not None
+    confirmation = context.client.get(remove["href"])
+    assert confirmation.status_code == 200
+    page = BeautifulSoup(confirmation.content, "html.parser")
+    cancel = page.find("a", string="Cancel")
+    assert cancel is not None
+    context.response = context.client.get(cancel["href"])
+
+
+@then("the document remains present on the record card")
+def step_cancelled_attachment_remains(context):
+    step_study_files_listed_on_assignment(context)
+    assert Attachment.objects.filter(pk=context.target_attachment.pk).exists()
