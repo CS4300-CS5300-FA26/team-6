@@ -273,6 +273,8 @@ def edit_effort_estimate(request, course_id, assignment_id):
             "due_date": local_assignment.due_date,
             "canvas_course_id": local_assignment.canvas_course_id,
             "canvas_assignment_id": local_assignment.canvas_assignment_id,
+            "estimated_effort_minutes": local_assignment.estimated_effort_minutes,
+            "effort_estimate_source": local_assignment.effort_estimate_source,
         }
 
     # Handle a submitted manual estimate.
