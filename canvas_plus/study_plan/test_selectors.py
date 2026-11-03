@@ -11,11 +11,11 @@ from django.utils import timezone
 # pylint: disable=import-error
 from assignments.models import Assignment
 from study_plan.models import StudyPlan, StudySession
-from study_plan.selectors import latest_plan_sessions
+from study_plan.selectors import latest_plan_sessions, study_plan_context
 
 
-class LatestPlanSessionsTests(TestCase):
-    """Only the signed-in student's newest plan is shown, in order, by local day."""
+class StudyPlanTestCase(TestCase):
+    """Shared students, Denver times, and plan builders for the study plan tests."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="planner")
@@ -51,6 +51,10 @@ class LatestPlanSessionsTests(TestCase):
     def titles(sessions):
         """Assignment titles, in the order returned, for readable failures."""
         return [session.assignment.title for session in sessions]
+
+
+class LatestPlanSessionsTests(StudyPlanTestCase):
+    """Only the signed-in student's newest plan is shown, in order, by local day."""
 
     def test_no_plan_returns_none(self):
         """A student who never generated a plan gets None, not an empty list."""
@@ -133,3 +137,43 @@ class LatestPlanSessionsTests(TestCase):
 
         with self.assertNumQueries(2):
             self.titles(latest_plan_sessions(self.user))
+
+
+class StudyPlanContextTests(StudyPlanTestCase):
+    """The untrusted ?date= text becomes a day, or a correction message."""
+
+    def setUp(self):
+        super().setUp()
+        plan = self.make_plan(self.user)
+        self.add_session(plan, "HW3", self.local_datetime(self.day, time(14)))
+        self.add_session(plan, "Lab 4", self.local_datetime(self.day + timedelta(days=1), time(9)))
+
+    def test_no_day_shows_the_whole_plan(self):
+        """Without ?date= every session is shown and no day is selected."""
+        context = study_plan_context(self.user, None)
+
+        self.assertEqual(self.titles(context["study_sessions"]), ["HW3", "Lab 4"])
+        self.assertIsNone(context["study_day"])
+
+    def test_empty_day_is_the_same_as_no_day(self):
+        """An empty ?date= (a cleared date picker) is not an error."""
+        context = study_plan_context(self.user, "")
+
+        self.assertEqual(self.titles(context["study_sessions"]), ["HW3", "Lab 4"])
+        self.assertIsNone(context["study_day"])
+
+    def test_valid_day_shows_only_that_day(self):
+        """A real date narrows the plan and is passed on as a date."""
+        context = study_plan_context(self.user, "2026-11-05")
+
+        self.assertEqual(self.titles(context["study_sessions"]), ["HW3"])
+        self.assertEqual(context["study_day"], date(2026, 11, 5))
+
+    def test_invalid_day_gives_a_message_and_no_sessions(self):
+        """Malformed or impossible dates are reported, never crash, and show nothing."""
+        for raw_day in ("2026-02-30", "not-a-date"):
+            with self.subTest(raw_day=raw_day):
+                self.assertEqual(
+                    study_plan_context(self.user, raw_day),
+                    {"study_day_error": "That day is not a valid date."},
+                )
