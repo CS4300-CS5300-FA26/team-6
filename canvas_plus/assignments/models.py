@@ -23,6 +23,24 @@ class Assignment(models.Model):
     canvas_course_id = models.PositiveBigIntegerField()
     canvas_assignment_id = models.PositiveBigIntegerField()
 
+    # Store the estimated amount of work required for the assignment.
+    # The value is stored in minutes so scheduling logic has a consistent unit to work with.
+    estimated_effort_minutes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    # Track whether the current estimate came from the AI or was manually entered/overridden by the student.
+    effort_estimate_source = models.CharField(
+        max_length=20,
+        choices=[
+            ("automatic", "Automatic"),
+            ("manual", "Manual"),
+        ],
+        null=True,
+        blank=True,
+    )
+
     class Meta:  # pylint: disable=too-few-public-methods
         """One student mirrors one Canvas assignment at most."""
 

@@ -58,33 +58,81 @@ class AssignmentOwnershipMigrationTests(TransactionTestCase):
 
     def test_applies_on_empty_prior_schema(self):
         """Given an empty 0002 schema, the ownership migration applies cleanly."""
-        self._migrate_to(OWNERSHIP_MIGRATION)
 
-        user = get_user_model().objects.create_user(username="migration-owner")
-        assignment = Assignment.objects.create(
-            user=user, title="Owned project", course="CS 4300",
-            canvas_course_id=42, canvas_assignment_id=101,
+        # Migrate to the ownership schema and capture the historical app registry.
+        ownership_apps = self._migrate_to(OWNERSHIP_MIGRATION)
+
+        # Use models exactly as they existed at migration 0003.
+        HistoricalAssignment = ownership_apps.get_model(
+            "assignments",
+            "Assignment",
         )
-        self.assertIsNone(Assignment.objects.get(pk=assignment.pk).due_date)
+        HistoricalStudyFile = ownership_apps.get_model(
+            "assignments",
+            "StudyFile",
+        )
+        HistoricalAttachment = ownership_apps.get_model(
+            "assignments",
+            "Attachment",
+        )
 
+        # Create the user using the current auth model.
+        user = get_user_model().objects.create_user(
+            username="migration-owner",
+        )
+
+        # Create an assignment using the historical 0003 schema.
+        assignment = HistoricalAssignment.objects.create(
+            user_id=user.id,
+            title="Owned project",
+            course="CS 4300",
+            canvas_course_id=42,
+            canvas_assignment_id=101,
+        )
+
+        # Confirm the nullable due_date field behaves as expected.
+        self.assertIsNone(
+            HistoricalAssignment.objects.get(
+                pk=assignment.pk
+            ).due_date
+        )
+
+        # Confirm the uniqueness constraint added by the migration works.
         with transaction.atomic():
             with self.assertRaises(IntegrityError):
-                Assignment.objects.create(
+                HistoricalAssignment.objects.create(
+                    user_id=user.id,
                     canvas_course_id=42,
-                    user=user, title="Duplicate mirror", course="CS 4300",
+                    title="Duplicate mirror",
+                    course="CS 4300",
                     canvas_assignment_id=101,
                 )
 
-        study_file = StudyFile.objects.create(
-            user=user,
-            file=SimpleUploadedFile("notes.pdf", b"tiny"),
+        # Create a historical StudyFile using the 0003 schema.
+        study_file = HistoricalStudyFile.objects.create(
+            user_id=user.id,
+            file=SimpleUploadedFile(
+                "notes.pdf",
+                b"tiny",
+            ),
             original_name="notes.pdf",
             size=4,
         )
-        Attachment.objects.create(
-            user=user, assignment=assignment, study_file=study_file
+
+        # Create a historical attachment using foreign-key IDs.
+        HistoricalAttachment.objects.create(
+            user_id=user.id,
+            assignment_id=assignment.id,
+            study_file_id=study_file.id,
         )
-        self.assertEqual(assignment.attachments.count(), 1)
+
+        # Confirm the attachment row was created.
+        self.assertEqual(
+            HistoricalAttachment.objects.filter(
+                assignment_id=assignment.id
+            ).count(),
+            1,
+         )
 
     def test_refuses_legacy_rows_and_preserves_them(self):
         """Given historical unowned rows, the migration refuses and changes nothing."""

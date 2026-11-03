@@ -14,6 +14,8 @@ from assignments.test_helpers import configure_canvas_user
 
 COURSES = [{"id": 42, "name": "CS 4300"}]
 UPCOMING = [{
+    "id": 101,
+    "course_id": 42,
     "title": "Canvas Project 1",
     "course_name": "CS 4300",
     "due_date": timezone.now() + timedelta(days=7),

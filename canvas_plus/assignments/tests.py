@@ -36,6 +36,8 @@ class CanvasAssignmentsPageTests(TestCase):
         )
         courses = [{"id": 42, "name": "CS 4300"}]
         assignments = [{
+            "id": 101,
+            "course_id": 42,
             "title": "Canvas Project 1",
             "course_name": "CS 4300",
             "due_date": due_date,
@@ -135,24 +137,32 @@ class CanvasAssignmentsPageTests(TestCase):
         courses = [{"id": 42, "name": "CS 4300"}]
         assignments = [
             {
+                "id": 101,
+                "course_id": 42,
                 "title": "Turned in",
                 "course_name": "CS 4300",
                 "due_date": now + timedelta(hours=30),
                 "submitted": True,
             },
             {
+                "id": 102,
+                "course_id": 42,
                 "title": "Missed",
                 "course_name": "CS 4300",
                 "due_date": now - timedelta(hours=2),
                 "submitted": False,
             },
             {
+                "id": 103,
+                "course_id": 42,
                 "title": "Close",
                 "course_name": "CS 4300",
                 "due_date": now + timedelta(hours=30),
                 "submitted": False,
             },
             {
+                "id": 104,
+                "course_id": 42,
                 "title": "Far",
                 "course_name": "CS 4300",
                 "due_date": now + timedelta(days=6),
@@ -207,12 +217,16 @@ class CanvasAssignmentsPageTests(TestCase):
         )
         list_upcoming_assignments_mock.side_effect = [
             [{
+                "id": 101,
+                "course_id": 42,
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
                 "due_date": earlier_due_date,
                 "submitted": False,
             }],
             [{
+                "id": 101,
+                "course_id": 42,
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
                 "due_date": revised_due_date,
