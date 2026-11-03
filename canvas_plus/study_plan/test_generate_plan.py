@@ -474,7 +474,11 @@ class GeneratePlanTests(TestCase):
             canvas_assignment_id=101,
             title="Research outline",
             course="Biology",
-            due_date=datetime(2026, 11, 3, 12, tzinfo=local_timezone),
+            due_date=datetime.combine(
+                available_date,
+                time(12),
+                tzinfo=local_timezone,
+            ),
             estimated_effort_minutes=60,
         )
         second_assignment = Assignment.objects.create(
@@ -483,7 +487,11 @@ class GeneratePlanTests(TestCase):
             canvas_assignment_id=102,
             title="Problem set",
             course="Chemistry",
-            due_date=datetime(2026, 11, 4, 12, tzinfo=local_timezone),
+            due_date=datetime.combine(
+                available_date + timedelta(days=1),
+                time(12),
+                tzinfo=local_timezone,
+            ),
             estimated_effort_minutes=60,
         )
         mock_infer.return_value = StudyPlanResponse(
