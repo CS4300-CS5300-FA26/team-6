@@ -144,7 +144,10 @@ def get_course_syllabus(token, course_id):
     )
     if not isinstance(course, dict):
         raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
-    return course.get("syllabus_body")
+    syllabus = course.get("syllabus_body")
+    if syllabus is not None and not isinstance(syllabus, str):
+        raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
+    return syllabus
 
 
 def _validate_assignment_course(course):
