@@ -15,6 +15,7 @@ from study_plan.models import StudyPlan, StudySession
 
 NO_PLAN_MESSAGE = "No study plan has been generated yet."
 INVALID_DAY_MESSAGE = "That day is not a valid date."
+EMPTY_DAY_MESSAGE = "No study sessions on this day."
 DEFAULT_DAY, DEFAULT_START, DEFAULT_END = "2026-11-05", "2:00 PM", "3:00 PM"
 
 
@@ -113,7 +114,9 @@ def step_open_availability_for_day(context, day):
 def step_open_availability_from_sidebar(context):
     url = reverse("availability:list")
     context.response = context.client.get(url)
-    assert f'href="{url}"' in context.response.content.decode(), "sidebar has no Availability link"
+    # Only the sidebar counts; the page's own "Show all days" link has the same href.
+    sidebar = re.search(r"<nav[^>]*>(.*?)</nav>", context.response.content.decode(), re.S)
+    assert sidebar and f'href="{url}"' in sidebar.group(1), "sidebar has no Availability link"
 
 
 # Thens
@@ -148,3 +151,8 @@ def step_told_no_plan(context):
 def step_told_invalid_day(context):
     assert context.response.status_code == 200, f"page returned {context.response.status_code}"
     assert INVALID_DAY_MESSAGE in context.response.content.decode(), "invalid-day message not shown"
+
+
+@then("I am told I have no study sessions that day")
+def step_told_empty_day(context):
+    assert EMPTY_DAY_MESSAGE in context.response.content.decode(), "empty-day message not shown"
