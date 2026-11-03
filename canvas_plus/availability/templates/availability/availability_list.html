@@ -43,4 +43,41 @@
         <!-- Show a clear message when no availability has been entered. -->
         <p>No availability entered yet.</p>
     {% endif %}
+
+    <!-- The student's most recent study plan, optionally narrowed to one day. -->
+    <h2>Study plan</h2>
+
+    <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
+    <form method="get">
+        <label for="study-day">Day</label>
+        <input type="date" id="study-day" name="date" value="{{ study_day|date:'Y-m-d' }}">
+        <button type="submit">Show day</button>
+        <a href="{% url 'availability:list' %}">Show all days</a>
+    </form>
+
+    <!-- Check the error first: study_sessions is missing from the context then, not None. -->
+    {% if study_day_error %}
+        <p role="status">{{ study_day_error }}</p>
+    {% elif study_sessions is None %}
+        <p>No study plan has been generated yet.</p>
+    {% elif study_sessions %}
+        <ul class="assignment-list">
+            {% for session in study_sessions %}
+                <li class="assignment-card study-session">
+                    <span class="assignment-status">Study</span>
+                    <div class="assignment-details">
+                        <h3 class="assignment-title">{{ session.assignment.title }}</h3>
+                    </div>
+                    <!-- date and time filters convert the stored UTC times to local time. -->
+                    <p class="assignment-due">{{ session.start|date:"M j, Y" }} · {{ session.start|time:"g:i A" }} to {{ session.end|time:"g:i A" }}</p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% elif study_day %}
+        <!-- A plan exists, but nothing is scheduled on the chosen day. -->
+        <p>No study sessions on this day.</p>
+    {% else %}
+        <!-- A plan with no sessions at all, e.g. everything went into its notices. -->
+        <p>This study plan has no sessions.</p>
+    {% endif %}
 {% endblock %}
