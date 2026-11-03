@@ -10,7 +10,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -178,3 +178,15 @@ def open_attachment(request, attachment_id):
         return redirect("assignment_list")
     # ponytail: The dyno streams the bytes (max 25 MiB); signed URLs are the upgrade if needed.
     return FileResponse(stored_file, as_attachment=True, filename=study_file.original_name)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def remove_attachment(request, attachment_id):
+    """Confirm removal, then unlink only the student's chosen attachment."""
+    attachment = get_object_or_404(Attachment, pk=attachment_id, user=request.user)
+    if request.method == "POST":
+        attachment.delete()
+        messages.success(request, "File removed.")
+        return redirect("assignment_list")
+    return render(request, "assignments/remove_attachment.html", {"attachment": attachment})

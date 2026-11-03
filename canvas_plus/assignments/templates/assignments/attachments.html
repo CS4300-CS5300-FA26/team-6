@@ -3,6 +3,7 @@
     {% for attachment in assignment.attachments %}
       <li>
         <a id="attachment-name-{{ attachment.pk }}" href="{% url 'open_attachment' attachment_id=attachment.pk %}">{{ attachment.study_file.original_name }}</a>
+        <a id="attachment-remove-{{ attachment.pk }}" aria-labelledby="attachment-remove-{{ attachment.pk }} attachment-name-{{ attachment.pk }}" href="{% url 'remove_attachment' attachment_id=attachment.pk %}">Remove</a>
       </li>
     {% endfor %}
   </ul>

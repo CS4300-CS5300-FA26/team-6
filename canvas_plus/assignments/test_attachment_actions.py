@@ -104,7 +104,7 @@ class AttachmentActionTests(MediaRootTestCase):
         response = self.client.get(self.url("remove_attachment"))
         self.assertContains(response, "notes.txt")
         page = BeautifulSoup(response.content, "html.parser")
-        form = page.find("form")
+        form = page.find("button", string="Remove").find_parent("form")
         self.assertEqual(form["method"], "post")
         self.assertIsNotNone(form.select_one('input[name="csrfmiddlewaretoken"]'))
         self.assertEqual(form.find("button").get_text(strip=True), "Remove")
