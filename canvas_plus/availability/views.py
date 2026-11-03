@@ -2,6 +2,7 @@
 #imports for user login, html templates, availability form, and model.
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
+from study_plan.selectors import study_plan_context  # pylint: disable=import-error
 from .forms import AvailabilityForm
 from .models import Availability
 
@@ -37,6 +38,8 @@ def availability_list(request):
         {
             "form": form,
             "availability_entries": availability_entries,
+            #study plan section; ?date= picks one day
+            **study_plan_context(request.user, request.GET.get("date")),
         },
     )
 @login_required
