@@ -12,11 +12,15 @@ from assignments.models import Assignment
 from availability.models import Availability
 from ai_inference.exceptions import AIProviderError
 from study_plan.exceptions import (
+    EmptyAssignmentSelectionError,
     InaccessibleAssignmentError,
+    NoEligibleAssignmentsError,
+    NoUsableAvailabilityError,
     StudyPlanRetriesExhaustedError,
 )
 from study_plan.generate import generate_plan
 from study_plan.models import StudyPlan as PersistedStudyPlan
+from study_plan.models import StudySession
 from study_plan.schema import StudyPlan as StudyPlanResponse
 from study_plan.schema import StudySessionProposal
 
@@ -342,6 +346,82 @@ class GeneratePlanTests(TestCase):
         for title in ("Missing due date", "Missing effort estimate", "Zero effort estimate"):
             with self.subTest(excluded_assignment=title):
                 self.assertNotIn(title, inference_input)
+
+    @patch("study_plan.generate.infer")
+    def test_empty_assignment_selection_raises_error(self, mock_infer):
+        """An empty selection is rejected without inference or plan creation."""
+        empty_user = get_user_model().objects.create_user(username="empty-selection-student")
+        with self.assertRaises(EmptyAssignmentSelectionError):
+            generate_plan(empty_user, [])
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=empty_user).exists())
+        mock_infer.assert_not_called()
+
+    @patch("study_plan.generate.infer")
+    def test_no_eligible_assignments_raises_error(self, mock_infer):
+        """A selection with no eligible assignments is rejected before inference."""
+        ineligible_user = get_user_model().objects.create_user(
+            username="no-eligible-assignment-student"
+        )
+        ineligible_assignment = Assignment.objects.create(
+            user=ineligible_user,
+            canvas_course_id=11,
+            canvas_assignment_id=111,
+            title="Undated assignment",
+            course="Biology",
+            due_date=None,
+            estimated_effort_minutes=30,
+        )
+        with self.assertRaises(NoEligibleAssignmentsError):
+            generate_plan(ineligible_user, [ineligible_assignment.id])
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=ineligible_user).exists())
+        mock_infer.assert_not_called()
+
+    @patch("study_plan.generate.infer")
+    def test_no_availability_raises_error(self, mock_infer):
+        """An eligible assignment without availability is rejected before inference."""
+        no_availability_user, no_availability_assignment, _ = self.create_retry_case(
+            "no-availability-student"
+        )
+        Availability.objects.filter(user=no_availability_user).delete()
+        with self.assertRaises(NoUsableAvailabilityError):
+            generate_plan(no_availability_user, [no_availability_assignment.id])
+        self.assertFalse(
+            PersistedStudyPlan.objects.filter(user=no_availability_user).exists()
+        )
+        mock_infer.assert_not_called()
+
+    @patch("study_plan.generate.infer")
+    def test_past_availability_raises_error(self, mock_infer):
+        """Availability windows that have ended are rejected before inference."""
+        expired_user, expired_assignment, _ = self.create_retry_case("expired-windows-student")
+        Availability.objects.filter(user=expired_user).update(
+            date=date.today() - timedelta(days=1)
+        )
+        with self.assertRaises(NoUsableAvailabilityError):
+            generate_plan(expired_user, [expired_assignment.id])
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=expired_user).exists())
+        mock_infer.assert_not_called()
+
+    @patch("study_plan.generate.infer")
+    def test_consumed_availability_raises_error(self, mock_infer):
+        """A fully occupied availability window creates no additional plan."""
+        consumed_user, consumed_assignment, valid_plan = self.create_retry_case(
+            "consumed-windows-student"
+        )
+        existing_plan = PersistedStudyPlan.objects.create(user=consumed_user, notices=[])
+        earlier_start = valid_plan.sessions[0].start
+        earlier_end = earlier_start + timedelta(hours=1)
+        StudySession.objects.create(
+            plan=existing_plan,
+            assignment=consumed_assignment,
+            start=earlier_start,
+            end=earlier_end,
+        )
+        with self.assertRaises(NoUsableAvailabilityError):
+            generate_plan(consumed_user, [consumed_assignment.id])
+        self.assertEqual(PersistedStudyPlan.objects.filter(user=consumed_user).count(), 1)
+        self.assertEqual(existing_plan.sessions.count(), 1)
+        mock_infer.assert_not_called()
 
     @patch("study_plan.generate.infer")
     def test_generates_plan_for_multiple_assignments(self, mock_infer):
