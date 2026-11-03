@@ -75,6 +75,15 @@ def test_course_syllabus_request_returns_syllabus_html():
 
 
 @pytest.mark.unit
+def test_malformed_syllabus_is_not_treated_as_success():
+    """A syllabus that isn't text or empty is reported as a Canvas problem, not shown."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=response({"id": 7, "syllabus_body": 42})):
+        with pytest.raises(CanvasAPIError):
+            get_course_syllabus("fake-token", 7)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("next_url", [
     "https://untrusted.example/api/v1/courses",
     "http://canvas.example.edu/api/v1/courses",
