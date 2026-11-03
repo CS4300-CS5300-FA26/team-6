@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from assignments.models import Assignment
-
+from unittest.mock import patch
 
 @pytest.mark.django_db
 def test_owner_can_update_effort_estimate(client):
@@ -196,3 +196,64 @@ def test_invalid_effort_estimate_is_not_saved(client):
 
     # The form should display the validation error.
     assert b"greater than zero" in response.content
+
+@pytest.mark.django_db
+@patch("assignments.views.load_canvas_context")
+def test_saved_effort_estimate_appears_on_assignment_list(
+    load_canvas_context_mock, client,):
+    """A saved effort estimate should appear on the assignments page."""
+
+    # Create and log in the student.
+    user = get_user_model().objects.create_user(
+        username="estimate-display-user",
+    )
+    client.force_login(user)
+
+    # Create the local Assignment that already contains a saved estimate.
+    Assignment.objects.create(
+        user=user,
+        canvas_course_id=42,
+        canvas_assignment_id=101,
+        title="Project 1",
+        course="CS 4300",
+        due_date=timezone.now(),
+        estimated_effort_minutes=120,
+        effort_estimate_source="manual",
+    )
+
+    # Mock the live Canvas assignment with matching Canvas identifiers.
+    load_canvas_context_mock.return_value = {
+        "assignments": [
+            {
+                "canvas_assignment_id": 101,
+                "canvas_course_id": 42,
+                "title": "Project 1",
+                "course_name": "CS 4300",
+                "due_date": timezone.now(),
+                "submitted": False,
+                "priority": "Normal",
+            }
+        ],
+        "canvas_connection_expired": False,
+        "canvas_connection_missing": False,
+        "assignments_unavailable": False,
+        "assignments_unavailable_message": "",
+    }
+
+    # Load the assignments page.
+    response = client.get(
+        reverse("assignment_list")
+    )
+
+    # The page should render successfully.
+    assert response.status_code == 200
+
+    # The saved local effort estimate should be displayed.
+    assert b"Estimated effort: 120 minutes" in response.content
+
+    # Viewing the page must not create a duplicate local Assignment.
+    assert Assignment.objects.filter(
+        user=user,
+        canvas_assignment_id=101,
+    ).count() == 1
+    

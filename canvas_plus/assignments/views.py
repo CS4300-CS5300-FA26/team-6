@@ -117,6 +117,29 @@ def assignment_list(request):
         }
         for assignment in assignments_by_id.values():
             assignment["attachments"] = []
+            assignment["estimated_effort_minutes"] = None
+            assignment["effort_estimate_source"] = None
+        
+        # Load existing local Assignment rows only.
+        # This does not create database records just from viewing the page.
+        local_assignments = Assignment.objects.filter(
+            user=request.user,
+            canvas_assignment_id__in=assignments_by_id,
+        )
+
+        # Merge saved effort-estimate information into the Canvas dictionaries.
+        for local_assignment in local_assignments:
+            canvas_assignment = assignments_by_id.get(
+                local_assignment.canvas_assignment_id
+            )
+
+            if canvas_assignment is not None:
+                canvas_assignment["estimated_effort_minutes"] = (
+                    local_assignment.estimated_effort_minutes
+                )
+                canvas_assignment["effort_estimate_source"] = (
+                    local_assignment.effort_estimate_source
+                )
         # Django supplies model managers dynamically.
         attachments = Attachment.objects.filter(  # pylint: disable=no-member
             user=request.user,
