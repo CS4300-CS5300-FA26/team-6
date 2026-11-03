@@ -49,7 +49,6 @@
               <p class="assignment-course">{{ g.course }}</p>
             </div>
             <p class="assignment-due">Score: {{ g.score|floatformat }}</p>
-            {% include "assignments/attachments.html" with assignment=g %}
           </li>
         {% endfor %}
       </ul>

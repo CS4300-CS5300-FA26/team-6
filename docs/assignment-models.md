@@ -176,6 +176,11 @@ filesystem storage. Production sets all four: `BUCKETEER_AWS_ACCESS_KEY_ID`,
 `BUCKETEER_BUCKET_NAME`. Partial configuration fails at startup, naming missing
 variables without disclosing their values.
 
+The all-empty fallback also applies with `DEBUG=False`: startup checks detect
+partial configuration, not an entirely missing production configuration. Verify
+all four variables on Heroku before deploying uploads; local dyno storage is
+ephemeral and cannot preserve the uploaded bytes across restarts.
+
 Complete configuration selects `storages.backends.s3.S3Storage` with private
 defaults (`default_acl=None`, `querystring_auth=True`, `file_overwrite=False`).
 There is no custom domain or `public/` prefix: uploads remain under
