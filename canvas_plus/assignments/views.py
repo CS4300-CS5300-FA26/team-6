@@ -3,7 +3,7 @@ import requests
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from accounts.canvas_client import (
@@ -18,6 +18,8 @@ from accounts.canvas_client import (
 from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
 from .priority import priority
+from .forms import EffortEstimateForm
+from .models import Assignment
 
 # Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
 COURSE_CACHE_SECONDS = 60 * 60
@@ -78,6 +80,32 @@ def assignment_list(request):
                 assignment["priority"] = priority(
                     assignment["due_date"], assignment["submitted"], now
                 )
+                # Create or update the local database record that mirrors
+                # this Canvas assignment for the signed-in student.
+                local_assignment, _created = Assignment.objects.update_or_create(
+                    user=request.user,
+                    canvas_assignment_id=assignment["id"],
+                    defaults={
+                        "canvas_course_id": assignment["course_id"],
+                        "title": assignment["title"],
+                        "course": assignment["course_name"],
+                        "due_date": assignment["due_date"],
+                    },
+                )
+
+                # Expose the local database ID to the template so local
+                # features such as effort estimation can link to this row.
+                assignment["local_assignment_id"] = local_assignment.id
+
+                # Expose the currently saved effort estimate, if one exists.
+                assignment["estimated_effort_minutes"] = (
+                    local_assignment.estimated_effort_minutes
+                )
+
+                # Expose whether the estimate was automatic or manually overridden.
+                assignment["effort_estimate_source"] = (
+                    local_assignment.effort_estimate_source
+                )
         except (CanvasAuthenticationError, SavedTokenError):
             connection.is_valid = False
             connection.save(update_fields=["is_valid", "updated_at"])
@@ -96,3 +124,56 @@ def assignment_list(request):
         **graded_context,
     }
     return render(request, "assignments/assignment_list.html", context)
+
+@login_required
+def edit_effort_estimate(request, assignment_id):
+    """Allow a student to manually update their own assignment effort estimate."""
+
+    # Retrieve the requested assignment only if it belong to the currently logged-in student.
+    # Including user=request.user prevents one student from editing another student's assignment by changing the URL.
+    assignment = get_object_or_404(
+        Assignment,
+        id=assignment_id,
+        user=request.user,
+    )
+
+    # Handle a submitted manual estimate.
+    if request.method == "POST":
+        # Bind the submitted value to the existing Assignment record.
+        form = EffortEstimateForm(
+            request.POST,
+            instance=assignment,
+        )
+
+        # Only save if the form passes validation.
+        if form.is_valid():
+            # Do not save immediately because we also need to mark the estimate as manually entered.
+            updated_assignment = form.save(commit=False)
+
+            # Record that the student manually changed the estimate.
+            updated_assignment.effort_estimate_source = "manual"
+
+            # Save the updated estimate and source.
+            updated_assignment.save(
+                update_fields=[
+                    "estimated_effort_minutes",
+                    "effort_estimate_source",
+                ]
+            )
+
+            # Return the student to the assignment page/list.
+            return redirect("assignment_list")
+
+    else:
+        # Pre-fill the form with the current effort estimate.
+        form = EffortEstimateForm(instance=assignment)
+
+    # Show the edit form initially or redisplay it with validation errors after an invalid POST.
+    return render(
+        request,
+        "assignments/edit_effort_estimate.html",
+        {
+            "form": form,
+            "assignment": assignment,
+        },
+    )

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- Identify the assignment being updated. -->
+<h1>Edit Effort Estimate</h1>
+
+<h2>{{ assignment.title }}</h2>
+
+<!-- Show the current estimate when one already exists. -->
+{% if assignment.estimated_effort_minutes %}
+    <p>
+        Current estimate:
+        {{ assignment.estimated_effort_minutes }} minutes
+    </p>
+{% else %}
+    <p>No effort estimate is currently available.</p>
+{% endif %}
+
+<!-- Allow the student to enter a manual effort estimate. -->
+<form method="post">
+
+    <!-- Required protection for Django POST forms. -->
+    {% csrf_token %}
+
+    <!-- Display validation errors associated with the form. -->
+    {{ form.non_field_errors }}
+
+    <!-- Render the effort estimate field and its validation errors. -->
+    {{ form.as_p }}
+
+    <!-- Submit the student's manual estimate. -->
+    <button type="submit">
+        Save Estimate
+    </button>
+
+</form>
+
+{% endblock %}
