@@ -35,6 +35,7 @@ def assignment_result(due_date):
     return {
         "title": ASSIGNMENT_TITLE,
         "course_name": COURSE["name"],
+        "canvas_assignment_id": 101, "canvas_course_id": 42,
         "due_date": due_date,
         "submitted": False,
     }

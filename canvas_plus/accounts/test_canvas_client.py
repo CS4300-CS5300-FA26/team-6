@@ -155,6 +155,7 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
     """Return upcoming assignments with a UTC due date and their course name."""
     courses = [{"id": 42, "name": "CS 4300"}]
     assignments = [{
+        "id": 101,
         "name": "Project 1",
         "due_at": "2026-10-22T18:30:00-06:00",
     }]
@@ -165,6 +166,8 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
         result = list_upcoming_assignments("fake-token", courses)
 
     assert result == [{
+        "canvas_assignment_id": 101,
+        "canvas_course_id": 42,
         "title": "Project 1",
         "course_name": "CS 4300",
         "due_date": datetime(2026, 10, 23, 0, 30, tzinfo=timezone.utc),
@@ -190,13 +193,15 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
     with patch(
         "accounts.canvas_client.requests.get",
         side_effect=[
-            response([{"name": "Project 1", "due_at": None}]),
+            response([{"id": 101, "name": "Project 1", "due_at": None}]),
             response([]),
         ],
     ):
         result = list_upcoming_assignments("fake-token", courses)
 
     assert result == [{
+        "canvas_assignment_id": 101,
+        "canvas_course_id": 42,
         "title": "Project 1",
         "course_name": "CS 4300",
         "due_date": None,
@@ -216,7 +221,7 @@ def test_upcoming_assignments_reject_malformed_due_dates(due_at, message):
     courses = [{"id": 42, "name": "CS 4300"}]
     with patch(
         "accounts.canvas_client.requests.get",
-        return_value=response([{"name": "Project 1", "due_at": due_at}]),
+        return_value=response([{"id": 113, "name": "Project 1", "due_at": due_at}]),
     ):
         with pytest.raises(CanvasAPIError, match=message):
             list_upcoming_assignments("fake-token", courses)
@@ -251,20 +256,23 @@ def test_upcoming_assignments_are_sorted_by_due_date_across_courses():
     ]
     responses = [
         response([
-            {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
-            {"name": "No due date", "due_at": None},
+            {"id": 105, "name": "Later", "due_at": "2026-10-24T18:30:00Z"},
+            {"id": 106, "name": "No due date", "due_at": None},
         ]),
         response([]),
-        response([{"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"}]),
+        response([{"id": 107, "name": "Earlier", "due_at": "2026-10-23T18:30:00Z"}]),
         response([]),
     ]
     with patch("accounts.canvas_client.requests.get", side_effect=responses):
         result = list_upcoming_assignments("fake-token", courses)
 
-    assert [assignment["title"] for assignment in result] == [
-        "Earlier",
-        "Later",
-        "No due date",
+    assert [
+        (assignment["title"], assignment["canvas_assignment_id"], assignment["canvas_course_id"])
+        for assignment in result
+    ] == [
+        ("Earlier", 107, 84),
+        ("Later", 105, 42),
+        ("No due date", 106, 42),
     ]
 
 
@@ -277,14 +285,14 @@ def test_multiple_undated_assignments_sort_after_dated_in_original_order():
     ]
     responses = [
         response([
-            {"name": "Undated A", "due_at": None},
-            {"name": "Later", "due_at": "2026-10-24T18:30:00Z"},
-            {"name": "Undated B", "due_at": None},
+            {"id": 108, "name": "Undated A", "due_at": None},
+            {"id": 109, "name": "Later", "due_at": "2026-10-24T18:30:00Z"},
+            {"id": 110, "name": "Undated B", "due_at": None},
         ]),
         response([]),
         response([
-            {"name": "Undated C", "due_at": None},
-            {"name": "Earlier", "due_at": "2026-10-23T18:30:00Z"},
+            {"id": 111, "name": "Undated C", "due_at": None},
+            {"id": 112, "name": "Earlier", "due_at": "2026-10-23T18:30:00Z"},
         ]),
         response([]),
     ]
@@ -304,7 +312,10 @@ def test_multiple_undated_assignments_sort_after_dated_in_original_order():
 def test_only_undated_assignments_keep_original_order():
     """A result set with no due dates at all sorts without error."""
     courses = [{"id": 42, "name": "CS 4300"}]
-    payload = [{"name": "First", "due_at": None}, {"name": "Second", "due_at": None}]
+    payload = [
+        {"id": 103, "name": "First", "due_at": None},
+        {"id": 104, "name": "Second", "due_at": None},
+    ]
     with patch(
         "accounts.canvas_client.requests.get",
         side_effect=[response(payload), response([])],
@@ -345,8 +356,8 @@ def test_upcoming_assignments_follow_pagination_without_repeating_query_params()
     with patch(
         "accounts.canvas_client.requests.get",
         side_effect=[
-            response([{"name": "Project 1", "due_at": None}], next_url=next_url),
-            response([{"name": "Project 2", "due_at": None}]),
+            response([{"id": 116, "name": "Project 1", "due_at": None}], next_url=next_url),
+            response([{"id": 117, "name": "Project 2", "due_at": None}]),
             response([]),
         ],
     ) as get:
@@ -381,7 +392,9 @@ def test_upcoming_assignments_reject_unauthorized_pagination_links():
             list_upcoming_assignments("fake-token", courses)
 
     assert get.call_count >= 1
-    assert all(call.args[0].startswith("https://canvas.example.edu/") for call in get.call_args_list)
+    assert all(
+        call.args[0].startswith("https://canvas.example.edu/") for call in get.call_args_list
+    )
 
 
 @pytest.mark.unit
@@ -435,8 +448,8 @@ def test_overdue_assignments_are_included_and_sorted_first():
     with patch(
         "accounts.canvas_client.requests.get",
         side_effect=[
-            response([{"name": "Soon", "due_at": "2026-10-23T18:30:00Z"}]),
-            response([{"name": "Late", "due_at": "2026-10-20T18:30:00Z"}]),
+            response([{"id": 118, "name": "Soon", "due_at": "2026-10-23T18:30:00Z"}]),
+            response([{"id": 119, "name": "Late", "due_at": "2026-10-20T18:30:00Z"}]),
         ],
     ):
         result = list_upcoming_assignments("fake-token", courses)
@@ -492,7 +505,7 @@ ABSENT = object()
 def test_submission_status_is_normalized(submission, submitted):
     """A missing, unsubmitted, submitted, or graded submission sets the flag."""
     courses = [{"id": 42, "name": "CS 4300"}]
-    assignment = {"name": "Project 1", "due_at": None}
+    assignment = {"id": 101, "name": "Project 1", "due_at": None}
     if submission is not ABSENT:
         assignment["submission"] = submission
     with patch(
@@ -502,6 +515,8 @@ def test_submission_status_is_normalized(submission, submitted):
         result = list_upcoming_assignments("fake-token", courses)
 
     assert result == [{
+        "canvas_assignment_id": 101,
+        "canvas_course_id": 42,
         "title": "Project 1",
         "course_name": "CS 4300",
         "due_date": None,
@@ -517,7 +532,7 @@ def test_malformed_submission_raises_api_error(submission):
     with patch(
         "accounts.canvas_client.requests.get",
         return_value=response([
-            {"name": "Project 1", "due_at": None, "submission": submission},
+            {"id": 114, "name": "Project 1", "due_at": None, "submission": submission},
         ]),
     ):
         with pytest.raises(CanvasAPIError):
@@ -620,3 +635,17 @@ def test_rejected_token_during_a_concurrent_load(monkeypatch):
     with patch("accounts.canvas_client.requests.get", return_value=response({}, status=401)):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("identity", [{}, {"id": None}, {"id": True}, {"id": False},
+                                      {"id": 0}, {"id": -1}])
+def test_upcoming_assignments_require_positive_nonboolean_assignment_id(identity):
+    """Missing, null, boolean, zero, and negative Canvas identities are unusable."""
+    assignment = {"name": "Project 1", "due_at": None, **identity}
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[response([assignment]), response([])],
+    ):
+        with pytest.raises(CanvasAPIError):
+            list_upcoming_assignments("fake-token", [{"id": 42, "name": "CS 4300"}])
