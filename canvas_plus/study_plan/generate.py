@@ -1,5 +1,7 @@
 """Generate and persist study plans."""
 
+from dataclasses import dataclass
+
 from django.db import transaction
 
 from ai_inference import infer
@@ -25,6 +27,18 @@ from study_plan.validation import (
 
 GENERATE_ATTEMPTS = 2
 
+
+@dataclass(frozen=True)
+class ProposalValidationContext:
+    """Inputs needed to validate a generated proposal."""
+
+    assignment_deadlines: dict
+    free_windows: list
+    occupied_sessions: object
+    assignments: list
+    allow_late: bool
+
+
 def generate_plan(user, assignment_ids, allow_late=False):
     """Generate, validate, and persist a plan for the user's assignments.
 
@@ -43,18 +57,7 @@ def generate_plan(user, assignment_ids, allow_late=False):
             "One or more selected assignments are inaccessible."
         )
 
-    notices = []
-    eligible_assignments = []
-    for assignment in assignments:
-        estimate = getattr(assignment, "estimated_effort_minutes", None)
-        if assignment.due_date is None:
-            notices.append(f"{assignment.title} was skipped because it has no due date.")
-        elif not isinstance(estimate, int) or isinstance(estimate, bool) or estimate <= 0:
-            notices.append(
-                f"{assignment.title} was skipped because it has no positive effort estimate."
-            )
-        else:
-            eligible_assignments.append(assignment)
+    eligible_assignments, notices = _filter_eligible_assignments(assignments)
 
     if not eligible_assignments:
         raise NoEligibleAssignmentsError("No selected assignments are eligible to plan.")
@@ -77,25 +80,14 @@ def generate_plan(user, assignment_ids, allow_late=False):
         for assignment in eligible_assignments
     }
 
-    for attempt in range(GENERATE_ATTEMPTS):
-        try:
-            proposal = infer(system_prompt, content, StudyPlanResponse)
-            validate_plan(
-                proposal,
-                assignment_deadlines,
-                free_windows,
-                occupied_sessions=occupied_sessions,
-                allow_late=allow_late,
-            )
-            validate_estimated_effort(proposal, eligible_assignments)
-        except (AIInferenceError, PlanValidationError) as error:
-            if attempt == GENERATE_ATTEMPTS - 1:
-                raise StudyPlanRetriesExhaustedError(
-                    f"Could not generate a valid study plan after {GENERATE_ATTEMPTS} attempts."
-                ) from error
-        else:
-            break
-
+    validation_context = ProposalValidationContext(
+        assignment_deadlines=assignment_deadlines,
+        free_windows=free_windows,
+        occupied_sessions=occupied_sessions,
+        assignments=eligible_assignments,
+        allow_late=allow_late,
+    )
+    proposal = _request_valid_proposal(system_prompt, content, validation_context)
     notices.extend(proposal.notices)
     notices.extend(_remaining_effort_notices(proposal, eligible_assignments))
     with transaction.atomic():
@@ -113,6 +105,51 @@ def generate_plan(user, assignment_ids, allow_late=False):
             ]
         )
     return persisted_plan
+
+
+def _filter_eligible_assignments(assignments):
+    """Return schedulable assignments and notices for skipped ones."""
+    eligible_assignments = []
+    notices = []
+    for assignment in assignments:
+        estimate = getattr(assignment, "estimated_effort_minutes", None)
+        if assignment.due_date is None:
+            notices.append(f"{assignment.title} was skipped because it has no due date.")
+        elif not isinstance(estimate, int) or isinstance(estimate, bool) or estimate <= 0:
+            notices.append(
+                f"{assignment.title} was skipped because it has no positive effort estimate."
+            )
+        else:
+            eligible_assignments.append(assignment)
+    return eligible_assignments, notices
+
+
+def _request_valid_proposal(system_prompt, content, validation_context):
+    """Retry inference once when it fails or returns an invalid proposal."""
+    for attempt in range(GENERATE_ATTEMPTS):
+        try:
+            proposal = infer(system_prompt, content, StudyPlanResponse)
+            _validate_proposal(proposal, validation_context)
+        except (AIInferenceError, PlanValidationError) as error:
+            if attempt == GENERATE_ATTEMPTS - 1:
+                raise StudyPlanRetriesExhaustedError(
+                    f"Could not generate a valid study plan after {GENERATE_ATTEMPTS} attempts."
+                ) from error
+        else:
+            return proposal
+    raise AssertionError("Inference retry loop ended unexpectedly.")
+
+
+def _validate_proposal(proposal, context):
+    """Validate scheduling constraints and estimated effort."""
+    validate_plan(
+        proposal,
+        context.assignment_deadlines,
+        context.free_windows,
+        occupied_sessions=context.occupied_sessions,
+        allow_late=context.allow_late,
+    )
+    validate_estimated_effort(proposal, context.assignments)
 
 
 def _remaining_effort_notices(proposal, assignments):

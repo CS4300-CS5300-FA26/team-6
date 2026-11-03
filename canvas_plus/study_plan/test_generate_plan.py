@@ -72,9 +72,8 @@ class GeneratePlanTests(TestCase):
         )
         return user, assignment, valid_plan
 
-    @patch("study_plan.generate.infer")
-    def test_long_assignment_split_into_sessions(self, mock_infer):
-        """Effort is split across windows and sub-15-minute remainder is reported."""
+    def create_long_assignment_case(self):
+        """Create a multi-day assignment with two full study windows."""
         user = get_user_model().objects.create_user(username="long-plan-student")
         local_timezone = ZoneInfo(settings.TIME_ZONE)
         first_date = date.today() + timedelta(days=1)
@@ -88,7 +87,6 @@ class GeneratePlanTests(TestCase):
                 start_time=window_start,
                 end_time=window_end,
             )
-
         assignment = Assignment.objects.create(
             user=user,
             canvas_course_id=11,
@@ -105,15 +103,33 @@ class GeneratePlanTests(TestCase):
         proposal_sessions = [
             StudySessionProposal(
                 assignment_id=assignment.id,
-                start=datetime.combine(available_date, window_start, tzinfo=local_timezone),
-                end=datetime.combine(available_date, proposed_end, tzinfo=local_timezone),
+                start=datetime.combine(
+                    available_date,
+                    window_start,
+                    tzinfo=local_timezone,
+                ),
+                end=datetime.combine(
+                    available_date,
+                    window_end,
+                    tzinfo=local_timezone,
+                ),
                 late=False,
             )
-            for available_date, proposed_end in zip(
-                dates[:2],
-                (window_end, window_end),
-            )
+            for available_date in dates[:2]
         ]
+        return user, assignment, local_timezone, window_start, window_end, proposal_sessions
+
+    @patch("study_plan.generate.infer")
+    def test_long_assignment_split_into_sessions(self, mock_infer):
+        """Effort is split across windows and sub-15-minute remainder is reported."""
+        (
+            user,
+            assignment,
+            local_timezone,
+            window_start,
+            window_end,
+            proposal_sessions,
+        ) = self.create_long_assignment_case()
         mock_infer.return_value = StudyPlanResponse(sessions=proposal_sessions)
 
         plan = generate_plan(user, [assignment.id])
@@ -334,12 +350,18 @@ class GeneratePlanTests(TestCase):
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0].assignment_id, eligible_assignment.id)
         self.assertTrue(
-            any("Missing due date" in notice and "no due date" in notice for notice in plan.notices)
+            any(
+                "Missing due date" in notice and "no due date" in notice
+                for notice in plan.notices
+            )
         )
         for title in ("Missing effort estimate", "Zero effort estimate"):
             with self.subTest(assignment=title):
                 self.assertTrue(
-                    any(title in notice and "positive effort estimate" in notice for notice in plan.notices)
+                    any(
+                        title in notice and "positive effort estimate" in notice
+                        for notice in plan.notices
+                    )
                 )
         inference_input = str(mock_infer.call_args.args[1])
         self.assertIn("Eligible assignment", inference_input)
@@ -616,55 +638,15 @@ class GeneratePlanTests(TestCase):
     @patch("study_plan.generate.infer")
     def test_new_plan_avoids_earlier_plans(self, mock_infer):
         """New sessions use remaining time and leave the earlier plan unchanged."""
-        user = get_user_model().objects.create_user(username="existing-plan-student")
-        local_timezone = ZoneInfo(settings.TIME_ZONE)
-        available_date = date.today() + timedelta(days=1)
-        Availability.objects.create(
-            user=user,
-            date=available_date,
-            start_time=time(9),
-            end_time=time(12),
-        )
-        assignment = Assignment.objects.create(
-            user=user,
-            canvas_course_id=11,
-            canvas_assignment_id=104,
-            title="Assignment alongside existing plan",
-            course="Biology",
-            due_date=datetime.combine(
-                available_date + timedelta(days=1),
-                time(17),
-                tzinfo=local_timezone,
-            ),
-            estimated_effort_minutes=60,
-        )
-
-        earlier_plan = PersistedStudyPlan.objects.create(user=user, notices=[])
-        earlier_start = datetime.combine(
-            available_date,
-            time(10),
-            tzinfo=local_timezone,
-        )
-        earlier_end = datetime.combine(
-            available_date,
-            time(10, 30),
-            tzinfo=local_timezone,
-        )
-        earlier_session = earlier_plan.sessions.create(
-            assignment=assignment,
-            start=earlier_start,
-            end=earlier_end,
-        )
-        proposed_windows = [
-            (
-                datetime.combine(available_date, time(9), tzinfo=local_timezone),
-                datetime.combine(available_date, time(9, 30), tzinfo=local_timezone),
-            ),
-            (
-                datetime.combine(available_date, time(10, 30), tzinfo=local_timezone),
-                datetime.combine(available_date, time(11), tzinfo=local_timezone),
-            ),
-        ]
+        (
+            user,
+            assignment,
+            earlier_start,
+            earlier_end,
+            earlier_session,
+            proposed_windows,
+            expected_free_windows,
+        ) = self.create_existing_plan_case()
         mock_infer.return_value = StudyPlanResponse(
             sessions=[
                 StudySessionProposal(
@@ -693,7 +675,65 @@ class GeneratePlanTests(TestCase):
                 )
 
         inference_content = str(mock_infer.call_args.args[1])
-        for window_start, window_end in [
+        for window_start, window_end in expected_free_windows:
+            with self.subTest(window=(window_start, window_end)):
+                self.assertIn(f'"start": "{window_start.isoformat()}"', inference_content)
+                self.assertIn(
+                    f'"end": "{window_end.isoformat()}"',
+                    inference_content,
+                )
+
+    def create_existing_plan_case(self):
+        """Create a plan occupying the middle of one availability window."""
+        user = get_user_model().objects.create_user(username="existing-plan-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(12),
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=104,
+            title="Assignment alongside existing plan",
+            course="Biology",
+            due_date=datetime.combine(
+                available_date + timedelta(days=1),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            estimated_effort_minutes=60,
+        )
+        earlier_start = datetime.combine(
+            available_date,
+            time(10),
+            tzinfo=local_timezone,
+        )
+        earlier_end = datetime.combine(
+            available_date,
+            time(10, 30),
+            tzinfo=local_timezone,
+        )
+        earlier_plan = PersistedStudyPlan.objects.create(user=user, notices=[])
+        earlier_session = earlier_plan.sessions.create(
+            assignment=assignment,
+            start=earlier_start,
+            end=earlier_end,
+        )
+        proposed_windows = [
+            (
+                datetime.combine(available_date, time(9), tzinfo=local_timezone),
+                datetime.combine(available_date, time(9, 30), tzinfo=local_timezone),
+            ),
+            (
+                datetime.combine(available_date, time(10, 30), tzinfo=local_timezone),
+                datetime.combine(available_date, time(11), tzinfo=local_timezone),
+            ),
+        ]
+        expected_free_windows = [
             (
                 datetime.combine(available_date, time(9), tzinfo=local_timezone),
                 earlier_start,
@@ -702,10 +742,16 @@ class GeneratePlanTests(TestCase):
                 earlier_end,
                 datetime.combine(available_date, time(12), tzinfo=local_timezone),
             ),
-        ]:
-            with self.subTest(window=(window_start, window_end)):
-                self.assertIn(f'"start": "{window_start.isoformat()}"', inference_content)
-                self.assertIn(f'"end": "{window_end.isoformat()}"', inference_content)
+        ]
+        return (
+            user,
+            assignment,
+            earlier_start,
+            earlier_end,
+            earlier_session,
+            proposed_windows,
+            expected_free_windows,
+        )
 
     @patch("study_plan.generate.infer")
     def test_other_users_data_rejected(self, mock_infer):

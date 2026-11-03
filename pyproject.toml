@@ -54,3 +54,6 @@ ignore = [
     "migrations"
     ]
 
+[tool.pylint.typecheck]
+generated-members = ["objects"]
+

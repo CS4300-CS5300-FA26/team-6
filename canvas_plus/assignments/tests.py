@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
-from assignments.models import Assignment
+from assignments.test_helpers import configure_canvas_user
 
 
 @pytest.mark.integration
@@ -22,20 +22,7 @@ class CanvasAssignmentsPageTests(TestCase):
     """The logged-in assignments page displays current Canvas API results."""
 
     def setUp(self):
-        self.settings_override = override_settings(
-            CANVAS_BASE_URL="https://canvas.example.edu",
-            CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
-        )
-        self.settings_override.enable()
-        self.addCleanup(self.settings_override.disable)
-        self.user = get_user_model().objects.create_user(
-            username="canvas-student",
-            password="test-password-123",
-        )
-        self.connection = CanvasConnection(user=self.user, canvas_url="https://canvas.example.edu")
-        self.connection.set_token("fake-canvas-token")
-        self.connection.save()
-        self.client.force_login(self.user)
+        self.user, self.connection = configure_canvas_user(self)
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True)
@@ -370,4 +357,3 @@ class SharedTemplateTests(TestCase):
                     f'<a href="{assignments_url}">Assignments</a>',
                     html=True,
                 )
-                

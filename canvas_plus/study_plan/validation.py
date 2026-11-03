@@ -44,38 +44,55 @@ def validate_plan(
     proposed = []
 
     for session in sessions:
-        assignment_id = getattr(session, "assignment_id", None)
-        if assignment_id not in assignment_deadlines:
-            raise PlanValidationError("A session references an unknown assignment.")
-
-        start = getattr(session, "start", None)
-        end = getattr(session, "end", None)
-        start_utc, end_utc = _normalize_interval((start, end), "proposed session")
-        duration = end_utc - start_utc
-        if duration <= timedelta(0) or duration % timedelta(minutes=15):
-            raise PlanValidationError(
-                "Session duration must be a positive multiple of 15 minutes."
+        proposed.append(
+            _validate_proposed_session(
+                session,
+                assignment_deadlines,
+                available,
+                allow_late,
             )
-
-        if not any(
-            window_start <= start_utc and end_utc <= window_end
-            for window_start, window_end in available
-        ):
-            raise PlanValidationError("A session falls outside availability.")
-
-        deadline = assignment_deadlines[assignment_id]
-        if not _is_aware_datetime(deadline):
-            raise PlanValidationError("Assignment deadlines must be timezone-aware.")
-        is_late = end_utc > deadline.astimezone(datetime_timezone.utc)
-        late_flag = getattr(session, "late", None)
-        if not isinstance(late_flag, bool) or late_flag != is_late:
-            raise PlanValidationError("The session late flag does not match its deadline.")
-        if is_late and not allow_late:
-            raise PlanValidationError("Late sessions require explicit opt-in.")
-
-        proposed.append((start_utc, end_utc))
+        )
 
     _reject_overlaps(proposed, "Sessions in the proposed plan overlap.")
+    _reject_occupied_overlaps(proposed, occupied)
+    return plan
+
+
+def _validate_proposed_session(session, assignment_deadlines, available, allow_late):
+    """Validate one session and return its UTC interval."""
+    assignment_id = getattr(session, "assignment_id", None)
+    if assignment_id not in assignment_deadlines:
+        raise PlanValidationError("A session references an unknown assignment.")
+
+    start_utc, end_utc = _normalize_interval(
+        (getattr(session, "start", None), getattr(session, "end", None)),
+        "proposed session",
+    )
+    duration = end_utc - start_utc
+    if duration <= timedelta(0) or duration % timedelta(minutes=15):
+        raise PlanValidationError(
+            "Session duration must be a positive multiple of 15 minutes."
+        )
+    if not any(
+        window_start <= start_utc and end_utc <= window_end
+        for window_start, window_end in available
+    ):
+        raise PlanValidationError("A session falls outside availability.")
+
+    deadline = assignment_deadlines[assignment_id]
+    if not _is_aware_datetime(deadline):
+        raise PlanValidationError("Assignment deadlines must be timezone-aware.")
+    is_late = end_utc > deadline.astimezone(datetime_timezone.utc)
+    late_flag = getattr(session, "late", None)
+    if not isinstance(late_flag, bool) or late_flag != is_late:
+        raise PlanValidationError("The session late flag does not match its deadline.")
+    if is_late and not allow_late:
+        raise PlanValidationError("Late sessions require explicit opt-in.")
+    return start_utc, end_utc
+
+
+def _reject_occupied_overlaps(proposed, occupied):
+    """Reject proposed sessions that overlap sessions from earlier plans."""
     for proposed_start, proposed_end in proposed:
         if any(
             proposed_start < occupied_end and occupied_start < proposed_end
@@ -84,7 +101,6 @@ def validate_plan(
             raise PlanValidationError(
                 "A proposed session overlaps an earlier plan session."
             )
-    return plan
 
 
 def validate_estimated_effort(plan, assignments):

@@ -37,12 +37,16 @@ def make_plan(*sessions):
 def assert_plan_rejected(
     plan,
     *,
-    availability_windows=AVAILABILITY,
-    assignment_deadlines=ASSIGNMENT_DEADLINES,
+    availability_windows=None,
+    assignment_deadlines=None,
     occupied_sessions=(),
     allow_late=False,
 ):
     """Assert a proposal violates a scheduling rule."""
+    if availability_windows is None:
+        availability_windows = AVAILABILITY
+    if assignment_deadlines is None:
+        assignment_deadlines = ASSIGNMENT_DEADLINES
     with pytest.raises(PlanValidationError):
         validate_plan(
             plan,
