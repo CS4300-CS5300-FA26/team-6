@@ -47,12 +47,15 @@ team-6/
 │   │   ├── urls.py
 │   │   ├── views.py
 │   │   └── wsgi.py
-│   ├── courses/                        # Current course list
+│   ├── courses/                        # Current course list and course pages
 │   │   ├── templates/courses/
+│   │   │   ├── course_detail.html
 │   │   │   └── course_list.html
 │   │   ├── apps.py
 │   │   ├── current.py                  # Which courses count as current
+│   │   ├── syllabus.py                 # Makes Canvas syllabus HTML safe to show
 │   │   ├── test_current.py
+│   │   ├── test_syllabus.py
 │   │   ├── tests.py
 │   │   ├── urls.py
 │   │   └── views.py
@@ -64,6 +67,7 @@ team-6/
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
 │   │   ├── connect_canvas.feature
+│   │   ├── course_page.feature
 │   │   ├── courses.feature
 │   │   └── landing_page.feature
 │   ├── templates/                      # Shared layout and landing page
@@ -347,3 +351,7 @@ Stephen used AI to assist with creating the inference function, content builder,
 #### Current course list
 
 Jackson McGuire used Claude Code to help build the course list. Jackson ran every test red and green himself and verified the page against his real Canvas courses on a local server.
+
+#### Course page with syllabus
+
+Jackson McGuire used Claude Code to help build the course page. Jackson ran every test red and green himself and verified the page against his real Canvas syllabi on a local server.
