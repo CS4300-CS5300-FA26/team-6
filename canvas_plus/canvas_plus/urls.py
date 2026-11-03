@@ -34,6 +34,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('assignments/', include("assignments.urls")),
     path('accounts/', include("accounts.urls")),
+    path('courses/', include("courses.urls")),
     path('availability/', include("availability.urls")),
     path('health/', health_check, name="health_check"),
 ]
