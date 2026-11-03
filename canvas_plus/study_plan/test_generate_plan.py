@@ -301,6 +301,38 @@ class GeneratePlanTests(TestCase):
                 )
 
     @patch("study_plan.generate.infer")
+    def test_out_of_availability_proposal_rejected(self, mock_infer):
+        """Repeated out-of-window proposals exhaust retries without saving a plan."""
+        user, assignment, _ = self.create_retry_case("outside-window-student")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        invalid_plan = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=assignment.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(10),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(10, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+            ],
+        )
+        mock_infer.return_value = invalid_plan
+
+        with self.assertRaises(StudyPlanRetriesExhaustedError):
+            generate_plan(user, [assignment.id])
+
+        self.assertEqual(mock_infer.call_count, 2)
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=user).exists())
+
+    @patch("study_plan.generate.infer")
     def test_inference_input_is_deadline_ordered(self, mock_infer):
         """Inference receives deadline-ordered assignments and merged free time."""
         user = get_user_model().objects.create_user(username="ordered-plan-student")
