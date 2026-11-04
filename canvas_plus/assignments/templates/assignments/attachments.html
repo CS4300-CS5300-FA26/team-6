@@ -1,0 +1,17 @@
+{% if assignment.attachments %}
+  <ul class="assignment-attachments">
+    {% for attachment in assignment.attachments %}
+      <li>
+        <a id="attachment-name-{{ attachment.pk }}" href="{% url 'open_attachment' attachment_id=attachment.pk %}">{{ attachment.study_file.original_name }}</a>
+        <a id="attachment-remove-{{ attachment.pk }}" aria-labelledby="attachment-remove-{{ attachment.pk }} attachment-name-{{ attachment.pk }}" href="{% url 'remove_attachment' attachment_id=attachment.pk %}">Remove</a>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% if assignment.canvas_assignment_id and assignment.canvas_course_id %}
+  <form method="post" enctype="multipart/form-data" action="{% url 'upload_attachments' course_id=assignment.canvas_course_id assignment_id=assignment.canvas_assignment_id %}">
+    {% csrf_token %}
+    <label>Study files <input type="file" name="files" multiple required></label>
+    <button type="submit">Attach files</button>
+  </form>
+{% endif %}

@@ -1,11 +1,16 @@
 """Django views"""
+import logging
+
 import requests
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.core.exceptions import ImproperlyConfigured
-from django.shortcuts import render
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -17,10 +22,13 @@ from accounts.canvas_client import (
 )
 from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
+from .models import Attachment
 from .priority import priority
+from .uploads import save_attachments, validate_batch
 
 # Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
 COURSE_CACHE_SECONDS = 60 * 60
+logger = logging.getLogger(__name__)
 
 
 @sensitive_variables("token")
@@ -38,15 +46,14 @@ def recently_graded_context(token, courses, session):
         return {"show_recently_graded": True, "recently_graded": recent_grades(submissions)}
 
 
-@login_required
 @sensitive_variables("token")
-def assignment_list(request):
-    """Show the signed-in student's current upcoming Canvas assignments."""
+def load_canvas_context(user):
+    """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
     connection_expired = False
     connection_missing = False
-    connection = CanvasConnection.objects.filter(user=request.user).first()
+    connection = CanvasConnection.objects.filter(user=user).first()
     graded_context = {}
 
     if connection is None:
@@ -85,7 +92,7 @@ def assignment_list(request):
         except (CanvasAPIError, ImproperlyConfigured):
             unavailable_message = "Unable to load upcoming assignments. Please try again."
 
-    context = {
+    return {
         "assignments": assignments,
         "canvas_connection_expired": connection_expired,
         "canvas_connection_missing": connection_missing,
@@ -95,4 +102,98 @@ def assignment_list(request):
         "assignments_unavailable_message": unavailable_message,
         **graded_context,
     }
+
+
+@login_required
+def assignment_list(request):
+    """Show the signed-in student's current upcoming Canvas assignments."""
+    context = load_canvas_context(request.user)
+    if not context["assignments_unavailable"]:
+        assignments_by_id = {
+            item["canvas_assignment_id"]: item for item in context["assignments"]
+        }
+        for assignment in assignments_by_id.values():
+            assignment["attachments"] = []
+        # Django supplies model managers dynamically.
+        attachments = Attachment.objects.filter(  # pylint: disable=no-member
+            user=request.user,
+            assignment__canvas_assignment_id__in=assignments_by_id,
+        ).select_related("study_file", "assignment").order_by("study_file__uploaded_at")
+        for attachment in attachments:
+            assignments_by_id[attachment.assignment.canvas_assignment_id]["attachments"].append(
+                attachment
+            )
     return render(request, "assignments/assignment_list.html", context)
+
+
+@login_required
+@require_POST
+def upload_attachments(request, course_id, assignment_id):
+    """Attach a validated file batch to the student's live Canvas assignment."""
+    files = request.FILES.getlist("files")
+    try:
+        validate_batch(files)
+    except ValidationError as error:
+        messages.error(request, error.messages[0])
+        return redirect("assignment_list")
+
+    context = load_canvas_context(request.user)
+    if context["assignments_unavailable"]:
+        messages.error(request, "Unable to load Canvas assignments. Please reconnect or try again.")
+        return redirect("assignment_list")
+
+    assignment = next((
+        item for item in context["assignments"]
+        if item["canvas_assignment_id"] == assignment_id
+        and item["canvas_course_id"] == course_id
+    ), None)
+    if assignment is None:
+        raise Http404("Assignment not found")
+
+    try:
+        save_attachments(request.user, assignment, files)
+    # Production S3 storage raises botocore errors beyond OSError.
+    except Exception:  # pylint: disable=broad-exception-caught
+        messages.error(request, "Unable to upload files. Please try again.")
+    else:
+        messages.success(request, "Files attached successfully.")
+    return redirect("assignment_list")
+
+
+@login_required
+@require_GET
+def open_attachment(request, attachment_id):
+    """Download an owned attachment without exposing a public storage URL."""
+    attachment = get_object_or_404(Attachment, pk=attachment_id, user=request.user)
+    study_file = attachment.study_file
+    try:
+        # S3 opens lazily, so check for a missing object before starting a response.
+        if not study_file.file.storage.exists(study_file.file.name):
+            raise FileNotFoundError("Stored attachment is missing")
+        stored_file = study_file.file.open("rb")
+        try:
+            # FileResponse seeks to set Content-Length, which is when S3 fetches the object.
+            # ponytail: The dyno streams the bytes (max 25 MiB); signed URLs are the upgrade.
+            return FileResponse(
+                stored_file, as_attachment=True, filename=study_file.original_name,
+            )
+        except Exception:
+            stored_file.close()
+            raise
+    # Storage backends raise provider-specific exceptions beyond OSError.
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("Unable to open attachment %s", attachment_id)
+        messages.error(request, "Unable to open file. Please try again.")
+        return redirect("assignment_list")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def remove_attachment(request, attachment_id):
+    """Confirm removal, then unlink only the student's chosen attachment."""
+    attachment = get_object_or_404(Attachment, pk=attachment_id, user=request.user)
+    if request.method == "POST":
+        attachment.delete()
+        messages.success(request, "File removed.")
+        return redirect("assignment_list")
+    return render(request, "assignments/remove_attachment.html", {"attachment": attachment})

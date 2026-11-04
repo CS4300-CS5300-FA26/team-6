@@ -4,6 +4,9 @@
 
 {% block content %}
   <h1>Upcoming Assignments</h1>
+  {% for message in messages %}
+    <p class="{{ message.tags }}" role="status">{{ message }}</p>
+  {% endfor %}
   {% if assignments_unavailable %}
     {% if not canvas_connection_expired %}
       <p role="status">
@@ -26,6 +29,7 @@
           {% if assignment.due_date %}
             <p class="assignment-due">Due <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y g:i A" }}</time></p>
           {% endif %}
+          {% include "assignments/attachments.html" with assignment=assignment %}
         </li>
       {% endfor %}
     </ul>

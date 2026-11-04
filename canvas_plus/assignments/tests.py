@@ -1,5 +1,8 @@
 """Tests for the Canvas-backed assignments page."""
 
+# Independent request test classes deliberately repeat connection setup.
+# pylint: disable=duplicate-code
+
 from datetime import timedelta, timezone as datetime_timezone
 from unittest.mock import ANY, patch
 
@@ -14,7 +17,6 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
-from assignments.models import Assignment
 
 
 @pytest.mark.integration
@@ -54,6 +56,7 @@ class CanvasAssignmentsPageTests(TestCase):
         assignments = [{
             "title": "Canvas Project 1",
             "course_name": "CS 4300",
+            "canvas_assignment_id": 101, "canvas_course_id": 42,
             "due_date": due_date,
             "submitted": False,
         }]
@@ -153,24 +156,28 @@ class CanvasAssignmentsPageTests(TestCase):
             {
                 "title": "Turned in",
                 "course_name": "CS 4300",
+                "canvas_assignment_id": 102, "canvas_course_id": 42,
                 "due_date": now + timedelta(hours=30),
                 "submitted": True,
             },
             {
                 "title": "Missed",
                 "course_name": "CS 4300",
+                "canvas_assignment_id": 103, "canvas_course_id": 42,
                 "due_date": now - timedelta(hours=2),
                 "submitted": False,
             },
             {
                 "title": "Close",
                 "course_name": "CS 4300",
+                "canvas_assignment_id": 104, "canvas_course_id": 42,
                 "due_date": now + timedelta(hours=30),
                 "submitted": False,
             },
             {
                 "title": "Far",
                 "course_name": "CS 4300",
+                "canvas_assignment_id": 105, "canvas_course_id": 42,
                 "due_date": now + timedelta(days=6),
                 "submitted": False,
             },
@@ -225,12 +232,14 @@ class CanvasAssignmentsPageTests(TestCase):
             [{
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
+                "canvas_assignment_id": 106, "canvas_course_id": 42,
                 "due_date": earlier_due_date,
                 "submitted": False,
             }],
             [{
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
+                "canvas_assignment_id": 106, "canvas_course_id": 42,
                 "due_date": revised_due_date,
                 "submitted": False,
             }],
@@ -370,4 +379,3 @@ class SharedTemplateTests(TestCase):
                     f'<a href="{assignments_url}">Assignments</a>',
                     html=True,
                 )
-                

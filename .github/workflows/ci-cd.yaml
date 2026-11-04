@@ -17,6 +17,11 @@ jobs:
     env:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "fake-secret-key"
+      # Production settings require a bucket at startup; settings_test still uploads to disk.
+      BUCKETEER_AWS_ACCESS_KEY_ID: "fake-access"
+      BUCKETEER_AWS_SECRET_ACCESS_KEY: "fake-secret"
+      BUCKETEER_AWS_REGION: "fake-region"
+      BUCKETEER_BUCKET_NAME: "fake-bucket"
 
     # If I can get the container image used for DevEdu I won't need to setup python.
     # container:

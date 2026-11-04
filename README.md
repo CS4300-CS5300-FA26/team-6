@@ -168,6 +168,14 @@ settings load `.env` automatically for local runs. `.env` is ignored by Git; do
 not commit it or use the example secret in production. Configure production
 secrets through the server's environment variables instead.
 
+Leave all four `BUCKETEER_*` entries empty locally: uploaded files are stored in
+the Git-ignored `canvas_plus/media/` directory. Tests also use filesystem storage.
+Production must set all four entries to persist private uploads in Bucketeer:
+with `DJANGO_DEBUG=False`, missing entries prevent startup, and partial
+configuration prevents startup in every mode. See the
+[assignment upload guide](docs/assignment-models.md#upload-storage) for the storage
+options and quotas. Uploaded files have no public media route.
+
 ## Running the application
 
 From the repository root, enter the Django project directory and apply the database migrations:
@@ -351,7 +359,3 @@ Stephen used AI to assist with creating the inference function, content builder,
 #### Current course list
 
 Jackson McGuire used Claude Code to help build the course list. Jackson ran every test red and green himself and verified the page against his real Canvas courses on a local server.
-
-#### Course page with syllabus
-
-Jackson McGuire used Claude Code to help build the course page. Jackson ran every test red and green himself and verified the page against his real Canvas syllabi on a local server.

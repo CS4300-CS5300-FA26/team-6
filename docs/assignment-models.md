@@ -1,9 +1,10 @@
-# Assignment, StudyFile, and Attachment models (issue #42 foundation)
+# Assignment uploads, StudyFile, and Attachment models (issue #42)
 
 Issue #42 lets a student attach and manage files on their assignments. This
-slice lands only the data foundation: user-owned local assignment records and
-reusable files, so attachments and the estimates planned in issue #49 can
-persist independently of live Canvas API calls.
+implementation includes user-owned local assignment records, reusable files,
+and uploads, private downloads, and unlinking from assignment cards. Attachments
+and the estimates planned in issue #49 can persist independently of live Canvas
+API calls.
 
 **User story:** As a student, I want user-owned local Canvas assignment records
 and reusable files, so attachments and future estimates can persist
@@ -123,9 +124,9 @@ study file, and raises `ValidationError` when they do not match.
 `full_clean()` on every save.
 
 **Limit:** bulk writes skip `Model.save()` entirely. `bulk_create()`,
-queryset `update()`, and raw SQL bypass this validation; the upload and
-attachment write endpoints planned for later #42 work must scope every queryset
-to `request.user` and validate ownership themselves.
+queryset `update()`, and raw SQL bypass this validation. Uploads scope writes
+to `request.user` and verify the assignment against that student's live Canvas
+data; future attachment write endpoints must enforce the same ownership rules.
 
 ## Migration policy for legacy rows (0003)
 
@@ -147,9 +148,90 @@ rows need the reconciliation above first. Keep the dashboard on live Canvas data
 page loads must not create or synchronize local rows. Matching live assignments to
 local data uses the Canvas assignment ID and the signed-in user.
 
+## Upload flow and limits
+
+The signed-in student chooses one or more files on an assignment card. The POST
+validates the whole batch before loading Canvas data, then verifies both the
+course and assignment IDs against the student's current Canvas assignments.
+An empty batch or unavailable Canvas data is rejected; an assignment outside
+that list returns 404 without saving anything.
+
+The combined batch limit is **26,214,400 bytes (25 MiB)**, inclusive. The UI calls
+this 25 MB; larger batches receive **"File batch exceeds 25 MB limit"**. Files
+are saved together with their StudyFile and Attachment rows in a database
+transaction, creating the local Assignment on demand. If any write fails, all
+database writes roll back and cleanup attempts to delete every file already
+stored for that batch. Cleanup failures are logged and do not stop the remaining
+cleanup attempts. The student receives a retry message rather than partial success.
+
+Each valid upload reloads Canvas data once during the POST and once on the
+redirect to the assignment list. This is a known cost that could later be
+reduced with a single-assignment lookup.
+
+## Opening and removing attachments
+
+**User story:** As a student, I want to download or remove an attached file from
+its assignment card, so I can use my materials and keep the card relevant.
+
+Each file name links to `open_attachment` (GET
+`attachments/<attachment_id>/`). The signed-in owner receives a Django
+`FileResponse` download with the original name. All content is served as an
+attachment, including HTML and SVG, so uploaded documents cannot execute inline
+on the application's origin. Django encodes hostile names safely in the header.
+Filesystem and S3 use the same storage API, without public media or signed URLs.
+Storage existence is checked before opening because S3 opens lazily. Missing
+objects and storage failures during opening are logged and redirect to the
+assignment list with **"Unable to open file. Please try again."** The dyno
+streams the bytes (at most 25 MiB per uploaded batch); signed URLs are a future
+upgrade if streaming becomes a constraint.
+
+Each card also has an accessible Remove link to `remove_attachment` (GET/POST
+`attachments/<attachment_id>/remove/`). GET shows the file name, a CSRF-protected
+Remove button, and a Cancel link to the assignment list. GET and Cancel change
+nothing. POST deletes only that Attachment row and redirects with **"File
+removed."** The Assignment, StudyFile, stored bytes, and other attachments remain;
+a repeated POST returns 404. Unsupported methods return 405. Both endpoints
+require login and look up attachments by the signed-in user: another student's
+open, confirmation, or removal request returns 404.
+
+Removal leaves bytes in the bucket, counting against the **5 GB storage quota**,
+until a file-lifecycle decision is made. It does not reclaim storage.
+
+The request contracts are automated in `test_attachment_actions.py`, including
+ownership, exact downloads, header safety, missing/unavailable storage, CSRF,
+confirmation cancellation, and selective unlinking. The three remaining issue
+#42 scenarios run verbatim in `features/assignment_attachments.feature` using
+real requests, temporary storage, and faked Canvas results.
+
+## Upload storage
+
+With `DEBUG=True` and all four Bucketeer variables empty or absent, uploads use
+Django's FileSystemStorage in `canvas_plus/media/` (ignored by Git). Tests
+explicitly use filesystem storage. Production sets all four:
+`BUCKETEER_AWS_ACCESS_KEY_ID`, `BUCKETEER_AWS_SECRET_ACCESS_KEY`,
+`BUCKETEER_AWS_REGION`, and `BUCKETEER_BUCKET_NAME`.
+
+Partial configuration always fails at startup, and with `DEBUG=False` so does
+missing configuration, naming missing variables without disclosing their values.
+Dyno storage is ephemeral, so production must not appear to accept uploads it
+cannot keep. Verify all four variables on Heroku before deploying.
+
+Complete configuration selects `storages.backends.s3.S3Storage` with private
+defaults (`default_acl=None`, `querystring_auth=True`, `file_overwrite=False`).
+There is no custom domain or `public/` prefix: uploads remain under
+`study_files/<user id>/` in the private bucket. Bucketeer's `public/` prefix is
+world-readable and must not be used for these uploads. There is no public media
+route. Static files retain their WhiteNoise backend, with Django's plain static
+backend in tests.
+
+The provisioned Heroku Bucketeer add-on uses the **Hobbyist** plan
+(~$0.007/hour, max $5/month): **5 GB storage**, **5 GB bandwidth**, and
+**0 days data retention**. Upgrade (Micro, max $15/month) before either quota
+is reached.
+
 ## Boundaries (deliberately out of scope here)
 
-- Upload endpoints, the 25 MB limit, and storage configuration: later #42 work.
+- Uploading to assignments without dashboard cards is not supported.
 - Category choices and picker UX: issue #44; the field stays a free 50-character string.
 - Estimate fields on Assignment: issue #49.
 - Physical file deletion when a StudyFile row goes away: no delete logic exists

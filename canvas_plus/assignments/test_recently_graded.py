@@ -18,6 +18,7 @@ COURSES = [{"id": 42, "name": "CS 4300"}]
 UPCOMING = [{
     "title": "Canvas Project 1",
     "course_name": "CS 4300",
+    "canvas_assignment_id": 101, "canvas_course_id": 42,
     "due_date": timezone.now() + timedelta(days=7),
     "submitted": False,
 }]
