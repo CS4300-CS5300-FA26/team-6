@@ -51,7 +51,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="generate_plan">
         {% if plan_assignments %}
-            <fieldset>
+            <fieldset class="plan-assignment-list">
                 <legend>Assignments to schedule</legend>
                 {% for assignment in plan_assignments %}
                     <label>
