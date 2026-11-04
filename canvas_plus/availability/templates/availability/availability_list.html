@@ -69,6 +69,12 @@
             <p>No assignments are available to schedule.</p>
         {% endif %}
         {% if generation_error %}<p role="alert">{{ generation_error }}</p>{% endif %}
+        {% if generation_debug %}
+            <details>
+                <summary>Debug details</summary>
+                <pre>{{ generation_debug }}</pre>
+            </details>
+        {% endif %}
     </form>
 
     <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->

@@ -54,6 +54,7 @@ def generate_plan(user, assignment_ids, allow_late=False):
     }
     prompt_content = _build_prompt_content(eligible, availability, allow_late)
     proposal = None
+    last_error = None
     for _ in range(MAX_ATTEMPTS):
         try:
             proposal = infer(
@@ -73,13 +74,14 @@ def generate_plan(user, assignment_ids, allow_late=False):
                 allow_late=allow_late,
             )
             break
-        except (AIInferenceError, PlanValidationError):
+        except (AIInferenceError, PlanValidationError) as error:
+            last_error = error
             proposal = None
 
     if proposal is None:
         raise StudyPlanRetriesExhaustedError(
             "AI could not create a valid study plan after retrying."
-        )
+        ) from last_error
 
     with transaction.atomic():
         plan = PersistedStudyPlan.objects.create(
