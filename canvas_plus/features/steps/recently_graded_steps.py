@@ -113,6 +113,8 @@ def step_old_score_hidden(context):
 def step_upcoming_assignments(context):
     context.upcoming_title = "Canvas Project 1"
     context.upcoming_assignments.return_value = [{
+        "id": 201,
+        "course_id": 42,
         "title": context.upcoming_title,
         "course_name": "Software Engineering",
         "canvas_assignment_id": 101, "canvas_course_id": 42,

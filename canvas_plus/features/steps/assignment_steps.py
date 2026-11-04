@@ -33,6 +33,9 @@ def parse_due_date(value):
 def assignment_result(due_date):
     """Build one normalized result from the assignment-read contract."""
     return {
+        "id": 101,
+        "course_id": 42,
+        
         "title": ASSIGNMENT_TITLE,
         "course_name": COURSE["name"],
         "canvas_assignment_id": 101, "canvas_course_id": 42,
