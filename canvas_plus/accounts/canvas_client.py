@@ -198,6 +198,7 @@ def _normalize_assignment(assignment, course_name, course_id):
         "course_name": course_name,
         "due_date": due_date,
         "submitted": submitted,
+        "description": assignment.get("description"),
     }
 
 

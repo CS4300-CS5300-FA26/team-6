@@ -26,6 +26,7 @@ from .models import Attachment, Assignment
 from .priority import priority
 from .uploads import save_attachments, validate_batch
 from .forms import EffortEstimateForm 
+from study_plan.effort_estimation import estimate_and_save_assignment_effort
 
 # Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
 COURSE_CACHE_SECONDS = 60 * 60
@@ -311,9 +312,33 @@ def edit_effort_estimate(request, course_id, assignment_id):
             return redirect("assignment_list")
 
     else:
-        # Existing estimates are pre-filled.
-        # A Canvas-only assignment receives a blank form without
-        # creating a database row just from viewing the page.
+        # If this Canvas assignment does not already exist locally, create it when the student explicitly opens the effort page.
+        if local_assignment is None:
+            local_assignment = Assignment.objects.create(
+                user=request.user,
+                canvas_course_id=course_id,
+                canvas_assignment_id=assignment_id,
+                title=canvas_assignment["title"],
+                course=canvas_assignment["course_name"],
+                due_date=canvas_assignment["due_date"],
+            )
+
+            # Attempt to generate an automatic effort estimate using the assignment description supplied by Canvas.
+            # If there is not enough information, the helper returns None and the student can enter an estimate manually instead.
+            estimate_and_save_assignment_effort(
+                assignment=local_assignment,
+                assignment_information=canvas_assignment.get("description"),
+            )
+
+            # Add any newly generated estimate to the template context.
+            canvas_assignment["estimated_effort_minutes"] = (
+                local_assignment.estimated_effort_minutes
+            )
+            canvas_assignment["effort_estimate_source"] = (
+                local_assignment.effort_estimate_source
+            )
+
+        # Pre-fill the form with either the saved automatic estimate or an existing manual estimate.
         form = EffortEstimateForm(instance=local_assignment)
 
     # Display the manual effort-estimate form.

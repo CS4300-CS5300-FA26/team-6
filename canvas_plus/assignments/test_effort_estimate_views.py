@@ -257,3 +257,83 @@ def test_saved_effort_estimate_appears_on_assignment_list(
         canvas_assignment_id=101,
     ).count() == 1
     
+@pytest.mark.django_db
+@patch("assignments.views.estimate_and_save_assignment_effort")
+@patch("assignments.views.load_canvas_context")
+def test_opening_effort_page_generates_automatic_estimate(
+    load_canvas_context_mock,
+    estimate_and_save_mock,
+    client,
+):
+    """Opening the effort page should generate an estimate for a new assignment."""
+
+    # Create and log in the student.
+    user = get_user_model().objects.create_user(
+        username="automatic-effort-user",
+    )
+    client.force_login(user)
+
+    # Mock the Canvas assignment returned to the effort-edit view.
+    load_canvas_context_mock.return_value = {
+        "assignments": [
+            {
+                "canvas_assignment_id": 101,
+                "canvas_course_id": 42,
+                "title": "Research Paper",
+                "course_name": "CS 4300",
+                "due_date": timezone.now(),
+                "submitted": False,
+                "priority": "Normal",
+                "description": (
+                    "Write a five-page research paper using "
+                    "at least five academic sources."
+                ),
+            }
+        ],
+        "canvas_connection_expired": False,
+        "canvas_connection_missing": False,
+        "assignments_unavailable": False,
+        "assignments_unavailable_message": "",
+    }
+
+    # Mimic the real estimator by saving an automatic estimate.
+    def save_fake_estimate(assignment, assignment_information):
+        # Confirm the Canvas description reaches the estimator.
+        assert "five-page research paper" in assignment_information
+
+        # Save the same fields the real estimator would update.
+        assignment.estimated_effort_minutes = 90
+        assignment.effort_estimate_source = "automatic"
+        assignment.save(
+            update_fields=[
+                "estimated_effort_minutes",
+                "effort_estimate_source",
+            ]
+        )
+
+    estimate_and_save_mock.side_effect = save_fake_estimate
+
+    # Open the real effort-estimation page.
+    response = client.get(
+        reverse(
+            "edit_effort_estimate",
+            args=[42, 101],
+        )
+    )
+
+    # The page should render successfully.
+    assert response.status_code == 200
+
+    # The effort page should create the local Assignment.
+    assignment = Assignment.objects.get(
+        user=user,
+        canvas_course_id=42,
+        canvas_assignment_id=101,
+    )
+
+    # The automatic estimate should have been persisted.
+    assert assignment.estimated_effort_minutes == 90
+    assert assignment.effort_estimate_source == "automatic"
+
+    # The live view should have called the estimator exactly once.
+    estimate_and_save_mock.assert_called_once()
