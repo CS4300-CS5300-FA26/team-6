@@ -340,77 +340,33 @@ def test_opening_effort_page_generates_automatic_estimate(
 
 
 @pytest.mark.django_db
-def test_assignment_list_estimates_only_assignments_missing_an_estimate(client):
-    """The assignments page saves local rows and estimates only missing values."""
-    user = get_user_model().objects.create_user(username="assignment-list-estimates")
+@patch("assignments.views.estimate_and_save_assignment_effort")
+@patch("assignments.views.load_canvas_context")
+def test_assignment_list_does_not_create_rows_or_estimates(
+    load_canvas_context_mock,
+    estimate_and_save_mock,
+    client,
+):
+    """Effort estimation remains an explicit action from the effort page."""
+    user = get_user_model().objects.create_user(username="assignment-list-read-only")
     client.force_login(user)
-    saved_assignment = Assignment.objects.create(
-        user=user,
-        canvas_course_id=42,
-        canvas_assignment_id=201,
-        title="Saved estimate",
-        course="CS 4300",
-        due_date=timezone.now(),
-        estimated_effort_minutes=45,
-        effort_estimate_source="manual",
-    )
-    missing_estimate = Assignment.objects.create(
-        user=user,
-        canvas_course_id=42,
-        canvas_assignment_id=202,
-        title="Missing estimate",
-        course="CS 4300",
-        due_date=timezone.now(),
-    )
-    canvas_assignments = [
-        {
-            "canvas_assignment_id": assignment_id,
+    load_canvas_context_mock.return_value = {
+        "assignments": [{
+            "canvas_assignment_id": 203,
             "canvas_course_id": 42,
-            "title": title,
+            "title": "New assignment",
             "course_name": "CS 4300",
             "due_date": timezone.now(),
             "submitted": False,
             "description": "Complete the assigned coursework.",
             "priority": "Upcoming",
-        }
-        for assignment_id, title in [
-            (201, "Saved estimate"),
-            (202, "Missing estimate"),
-            (203, "New assignment"),
-        ]
-    ]
-
-    def save_estimate(assignment, assignment_information):
-        assert assignment_information == "Complete the assigned coursework."
-        assignment.estimated_effort_minutes = 90
-        assignment.effort_estimate_source = "automatic"
-        assignment.save(update_fields=["estimated_effort_minutes", "effort_estimate_source"])
-
-    canvas_context = {
-        "assignments": canvas_assignments,
+        }],
         "assignments_unavailable": False,
         "canvas_connection_expired": False,
         "canvas_connection_missing": False,
         "assignments_unavailable_message": "",
     }
-    with patch("assignments.views.load_canvas_context", return_value=canvas_context):
-        with patch(
-            "assignments.views.estimate_and_save_assignment_effort",
-            side_effect=save_estimate,
-        ) as estimate_mock:
-            response = client.get(reverse("assignment_list"))
-
+    response = client.get(reverse("assignment_list"))
     assert response.status_code == 200
-    estimated_ids = {
-        call.kwargs["assignment"].canvas_assignment_id
-        for call in estimate_mock.call_args_list
-    }
-    assert estimated_ids == {202, 203}
-    assert Assignment.objects.filter(user=user).count() == 3
-    saved_assignment.refresh_from_db()
-    missing_estimate.refresh_from_db()
-    new_assignment = Assignment.objects.get(user=user, canvas_assignment_id=203)
-    assert saved_assignment.estimated_effort_minutes == 45
-    assert saved_assignment.effort_estimate_source == "manual"
-    assert missing_estimate.estimated_effort_minutes == 90
-    assert new_assignment.estimated_effort_minutes == 90
+    assert Assignment.objects.filter(user=user).count() == 0
+    estimate_and_save_mock.assert_not_called()

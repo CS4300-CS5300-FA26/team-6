@@ -2,7 +2,6 @@
 import logging
 
 import requests
-from ai_inference.exceptions import AIInferenceError
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
@@ -122,59 +121,24 @@ def assignment_list(request):
             assignment["estimated_effort_minutes"] = None
             assignment["effort_estimate_source"] = None
         
-        local_assignments = {
-            assignment.canvas_assignment_id: assignment
-            for assignment in Assignment.objects.filter(
-                user=request.user,
-                canvas_assignment_id__in=assignments_by_id,
-            )
-        }
+        # Load existing local Assignment rows only. Viewing the page does not
+        # create database records or trigger effort estimation.
+        local_assignments = Assignment.objects.filter(
+            user=request.user,
+            canvas_assignment_id__in=assignments_by_id,
+        )
 
-        for assignment_id, canvas_assignment in assignments_by_id.items():
-            assignment_values = {
-                "canvas_course_id": canvas_assignment["canvas_course_id"],
-                "title": canvas_assignment["title"],
-                "course": canvas_assignment["course_name"],
-                "due_date": canvas_assignment.get("due_date"),
-            }
-            local_assignment = local_assignments.get(assignment_id)
-            if local_assignment is None:
-                local_assignment = Assignment.objects.create(
-                    user=request.user,
-                    canvas_assignment_id=assignment_id,
-                    **assignment_values,
+        for local_assignment in local_assignments:
+            canvas_assignment = assignments_by_id.get(
+                local_assignment.canvas_assignment_id
+            )
+            if canvas_assignment is not None:
+                canvas_assignment["estimated_effort_minutes"] = (
+                    local_assignment.estimated_effort_minutes
                 )
-                local_assignments[assignment_id] = local_assignment
-            else:
-                changed_fields = [
-                    field
-                    for field, value in assignment_values.items()
-                    if getattr(local_assignment, field) != value
-                ]
-                if changed_fields:
-                    for field in changed_fields:
-                        setattr(local_assignment, field, assignment_values[field])
-                    local_assignment.save(update_fields=changed_fields)
-
-            if local_assignment.estimated_effort_minutes is None:
-                try:
-                    estimate_and_save_assignment_effort(
-                        assignment=local_assignment,
-                        assignment_information=canvas_assignment.get("description"),
-                    )
-                except AIInferenceError:
-                    logger.warning(
-                        "Unable to estimate effort for Canvas assignment %s",
-                        assignment_id,
-                        exc_info=True,
-                    )
-
-            canvas_assignment["estimated_effort_minutes"] = (
-                local_assignment.estimated_effort_minutes
-            )
-            canvas_assignment["effort_estimate_source"] = (
-                local_assignment.effort_estimate_source
-            )
+                canvas_assignment["effort_estimate_source"] = (
+                    local_assignment.effort_estimate_source
+                )
         # Django supplies model managers dynamically.
         attachments = Attachment.objects.filter(  # pylint: disable=no-member
             user=request.user,

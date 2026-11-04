@@ -99,12 +99,6 @@ class AttachmentUploadTests(MediaRootTestCase):
             self.assertEqual(model.objects.count(), 0)
         self.assertEqual([path for path in Path(self.media_root).rglob("*") if path.is_file()], [])
 
-    def assert_no_uploads_saved(self):
-        """Rejected uploads leave no files or attachment links."""
-        self.assertEqual(StudyFile.objects.count(), 0)
-        self.assertEqual(Attachment.objects.count(), 0)
-        self.assertEqual([path for path in Path(self.media_root).rglob("*") if path.is_file()], [])
-
     def assert_redirect_message(self, response, message):
         """Validation failures redirect and display their exact message."""
         self.assertEqual(response.status_code, 302)
@@ -121,8 +115,7 @@ class AttachmentUploadTests(MediaRootTestCase):
             due_date="2000-01-01T00:00:00Z", canvas_course_id=999,
         )
         self.assertRedirects(response, reverse("assignment_list"))
-        assignment = Assignment.objects.get(user=self.user, canvas_assignment_id=101)
-        self.assertEqual(Assignment.objects.filter(user=self.user).count(), 2)
+        assignment = Assignment.objects.get()
         self.assertEqual(
             (assignment.user_id, assignment.canvas_assignment_id, assignment.canvas_course_id,
              assignment.title, assignment.course, assignment.due_date),
@@ -150,19 +143,10 @@ class AttachmentUploadTests(MediaRootTestCase):
         """Given two batches with the same original name, both byte streams survive."""
         first = self.post_batch([SimpleUploadedFile("notes.txt", b"first")])
         self.assertEqual(first.status_code, 302)
-        original_pk = Assignment.objects.get(
-            user=self.user, canvas_assignment_id=101,
-        ).pk
+        original_pk = Assignment.objects.get().pk
         second = self.post_batch([SimpleUploadedFile("notes.txt", b"second")])
         self.assertRedirects(second, reverse("assignment_list"))
-        self.assertEqual(
-            Assignment.objects.filter(
-                user=self.user, canvas_assignment_id=101,
-            ).count(),
-            1,
-        )
-        self.assertEqual(Assignment.objects.filter(user=self.user).count(), 2)
-        self.assertTrue(Assignment.objects.filter(pk=original_pk).exists())
+        self.assertEqual(list(Assignment.objects.values_list("pk", flat=True)), [original_pk])
         files = list(StudyFile.objects.order_by("pk"))
         self.assertEqual([item.original_name for item in files], ["notes.txt", "notes.txt"])
         self.assertNotEqual(files[0].file.name, files[1].file.name)
@@ -193,7 +177,7 @@ class AttachmentUploadTests(MediaRootTestCase):
         protected.force_login(self.user)
         response = protected.post(url, {"files": [SimpleUploadedFile("b.txt", b"b")]})
         self.assertEqual(response.status_code, 403)
-        self.assert_no_uploads_saved()
+        self.assert_nothing_saved()
 
     def test_oversized_real_batch_is_rejected_without_rows_or_files(self):
         """Two individually small files totaling 26,214,401 bytes reject the whole batch."""
@@ -202,13 +186,13 @@ class AttachmentUploadTests(MediaRootTestCase):
             SimpleUploadedFile("part-two.bin", b"b" * 13_107_201),
         ])
         self.assert_redirect_message(response, "File batch exceeds 25 MB limit")
-        self.assert_no_uploads_saved()
+        self.assert_nothing_saved()
 
     def test_empty_batch_is_rejected_without_rows_or_files(self):
         """A multipart request with no files displays the exact empty-batch message."""
         response = self.post_batch([])
         self.assert_redirect_message(response, "Choose at least one file to upload.")
-        self.assert_no_uploads_saved()
+        self.assert_nothing_saved()
 
     def test_canvas_authentication_failure_invalidates_connection_without_saving(self):
         """Expired Canvas credentials cannot create an attachment or cause a server error."""
@@ -226,8 +210,8 @@ class AttachmentUploadTests(MediaRootTestCase):
         self.assertLess(response.status_code, 500)
         self.assert_nothing_saved()
 
-    def test_second_storage_failure_removes_first_file_and_upload_rows(self):
-        """A partial batch rolls back its upload rows and removes its stored bytes."""
+    def test_second_storage_failure_removes_first_file_and_all_rows(self):
+        """A partial batch rolls back its rows and removes its stored bytes."""
         # FileField's public metadata API is exposed as Django's conventional _meta.
         storage = StudyFile._meta.get_field("file").storage  # pylint: disable=protected-access
         real_save = storage.save
@@ -253,31 +237,24 @@ class AttachmentUploadTests(MediaRootTestCase):
         errors = [item for item in get_messages(page.wsgi_request) if item.level_tag == "error"]
         self.assertTrue(errors, "The failed upload must display an error")
         self.assertContains(page, str(errors[0]))
-        self.assert_no_uploads_saved()
+        self.assert_nothing_saved()
         self.assertFalse(written[0].exists())
 
-    def test_list_saves_assignments_and_matches_attachments_by_identity_and_owner(self):
-        """GET mirrors live assignments; attachments stay scoped to the matching owner and card."""
+    def test_list_is_read_only_and_matches_attachments_by_identity_and_owner(self):
+        """GET creates no mirrors; names appear only on the matching owner's Canvas card."""
         page = self.client.get(reverse("assignment_list"))
         self.assertEqual(page.status_code, 200)
-        self.assertEqual(Assignment.objects.filter(user=self.user).count(), 2)
-        self.assertEqual(StudyFile.objects.count(), 0)
-        self.assertEqual(Attachment.objects.count(), 0)
+        self.assert_nothing_saved()
         other = make_user("other-upload-student")
         for owner, canvas_id, name in (
             (self.user, 101, "my-project-notes.txt"),
             (self.user, 102, "my-essay-notes.txt"),
             (other, 101, "private-other-student.txt"),
         ):
-            if owner == self.user:
-                assignment = Assignment.objects.get(
-                    user=owner, canvas_assignment_id=canvas_id,
-                )
-            else:
-                assignment = Assignment.objects.create(
-                    user=owner, canvas_assignment_id=canvas_id, canvas_course_id=42,
-                    title="Stale local title", course="Stale local course",
-                )
+            assignment = Assignment.objects.create(
+                user=owner, canvas_assignment_id=canvas_id, canvas_course_id=42,
+                title="Stale local title", course="Stale local course",
+            )
             Attachment.objects.create(
                 user=owner, assignment=assignment, study_file=upload(owner, name),
             )
