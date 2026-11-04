@@ -34,6 +34,7 @@ class StudyPlanGenerationViewTests(TestCase):
             title="Essay",
             course="Writing",
             due_date=self.start + timedelta(days=2),
+            estimated_effort_minutes=60,
             canvas_course_id=1,
             canvas_assignment_id=1,
         )
