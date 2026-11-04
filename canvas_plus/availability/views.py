@@ -1,6 +1,5 @@
 """Views for creating and updating student availability."""
 #imports for user login, html templates, availability form, and model.
-from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from assignments.models import Assignment
@@ -9,7 +8,6 @@ from study_plan.exceptions import (
     InaccessibleAssignmentError,
     NoEligibleAssignmentsError,
     NoUsableAvailabilityError,
-    StudyPlanRetriesExhaustedError,
     StudyPlanError,
 )
 from study_plan.generate import generate_plan
@@ -35,7 +33,6 @@ def availability_list(request):
 
     #if student submitted form validate and save
     generation_error = None
-    generation_debug = None
     if request.method == "POST" and request.POST.get("action") == "generate_plan":
         try:
             generate_plan(
@@ -48,13 +45,6 @@ def availability_list(request):
                 type(error),
                 "The study plan could not be generated. Please try again.",
             )
-            if (
-                settings.DEBUG
-                and isinstance(error, StudyPlanRetriesExhaustedError)
-                and error.__cause__ is not None
-            ):
-                cause = error.__cause__
-                generation_debug = f"{type(cause).__name__}: {cause}"
         else:
             return redirect("availability:list")
         form = AvailabilityForm()
@@ -85,7 +75,6 @@ def availability_list(request):
                 "due_date", "title"
             ),
             "generation_error": generation_error,
-            "generation_debug": generation_debug,
             #study plan section; ?date= picks one day
             **study_plan_context(request.user, request.GET.get("date")),
         },
