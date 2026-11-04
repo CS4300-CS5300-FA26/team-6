@@ -19,3 +19,14 @@ class StudyPlan(BaseModel):
 
     sessions: list[StudySessionProposal] = Field(min_length=1)
     notices: list[str] = Field(default_factory=list)
+
+
+class EffortEstimate(BaseModel):
+    """Structured AI response for an assignment effort estimate."""
+
+    # Estimated amount of study/work time required, in minutes.
+    # The value must be positive.
+    estimated_minutes: int = Field(gt=0)
+
+    # Short explanation of why the AI selected this estimate.
+    reason: str = Field(min_length=1)

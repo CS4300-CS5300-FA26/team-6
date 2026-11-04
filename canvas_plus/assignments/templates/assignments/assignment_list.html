@@ -30,6 +30,21 @@
             <p class="assignment-due">Due <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y g:i A" }}</time></p>
           {% endif %}
           {% include "assignments/attachments.html" with assignment=assignment %}
+          
+          {% if assignment.estimated_effort_minutes %}
+            <p class="assignment-effort">
+              Estimated effort: {{ assignment.estimated_effort_minutes }} minutes
+            </p>
+          {% else %}
+            <p class="assignment-effort">
+              No effort estimate yet.
+            </p>
+          {% endif %}
+
+          <!-- Allow the student to set or change the effort estimate. -->
+          <a href="{% url 'edit_effort_estimate' assignment.canvas_course_id assignment.canvas_assignment_id %}">
+            Edit Effort Estimate
+          </a>
         </li>
       {% endfor %}
     </ul>

@@ -54,6 +54,8 @@ class CanvasAssignmentsPageTests(TestCase):
         )
         courses = [{"id": 42, "name": "CS 4300"}]
         assignments = [{
+            "id": 101,
+            "course_id": 42,
             "title": "Canvas Project 1",
             "course_name": "CS 4300",
             "canvas_assignment_id": 101, "canvas_course_id": 42,
@@ -154,6 +156,8 @@ class CanvasAssignmentsPageTests(TestCase):
         courses = [{"id": 42, "name": "CS 4300"}]
         assignments = [
             {
+                "id": 101,
+                "course_id": 42,
                 "title": "Turned in",
                 "course_name": "CS 4300",
                 "canvas_assignment_id": 102, "canvas_course_id": 42,
@@ -161,6 +165,8 @@ class CanvasAssignmentsPageTests(TestCase):
                 "submitted": True,
             },
             {
+                "id": 102,
+                "course_id": 42,
                 "title": "Missed",
                 "course_name": "CS 4300",
                 "canvas_assignment_id": 103, "canvas_course_id": 42,
@@ -168,6 +174,8 @@ class CanvasAssignmentsPageTests(TestCase):
                 "submitted": False,
             },
             {
+                "id": 103,
+                "course_id": 42,
                 "title": "Close",
                 "course_name": "CS 4300",
                 "canvas_assignment_id": 104, "canvas_course_id": 42,
@@ -175,6 +183,8 @@ class CanvasAssignmentsPageTests(TestCase):
                 "submitted": False,
             },
             {
+                "id": 104,
+                "course_id": 42,
                 "title": "Far",
                 "course_name": "CS 4300",
                 "canvas_assignment_id": 105, "canvas_course_id": 42,
@@ -230,6 +240,8 @@ class CanvasAssignmentsPageTests(TestCase):
         )
         list_upcoming_assignments_mock.side_effect = [
             [{
+                "id": 101,
+                "course_id": 42,
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
                 "canvas_assignment_id": 106, "canvas_course_id": 42,
@@ -237,6 +249,8 @@ class CanvasAssignmentsPageTests(TestCase):
                 "submitted": False,
             }],
             [{
+                "id": 101,
+                "course_id": 42,
                 "title": "Canvas Project 1",
                 "course_name": "CS 4300",
                 "canvas_assignment_id": 106, "canvas_course_id": 42,

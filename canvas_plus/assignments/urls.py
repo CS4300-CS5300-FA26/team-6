@@ -15,4 +15,9 @@ urlpatterns = [
         name="upload_attachments",
     ),
     path("", views.assignment_list, name="assignment_list"),
+    path(
+        "<int:course_id>/<int:assignment_id>/effort/",
+        views.edit_effort_estimate,
+        name="edit_effort_estimate",
+    ),
 ]
