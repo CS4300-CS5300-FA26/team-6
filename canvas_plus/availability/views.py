@@ -2,9 +2,26 @@
 #imports for user login, html templates, availability form, and model.
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
+from assignments.models import Assignment
+from study_plan.exceptions import (
+    EmptyAssignmentSelectionError,
+    InaccessibleAssignmentError,
+    NoEligibleAssignmentsError,
+    NoUsableAvailabilityError,
+    StudyPlanError,
+)
+from study_plan.generate import generate_plan
 from study_plan.selectors import study_plan_context  # pylint: disable=import-error
 from .forms import AvailabilityForm
 from .models import Availability
+
+GENERATION_ERRORS = {
+    EmptyAssignmentSelectionError: "Select at least one assignment.",
+    InaccessibleAssignmentError: "One or more selected assignments are unavailable.",
+    NoEligibleAssignmentsError: "Select an assignment with a due date.",
+    NoUsableAvailabilityError: "Add future availability before generating a plan.",
+}
+
 
 @login_required
 def availability_list(request):
@@ -15,7 +32,23 @@ def availability_list(request):
     ).order_by("date", "start_time")
 
     #if student submitted form validate and save
-    if request.method =="POST":
+    generation_error = None
+    if request.method == "POST" and request.POST.get("action") == "generate_plan":
+        try:
+            generate_plan(
+                request.user,
+                request.POST.getlist("assignment_ids"),
+                allow_late=request.POST.get("allow_late") == "on",
+            )
+        except StudyPlanError as error:
+            generation_error = GENERATION_ERRORS.get(
+                type(error),
+                "The study plan could not be generated. Please try again.",
+            )
+        else:
+            return redirect("availability:list")
+        form = AvailabilityForm()
+    elif request.method == "POST":
         form = AvailabilityForm(request.POST)
         #only save if validation passes
         if form.is_valid():
@@ -38,6 +71,10 @@ def availability_list(request):
         {
             "form": form,
             "availability_entries": availability_entries,
+            "plan_assignments": Assignment.objects.filter(user=request.user).order_by(
+                "due_date", "title"
+            ),
+            "generation_error": generation_error,
             #study plan section; ?date= picks one day
             **study_plan_context(request.user, request.GET.get("date")),
         },

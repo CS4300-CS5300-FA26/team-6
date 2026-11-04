@@ -47,6 +47,30 @@
     <!-- The student's most recent study plan, optionally narrowed to one day. -->
     <h2>Study plan</h2>
 
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="generate_plan">
+        {% if plan_assignments %}
+            <fieldset>
+                <legend>Assignments to schedule</legend>
+                {% for assignment in plan_assignments %}
+                    <label>
+                        <input type="checkbox" name="assignment_ids" value="{{ assignment.pk }}" {% if not assignment.due_date %}disabled{% endif %}>
+                        {{ assignment.title }}{% if assignment.due_date %} · due {{ assignment.due_date|date:"M j, Y g:i A" }}{% else %} · no due date{% endif %}
+                    </label>
+                {% endfor %}
+            </fieldset>
+            <label>
+                <input type="checkbox" name="allow_late">
+                Allow sessions after deadlines
+            </label>
+            <button type="submit">Generate plan</button>
+        {% else %}
+            <p>No assignments are available to schedule.</p>
+        {% endif %}
+        {% if generation_error %}<p role="alert">{{ generation_error }}</p>{% endif %}
+    </form>
+
     <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
     <form method="get">
         <label for="study-day">Day</label>
