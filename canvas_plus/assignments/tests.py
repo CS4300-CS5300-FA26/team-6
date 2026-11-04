@@ -8,15 +8,13 @@ from unittest.mock import ANY, patch
 
 import pytest
 import requests
-from cryptography.fernet import Fernet
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
-from accounts.models import CanvasConnection
+from assignments.test_helpers import configure_canvas_user
 
 
 @pytest.mark.integration
@@ -24,20 +22,7 @@ class CanvasAssignmentsPageTests(TestCase):
     """The logged-in assignments page displays current Canvas API results."""
 
     def setUp(self):
-        self.settings_override = override_settings(
-            CANVAS_BASE_URL="https://canvas.example.edu",
-            CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
-        )
-        self.settings_override.enable()
-        self.addCleanup(self.settings_override.disable)
-        self.user = get_user_model().objects.create_user(
-            username="canvas-student",
-            password="test-password-123",
-        )
-        self.connection = CanvasConnection(user=self.user, canvas_url="https://canvas.example.edu")
-        self.connection.set_token("fake-canvas-token")
-        self.connection.save()
-        self.client.force_login(self.user)
+        self.user, self.connection = configure_canvas_user(self)
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True)
@@ -348,17 +333,12 @@ class SharedTemplateTests(TestCase):
     """The shared template is reflected across all pages listed above"""
 
     def setUp(self):
-        self.settings_override = override_settings(
-            CANVAS_BASE_URL="https://canvas.example.edu",
-            CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+        self.user, self.connection = configure_canvas_user(
+            self,
+            username="template-student",
+            password=None,
+            token="template-canvas-token",
         )
-        self.settings_override.enable()
-        self.addCleanup(self.settings_override.disable)
-        user = get_user_model().objects.create_user(username="template-student")
-        connection = CanvasConnection(user=user, canvas_url="https://canvas.example.edu")
-        connection.set_token("template-canvas-token")
-        connection.save()
-        self.client.force_login(user)
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=[])
