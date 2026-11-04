@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from study_plan.validation import PlanValidationError, validate_plan
+from study_plan.validation import (
+    PlanValidationError,
+    validate_estimated_effort,
+    validate_plan,
+)
 
 
 UTC = timezone.utc
@@ -33,12 +37,16 @@ def make_plan(*sessions):
 def assert_plan_rejected(
     plan,
     *,
-    availability_windows=AVAILABILITY,
-    assignment_deadlines=ASSIGNMENT_DEADLINES,
+    availability_windows=None,
+    assignment_deadlines=None,
     occupied_sessions=(),
     allow_late=False,
 ):
     """Assert a proposal violates a scheduling rule."""
+    if availability_windows is None:
+        availability_windows = AVAILABILITY
+    if assignment_deadlines is None:
+        assignment_deadlines = ASSIGNMENT_DEADLINES
     with pytest.raises(PlanValidationError):
         validate_plan(
             plan,
@@ -201,3 +209,18 @@ def test_late_session_with_opt_in_and_late_flag_is_accepted():
 
     assert result.sessions == [proposed]
     assert result.sessions[0].late is True
+
+
+@pytest.mark.unit
+def test_estimated_effort_rejects_proposals_over_assignment_estimate():
+    """The total proposed minutes for an assignment cannot exceed its estimate."""
+    assignment = SimpleNamespace(id=42, estimated_effort_minutes=30)
+    matching_plan = make_plan(make_session(end=START + timedelta(minutes=30)))
+    validate_estimated_effort(matching_plan, [assignment])
+
+    overestimated_plan = make_plan(
+        make_session(end=START + timedelta(minutes=30)),
+        make_session(start=START + timedelta(minutes=30), end=START + timedelta(minutes=45)),
+    )
+    with pytest.raises(PlanValidationError, match="assignment estimate"):
+        validate_estimated_effort(overestimated_plan, [assignment])

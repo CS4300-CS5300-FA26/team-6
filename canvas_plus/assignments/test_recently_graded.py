@@ -4,15 +4,13 @@ from datetime import timedelta
 from unittest.mock import ANY, patch
 
 import pytest
-from cryptography.fernet import Fernet
-from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
-from accounts.models import CanvasConnection
 from assignments.grades import RECENT_WINDOW
+from assignments.test_helpers import configure_canvas_user
 
 COURSES = [{"id": 42, "name": "CS 4300"}]
 UPCOMING = [{
@@ -31,20 +29,7 @@ class RecentlyGradedSectionTests(TestCase):
     """The Recently graded section fails on its own, without hiding the rest of the page."""
 
     def setUp(self):
-        self.settings_override = override_settings(
-            CANVAS_BASE_URL="https://canvas.example.edu",
-            CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
-        )
-        self.settings_override.enable()
-        self.addCleanup(self.settings_override.disable)
-        self.user = get_user_model().objects.create_user(
-            username="canvas-student",
-            password="test-password-123",
-        )
-        self.connection = CanvasConnection(user=self.user, canvas_url="https://canvas.example.edu")
-        self.connection.set_token("fake-canvas-token")
-        self.connection.save()
-        self.client.force_login(self.user)
+        self.user, self.connection = configure_canvas_user(self)
 
     @patch(
         "assignments.views.list_graded_submissions",

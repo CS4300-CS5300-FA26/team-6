@@ -59,3 +59,6 @@ ignore = [
 # nh3 is compiled (Rust); pylint must load it to see its functions.
 extension-pkg-allow-list = ["nh3"]
 
+[tool.pylint.typecheck]
+generated-members = ["objects"]
+

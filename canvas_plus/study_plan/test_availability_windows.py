@@ -28,7 +28,9 @@ class AvailabilityWindowPreparationTests(TestCase):
             fold=fold,
         )
 
+
     def add_window(self, user, day, start, end):
+        """Persist one availability interval for a test user."""
         return Availability.objects.create(
             user=user,
             date=day,
@@ -37,6 +39,7 @@ class AvailabilityWindowPreparationTests(TestCase):
         )
 
     def prepare(self, occupied_sessions=()):
+        """Prepare this user's windows against the test clock."""
         return prepare_availability_windows(
             self.user,
             now=self.now,
