@@ -17,7 +17,6 @@ from behave import given, when, then
 # Import the effort-estimation functions being tested.
 from study_plan.effort_estimation import (
     estimate_assignment_effort,
-    has_enough_available_time,
     save_manual_effort_estimate,
 )
 
@@ -146,32 +145,6 @@ def step_student_can_enter_manual_estimate(context):
     assert context.response.status_code == 302
 
 
-@given("an assignment requires more effort than the student has available")
-def step_insufficient_available_time(context):
-    """Prepare an estimate that exceeds available study time."""
-
-    # Example: the assignment requires three hours of work.
-    context.estimated_minutes = 180
-
-    # The student currently has only two hours available.
-    context.available_minutes = 120
-
-
-@when("the application compares estimated effort with available study time")
-def step_compare_effort_and_availability(context):
-    """Compare required effort against available study time."""
-
-    # Store the comparison result for the Then step.
-    context.has_enough_time = has_enough_available_time(
-        estimated_minutes=context.estimated_minutes,
-        available_minutes=context.available_minutes,
-    )
-
-
-@then(
-    "the student should be notified that there is not enough "
-    "available study time"
-)
 def step_insufficient_time_detected(context):
     """Verify insufficient study time is detected."""
 
@@ -242,22 +215,6 @@ def step_new_estimate_is_saved(context):
     assert context.assignment.effort_estimate_source == "manual"
 
 
-@then("the updated effort estimate should be used for future scheduling")
-def step_updated_estimate_used_for_scheduling(context):
-    """Verify future scheduling logic uses the new persisted estimate."""
-
-    # Reload the assignment to use the persisted estimate.
-    context.assignment.refresh_from_db()
-
-    # Simulate the student having only 100 minutes of available study time.
-    enough_time = has_enough_available_time(
-        estimated_minutes=context.assignment.estimated_effort_minutes,
-        available_minutes=100,
-    )
-
-    # The new 120-minute estimate should be used, so 100 minutes is insufficient.
-    assert enough_time is False
-    
 @given("the assignment is missing information needed for an effort estimate")
 def step_assignment_missing_information(context):
     """Create an incomplete assignment state that cannot be estimated automatically."""

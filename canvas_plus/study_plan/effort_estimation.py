@@ -72,16 +72,6 @@ def estimate_assignment_effort(
         EffortEstimate,
     )
 
-def has_enough_available_time(estimated_minutes, available_minutes):
-    """Return whether the student has enough available study time."""
-
-    # Without an automatic estimate, there is nothing useful to compare.
-    if estimated_minutes is None:
-        return False
-
-    # Available study time must meet or exceed the required effort.
-    return available_minutes >= estimated_minutes
-
 def estimate_and_save_assignment_effort(
     assignment,
     assignment_information,

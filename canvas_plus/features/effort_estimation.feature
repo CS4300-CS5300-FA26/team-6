@@ -16,16 +16,9 @@ Feature: Assignment effort estimation
     And the student can enter a manual estimate of 60 minutes
     And the manual effort estimate should be saved as 60 minutes
 
-  # The application should detect when the estimated work exceeds
-  # the amount of study time currently available.
-  Scenario: Estimated effort exceeds available study time
-    Given an assignment requires more effort than the student has available
-    When the application compares estimated effort with available study time
-    Then the student should be notified that there is not enough available study time
-
   #Student changes the effort manually
   Scenario: Student changes estimated effort through the manual entry form
     Given the student has an assignment with an estimated effort of 90 minutes
     When the student changes the effort estimate to 120 minutes through the edit page
     Then the new effort estimate should be saved as 120 minutes
-    And the updated effort estimate should be used for future scheduling
+    
