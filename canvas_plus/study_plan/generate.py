@@ -7,6 +7,7 @@ from django.db import transaction
 from ai_inference import infer
 from ai_inference.exceptions import AIInferenceError
 from assignments.models import Assignment
+from assignments.canvas_sync import refresh_selected_assignment_snapshots
 from study_plan.availability_windows import prepare_availability_windows
 from study_plan.exceptions import (
     EmptyAssignmentSelectionError,
@@ -58,7 +59,12 @@ def generate_plan(user, assignment_ids, allow_late=False):
             "One or more selected assignments are inaccessible."
         )
 
-    eligible_assignments, notices = _filter_eligible_assignments(assignments)
+    notices = refresh_selected_assignment_snapshots(user, assignments)
+    assignments = list(
+        Assignment.objects.filter(user=user, pk__in=selected_ids)
+    )
+    eligible_assignments, eligibility_notices = _filter_eligible_assignments(assignments)
+    notices.extend(eligibility_notices)
 
     if not eligible_assignments:
         raise NoEligibleAssignmentsError(

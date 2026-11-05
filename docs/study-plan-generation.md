@@ -47,10 +47,13 @@ generate/validate/persist flow:
 2. Assignments are queried by both primary key and user. If any requested ID is
    not owned by that user or does not exist, the call raises
    `InaccessibleAssignmentError`; it does not silently plan a partial selection.
-3. Assignments without a due date are excluded. Selected assignments without a
-   positive integer effort estimate are estimated from their saved Canvas
-   description. If an estimate cannot be produced, that assignment is excluded
-   with a notice. If none remain, `NoEligibleAssignmentsError` is raised.
+3. Selected assignment snapshots are refreshed from Canvas before planning.
+   If Canvas is unavailable or omits a selected assignment, its saved snapshot
+   is used and a notice is added. Assignments without a due date are excluded.
+   Selected assignments without a positive integer effort estimate are
+   estimated from their saved Canvas description. If an estimate cannot be
+   produced, that assignment is excluded with a notice. If none remain,
+   `NoEligibleAssignmentsError` is raised.
 4. The user's availability is trimmed to the future, overlapping or adjacent
    windows are merged, and sessions from their earlier plans are subtracted.
    If no free interval remains, `NoUsableAvailabilityError` is raised.
@@ -77,10 +80,11 @@ session ending exactly at its assignment deadline is on time. If it ends after
 the deadline, its `late` flag must be true and the caller must explicitly pass
 `allow_late=True`; late sessions must still fit in the user's availability.
 
-Canvas assignment rows are upserted when the assignments page successfully loads;
-this sync refreshes Canvas-owned fields without changing a saved estimate. It does
-not run effort estimation. The total proposed minutes for an assignment cannot
-exceed its estimate.
+Canvas assignment rows are upserted when the assignments page successfully loads
+and when selected assignments are refreshed for planning. Both paths update
+Canvas-owned fields without changing a saved estimate. Page sync does not run
+effort estimation. The total proposed minutes for an assignment cannot exceed
+its estimate.
 After validation, the plan's notices combine AI-provided notices, explanations
 for skipped assignments, and notices for estimated effort that could not be
 scheduled. A sub-15-minute remainder can be reported even though sessions

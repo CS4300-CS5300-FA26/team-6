@@ -1,14 +1,16 @@
 """Tests for on-demand estimates during study-plan generation."""
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone as datetime_timezone
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from cryptography.fernet import Fernet
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from ai_inference.exceptions import AIProviderError
+from accounts.models import CanvasConnection
 from assignments.models import Assignment
 from availability.models import Availability
 from study_plan.generate import generate_plan
@@ -146,3 +148,77 @@ class GenerationEstimationTests(TestCase):
         estimate_assignment_mock.assert_called_once()
         self.assertNotIn("Estimate unavailable", str(mock_infer.call_args.args[1]))
         self.assertEqual(StudyPlan.objects.filter(user=user).count(), 1)
+
+    @override_settings(
+        CANVAS_BASE_URL="https://canvas.example.edu",
+        CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+    )
+    @patch("assignments.canvas_sync.list_courses", return_value=[{"id": 42, "name": "CS 4300"}])
+    @patch("assignments.canvas_sync.list_upcoming_assignments")
+    @patch("study_plan.generate.infer")
+    def test_generation_refreshes_selected_canvas_data_before_inference(
+        self,
+        mock_infer,
+        list_assignments,
+        _list_courses,
+    ):
+        """Plan input and persisted rows use fresh Canvas fields, preserving estimates."""
+        user, local_timezone, available_date = self.create_user_and_window(
+            "refresh-before-plan-student"
+        )
+        connection = CanvasConnection(
+            user=user,
+            canvas_url="https://canvas.example.edu",
+        )
+        connection.set_token("canvas-test-token")
+        connection.save()
+        old_due_date = datetime.combine(
+            available_date + timedelta(days=1),
+            time(17),
+            tzinfo=local_timezone,
+        )
+        new_due_date = datetime.combine(
+            available_date + timedelta(days=2),
+            time(17),
+            tzinfo=local_timezone,
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=42,
+            canvas_assignment_id=115,
+            title="Old Canvas title",
+            course="Old course",
+            due_date=old_due_date,
+            description="Old description",
+            estimated_effort_minutes=30,
+            effort_estimate_source="manual",
+        )
+        list_assignments.return_value = [
+            {
+                "canvas_assignment_id": 115,
+                "canvas_course_id": 42,
+                "title": "Fresh Canvas title",
+                "course_name": "CS 4300",
+                "due_date": new_due_date,
+                "description": "Fresh assignment description",
+            },
+        ]
+        mock_infer.return_value = self.proposal_for(
+            assignment,
+            available_date,
+            local_timezone,
+        )
+
+        plan = generate_plan(user, [assignment.id])
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.title, "Fresh Canvas title")
+        self.assertEqual(assignment.course, "CS 4300")
+        self.assertEqual(assignment.due_date, new_due_date)
+        self.assertEqual(assignment.description, "Fresh assignment description")
+        self.assertEqual(assignment.estimated_effort_minutes, 30)
+        self.assertEqual(assignment.effort_estimate_source, "manual")
+        self.assertIn("Fresh Canvas title", str(mock_infer.call_args.args[1]))
+        expected_due_date = new_due_date.astimezone(datetime_timezone.utc).isoformat()
+        self.assertIn(expected_due_date, str(mock_infer.call_args.args[1]))
+        self.assertEqual(plan.sessions.count(), 1)

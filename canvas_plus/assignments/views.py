@@ -4,7 +4,6 @@ import logging
 import requests
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,8 +13,6 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
-    canvas_base_url,
-    canvas_origin,
     list_courses,
     list_graded_submissions,
     list_upcoming_assignments,
@@ -26,9 +23,8 @@ from .models import Attachment, Assignment
 from .priority import priority
 from .uploads import save_attachments, validate_batch
 from .forms import EffortEstimateForm 
+from .canvas_sync import get_cached_canvas_courses, upsert_canvas_assignment_snapshot
 
-# Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
-COURSE_CACHE_SECONDS = 60 * 60
 logger = logging.getLogger(__name__)
 
 
@@ -63,22 +59,14 @@ def load_canvas_context(user):
         connection_expired = True
     else:
         try:
-            try:
-                origins_match = canvas_origin(connection.canvas_url) == canvas_origin(
-                    canvas_base_url()
-                )
-            except ValueError:
-                origins_match = False
-            if not origins_match:
-                raise SavedTokenError("The configured Canvas host changed.")
-
             token = connection.get_token()
             with requests.Session() as session:
-                courses_key = f"canvas-courses:{connection.pk}:{connection.updated_at.timestamp()}"
-                courses = cache.get(courses_key)
-                if courses is None:
-                    courses = list_courses(token, session=session)
-                    cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
+                courses = get_cached_canvas_courses(
+                    connection,
+                    token,
+                    session,
+                    course_loader=list_courses,
+                )
                 assignments = list_upcoming_assignments(token, courses, session=session)
                 graded_context = recently_graded_context(token, courses, session)
             now = timezone.now()
@@ -121,16 +109,9 @@ def assignment_list(request):
             assignment["effort_estimate_source"] = None
 
         for canvas_assignment in assignments_by_id.values():
-            local_assignment, _ = Assignment.objects.update_or_create(
-                user=request.user,
-                canvas_assignment_id=canvas_assignment["canvas_assignment_id"],
-                defaults={
-                    "canvas_course_id": canvas_assignment["canvas_course_id"],
-                    "title": canvas_assignment["title"],
-                    "course": canvas_assignment["course_name"],
-                    "due_date": canvas_assignment.get("due_date"),
-                    "description": canvas_assignment.get("description") or "",
-                },
+            local_assignment = upsert_canvas_assignment_snapshot(
+                request.user,
+                canvas_assignment,
             )
             canvas_assignment["estimated_effort_minutes"] = (
                 local_assignment.estimated_effort_minutes
