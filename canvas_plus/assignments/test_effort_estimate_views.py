@@ -337,3 +337,4 @@ def test_opening_effort_page_generates_automatic_estimate(
 
     # The live view should have called the estimator exactly once.
     estimate_and_save_mock.assert_called_once()
+
