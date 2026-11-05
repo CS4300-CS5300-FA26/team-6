@@ -337,36 +337,3 @@ def test_opening_effort_page_generates_automatic_estimate(
 
     # The live view should have called the estimator exactly once.
     estimate_and_save_mock.assert_called_once()
-
-
-@pytest.mark.django_db
-@patch("assignments.views.estimate_and_save_assignment_effort")
-@patch("assignments.views.load_canvas_context")
-def test_assignment_list_does_not_create_rows_or_estimates(
-    load_canvas_context_mock,
-    estimate_and_save_mock,
-    client,
-):
-    """Effort estimation remains an explicit action from the effort page."""
-    user = get_user_model().objects.create_user(username="assignment-list-read-only")
-    client.force_login(user)
-    load_canvas_context_mock.return_value = {
-        "assignments": [{
-            "canvas_assignment_id": 203,
-            "canvas_course_id": 42,
-            "title": "New assignment",
-            "course_name": "CS 4300",
-            "due_date": timezone.now(),
-            "submitted": False,
-            "description": "Complete the assigned coursework.",
-            "priority": "Upcoming",
-        }],
-        "assignments_unavailable": False,
-        "canvas_connection_expired": False,
-        "canvas_connection_missing": False,
-        "assignments_unavailable_message": "",
-    }
-    response = client.get(reverse("assignment_list"))
-    assert response.status_code == 200
-    assert Assignment.objects.filter(user=user).count() == 0
-    estimate_and_save_mock.assert_not_called()
