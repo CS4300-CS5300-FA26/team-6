@@ -15,6 +15,7 @@ from study_plan.exceptions import (
     NoUsableAvailabilityError,
     StudyPlanRetriesExhaustedError,
 )
+from study_plan.effort_estimation import estimate_and_save_assignment_effort
 from study_plan.models import StudyPlan as PersistedStudyPlan
 from study_plan.models import StudySession
 from study_plan.prompt import build_plan_inference_input
@@ -60,7 +61,9 @@ def generate_plan(user, assignment_ids, allow_late=False):
     eligible_assignments, notices = _filter_eligible_assignments(assignments)
 
     if not eligible_assignments:
-        raise NoEligibleAssignmentsError("No selected assignments are eligible to plan.")
+        raise NoEligibleAssignmentsError(
+            "; ".join(notices) or "No selected assignments are eligible to plan."
+        )
 
     occupied_sessions = StudySession.objects.filter(plan__user=user).select_related("plan")
     free_windows = prepare_availability_windows(
@@ -115,12 +118,27 @@ def _filter_eligible_assignments(assignments):
         estimate = getattr(assignment, "estimated_effort_minutes", None)
         if assignment.due_date is None:
             notices.append(f"{assignment.title} was skipped because it has no due date.")
-        elif not isinstance(estimate, int) or isinstance(estimate, bool) or estimate <= 0:
-            notices.append(
-                f"{assignment.title} was skipped because it has no positive effort estimate."
-            )
         else:
-            eligible_assignments.append(assignment)
+            if not isinstance(estimate, int) or isinstance(estimate, bool) or estimate <= 0:
+                try:
+                    estimate_and_save_assignment_effort(
+                        assignment,
+                        assignment.description,
+                    )
+                except AIInferenceError:
+                    notices.append(
+                        f"{assignment.title} was skipped because its effort estimate "
+                        "could not be generated."
+                    )
+                    continue
+                estimate = assignment.estimated_effort_minutes
+
+            if not isinstance(estimate, int) or isinstance(estimate, bool) or estimate <= 0:
+                notices.append(
+                    f"{assignment.title} was skipped because it has no positive effort estimate."
+                )
+            else:
+                eligible_assignments.append(assignment)
     return eligible_assignments, notices
 
 

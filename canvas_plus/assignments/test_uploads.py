@@ -94,8 +94,15 @@ class AttachmentUploadTests(MediaRootTestCase):
         )
 
     def assert_nothing_saved(self):
-        """Rejected uploads leave neither local rows nor stored bytes."""
-        for model in (Assignment, StudyFile, Attachment):
+        """Rejected uploads leave no files or links beyond Canvas assignment sync."""
+        self.assertTrue(
+            set(
+                Assignment.objects.filter(user=self.user).values_list(
+                    "canvas_assignment_id", flat=True
+                )
+            ).issubset({101, 102})
+        )
+        for model in (StudyFile, Attachment):
             self.assertEqual(model.objects.count(), 0)
         self.assertEqual([path for path in Path(self.media_root).rglob("*") if path.is_file()], [])
 
@@ -115,7 +122,10 @@ class AttachmentUploadTests(MediaRootTestCase):
             due_date="2000-01-01T00:00:00Z", canvas_course_id=999,
         )
         self.assertRedirects(response, reverse("assignment_list"))
-        assignment = Assignment.objects.get()
+        assignment = Assignment.objects.get(
+            user=self.user,
+            canvas_assignment_id=101,
+        )
         self.assertEqual(
             (assignment.user_id, assignment.canvas_assignment_id, assignment.canvas_course_id,
              assignment.title, assignment.course, assignment.due_date),
@@ -143,10 +153,19 @@ class AttachmentUploadTests(MediaRootTestCase):
         """Given two batches with the same original name, both byte streams survive."""
         first = self.post_batch([SimpleUploadedFile("notes.txt", b"first")])
         self.assertEqual(first.status_code, 302)
-        original_pk = Assignment.objects.get().pk
+        original_pk = Assignment.objects.get(
+            user=self.user,
+            canvas_assignment_id=101,
+        ).pk
         second = self.post_batch([SimpleUploadedFile("notes.txt", b"second")])
         self.assertRedirects(second, reverse("assignment_list"))
-        self.assertEqual(list(Assignment.objects.values_list("pk", flat=True)), [original_pk])
+        self.assertEqual(
+            Assignment.objects.filter(
+                user=self.user,
+                canvas_assignment_id=101,
+            ).values_list("pk", flat=True).get(),
+            original_pk,
+        )
         files = list(StudyFile.objects.order_by("pk"))
         self.assertEqual([item.original_name for item in files], ["notes.txt", "notes.txt"])
         self.assertNotEqual(files[0].file.name, files[1].file.name)
@@ -240,8 +259,8 @@ class AttachmentUploadTests(MediaRootTestCase):
         self.assert_nothing_saved()
         self.assertFalse(written[0].exists())
 
-    def test_list_is_read_only_and_matches_attachments_by_identity_and_owner(self):
-        """GET creates no mirrors; names appear only on the matching owner's Canvas card."""
+    def test_list_syncs_assignments_and_matches_attachments_by_identity_and_owner(self):
+        """GET syncs Canvas rows; names appear only on the matching owner's Canvas card."""
         page = self.client.get(reverse("assignment_list"))
         self.assertEqual(page.status_code, 200)
         self.assert_nothing_saved()
@@ -251,10 +270,18 @@ class AttachmentUploadTests(MediaRootTestCase):
             (self.user, 102, "my-essay-notes.txt"),
             (other, 101, "private-other-student.txt"),
         ):
-            assignment = Assignment.objects.create(
-                user=owner, canvas_assignment_id=canvas_id, canvas_course_id=42,
-                title="Stale local title", course="Stale local course",
-            )
+            assignment = Assignment.objects.filter(
+                user=owner,
+                canvas_assignment_id=canvas_id,
+            ).first()
+            if assignment is None:
+                assignment = Assignment.objects.create(
+                    user=owner,
+                    canvas_assignment_id=canvas_id,
+                    canvas_course_id=42,
+                    title="Stale local title",
+                    course="Stale local course",
+                )
             Attachment.objects.create(
                 user=owner, assignment=assignment, study_file=upload(owner, name),
             )
@@ -270,4 +297,5 @@ class AttachmentUploadTests(MediaRootTestCase):
         self.assertNotIn("my-essay-notes.txt", project.get_text())
         self.assertIn("my-essay-notes.txt", essay.get_text())
         self.assertNotIn("my-project-notes.txt", essay.get_text())
-        self.assertEqual(Assignment.objects.count(), 3)
+        self.assertEqual(Assignment.objects.filter(user=self.user).count(), 2)
+        self.assertEqual(Assignment.objects.filter(user=other).count(), 1)

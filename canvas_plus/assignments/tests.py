@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
+from assignments.models import Assignment
 from assignments.test_helpers import configure_canvas_user
 
 
@@ -65,6 +66,67 @@ class CanvasAssignmentsPageTests(TestCase):
             courses,
             session=ANY,
         )
+
+        assignment = Assignment.objects.get(
+            user=self.user,
+            canvas_assignment_id=101,
+        )
+        self.assertEqual(assignment.title, "Canvas Project 1")
+        self.assertEqual(assignment.course, "CS 4300")
+        self.assertEqual(assignment.due_date, due_date)
+
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch("assignments.views.list_courses", return_value=[{"id": 42, "name": "CS 4300"}])
+    @patch("assignments.views.list_upcoming_assignments")
+    def test_assignment_sync_refreshes_canvas_fields_and_preserves_estimate(
+        self,
+        list_upcoming_assignments_mock,
+        _list_courses_mock,
+        _list_graded_submissions_mock,
+    ):
+        """Repeated successful loads refresh Canvas data without replacing a manual estimate."""
+        Assignment.objects.create(
+            user=self.user,
+            canvas_course_id=42,
+            canvas_assignment_id=101,
+            title="Old title",
+            course="Old course",
+            estimated_effort_minutes=75,
+            effort_estimate_source="manual",
+        )
+        list_upcoming_assignments_mock.side_effect = [
+            [{
+                "canvas_assignment_id": 101,
+                "canvas_course_id": 42,
+                "title": "Updated title",
+                "course_name": "CS 4300",
+                "due_date": None,
+                "description": "Updated description",
+                "submitted": False,
+            }],
+            [{
+                "canvas_assignment_id": 101,
+                "canvas_course_id": 42,
+                "title": "Latest title",
+                "course_name": "CS 4300",
+                "due_date": None,
+                "description": "Latest description",
+                "submitted": False,
+            }],
+        ]
+
+        self.client.get(reverse("assignment_list"))
+        self.client.get(reverse("assignment_list"))
+
+        assignment = Assignment.objects.get(
+            user=self.user,
+            canvas_assignment_id=101,
+        )
+        self.assertEqual(Assignment.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(assignment.title, "Latest title")
+        self.assertEqual(assignment.description, "Latest description")
+        self.assertEqual(assignment.estimated_effort_minutes, 75)
+        self.assertEqual(assignment.effort_estimate_source, "manual")
 
     @override_settings(CACHES=settings.LOCMEM_CACHE)
     @patch("assignments.views.list_graded_submissions", return_value=[])

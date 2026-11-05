@@ -258,14 +258,14 @@ def test_saved_effort_estimate_appears_on_assignment_list(
     ).count() == 1
     
 @pytest.mark.django_db
-@patch("assignments.views.estimate_and_save_assignment_effort")
+@patch("study_plan.effort_estimation.estimate_and_save_assignment_effort")
 @patch("assignments.views.load_canvas_context")
-def test_opening_effort_page_generates_automatic_estimate(
+def test_opening_effort_page_does_not_generate_automatic_estimate(
     load_canvas_context_mock,
     estimate_and_save_mock,
     client,
 ):
-    """Opening the effort page should generate an estimate for a new assignment."""
+    """Opening the effort page creates the row without running inference."""
 
     # Create and log in the student.
     user = get_user_model().objects.create_user(
@@ -296,23 +296,6 @@ def test_opening_effort_page_generates_automatic_estimate(
         "assignments_unavailable_message": "",
     }
 
-    # Mimic the real estimator by saving an automatic estimate.
-    def save_fake_estimate(assignment, assignment_information):
-        # Confirm the Canvas description reaches the estimator.
-        assert "five-page research paper" in assignment_information
-
-        # Save the same fields the real estimator would update.
-        assignment.estimated_effort_minutes = 90
-        assignment.effort_estimate_source = "automatic"
-        assignment.save(
-            update_fields=[
-                "estimated_effort_minutes",
-                "effort_estimate_source",
-            ]
-        )
-
-    estimate_and_save_mock.side_effect = save_fake_estimate
-
     # Open the real effort-estimation page.
     response = client.get(
         reverse(
@@ -331,10 +314,11 @@ def test_opening_effort_page_generates_automatic_estimate(
         canvas_assignment_id=101,
     )
 
-    # The automatic estimate should have been persisted.
-    assert assignment.estimated_effort_minutes == 90
-    assert assignment.effort_estimate_source == "automatic"
+    assert assignment.description == (
+        "Write a five-page research paper using at least five academic sources."
+    )
+    assert assignment.estimated_effort_minutes is None
+    assert assignment.effort_estimate_source is None
 
-    # The live view should have called the estimator exactly once.
-    estimate_and_save_mock.assert_called_once()
+    estimate_and_save_mock.assert_not_called()
 

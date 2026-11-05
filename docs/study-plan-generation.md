@@ -3,8 +3,8 @@
 This feature generates and persists study sessions for a student's selected
 assignments. It prepares the student's remaining availability, asks the AI
 inference layer for a structured schedule, validates the proposal locally, and
-only then saves the plan. The generation entry point is a backend service; this
-branch does not add a page or HTTP endpoint for it.
+only then saves the plan. The service is invoked by the Generate plan form on
+the availability page.
 
 **User story:** As a student, I want my selected assignments scheduled into my
 free time before their deadlines, so that I can see a practical study plan
@@ -28,12 +28,13 @@ without overlapping existing commitments.
 
 | Model | Purpose | Key rules |
 | --- | --- | --- |
-| `Assignment` | A Canvas assignment selected for planning | `estimated_effort_minutes` is nullable; an assignment is schedulable only when it has a due date and a positive effort estimate. |
+| `Assignment` | A Canvas assignment selected for planning | Canvas fields, including description, are synchronized locally; `estimated_effort_minutes` is nullable, and planning estimates selected assignments on demand when needed. |
 | `StudyPlan` | One generated plan for a user | Required user FK (CASCADE); `created_at`; JSON `notices` list. |
 | `StudySession` | One scheduled block in a plan | Required plan and assignment FKs (CASCADE); aware `start` and `end`; `late` records whether the session ends after its assignment deadline. |
 
-The assignment estimate is added by
-`canvas_plus/assignments/migrations/0004_assignment_estimated_effort_minutes.py`.
+Assignment descriptions are stored by
+`canvas_plus/assignments/migrations/0005_assignment_description.py`; estimates
+are added by `canvas_plus/assignments/migrations/0004_assignment_effort_estimate_source_and_more.py`.
 Apply migrations before using the planner.
 
 ## Generation flow
@@ -46,8 +47,10 @@ generate/validate/persist flow:
 2. Assignments are queried by both primary key and user. If any requested ID is
    not owned by that user or does not exist, the call raises
    `InaccessibleAssignmentError`; it does not silently plan a partial selection.
-3. Assignments without a due date or a positive integer effort estimate are
-   excluded. If none remain, `NoEligibleAssignmentsError` is raised.
+3. Assignments without a due date are excluded. Selected assignments without a
+   positive integer effort estimate are estimated from their saved Canvas
+   description. If an estimate cannot be produced, that assignment is excluded
+   with a notice. If none remain, `NoEligibleAssignmentsError` is raised.
 4. The user's availability is trimmed to the future, overlapping or adjacent
    windows are merged, and sessions from their earlier plans are subtracted.
    If no free interval remains, `NoUsableAvailabilityError` is raised.
@@ -74,7 +77,10 @@ session ending exactly at its assignment deadline is on time. If it ends after
 the deadline, its `late` flag must be true and the caller must explicitly pass
 `allow_late=True`; late sessions must still fit in the user's availability.
 
-The total proposed minutes for an assignment cannot exceed its estimate.
+Canvas assignment rows are upserted when the assignments page successfully loads;
+this sync refreshes Canvas-owned fields without changing a saved estimate. It does
+not run effort estimation. The total proposed minutes for an assignment cannot
+exceed its estimate.
 After validation, the plan's notices combine AI-provided notices, explanations
 for skipped assignments, and notices for estimated effort that could not be
 scheduled. A sub-15-minute remainder can be reported even though sessions

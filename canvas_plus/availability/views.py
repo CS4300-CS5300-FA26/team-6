@@ -18,7 +18,9 @@ from .models import Availability
 GENERATION_ERRORS = {
     EmptyAssignmentSelectionError: "Select at least one assignment.",
     InaccessibleAssignmentError: "One or more selected assignments are unavailable.",
-    NoEligibleAssignmentsError: "Select an assignment with a due date.",
+    NoEligibleAssignmentsError: (
+        "No selected assignment has both a due date and a usable effort estimate."
+    ),
     NoUsableAvailabilityError: "Add future availability before generating a plan.",
 }
 
@@ -41,9 +43,13 @@ def availability_list(request):
                 allow_late=request.POST.get("allow_late") == "on",
             )
         except StudyPlanError as error:
-            generation_error = GENERATION_ERRORS.get(
-                type(error),
-                "The study plan could not be generated. Please try again.",
+            generation_error = (
+                str(error)
+                if isinstance(error, NoEligibleAssignmentsError) and str(error)
+                else GENERATION_ERRORS.get(
+                    type(error),
+                    "The study plan could not be generated. Please try again.",
+                )
             )
         else:
             return redirect("availability:list")

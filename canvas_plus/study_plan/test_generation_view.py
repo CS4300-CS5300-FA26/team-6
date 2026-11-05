@@ -118,3 +118,28 @@ class StudyPlanGenerationViewTests(TestCase):
         self.assertContains(response, "selected assignments are unavailable")
         infer.assert_not_called()
         self.assertFalse(PersistedStudyPlan.objects.filter(user=self.user).exists())
+
+    @patch("study_plan.generate.estimate_and_save_assignment_effort", return_value=None)
+    @patch("study_plan.generate.infer")
+    def test_unestimable_assignment_shows_skip_reason(self, infer, estimate):
+        assignment = Assignment.objects.create(
+            user=self.user,
+            title="Needs an estimate",
+            course="Writing",
+            due_date=self.start + timedelta(days=2),
+            canvas_course_id=1,
+            canvas_assignment_id=2,
+            description="",
+        )
+
+        response = self.client.post(
+            reverse("availability:list"),
+            {"action": "generate_plan", "assignment_ids": [str(assignment.pk)]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Needs an estimate was skipped")
+        self.assertContains(response, "no positive effort estimate")
+        estimate.assert_called_once_with(assignment, "")
+        infer.assert_not_called()
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=self.user).exists())

@@ -58,7 +58,10 @@ def step_upload_oversized_attachment_batch(context):
 
 @then("no file is attached")
 def step_no_attachment_saved(context):
-    assert Assignment.objects.count() == 0
+    assert Assignment.objects.filter(
+        user=context.user,
+        canvas_assignment_id=101,
+    ).count() == 1
     assert StudyFile.objects.count() == 0
     assert Attachment.objects.count() == 0
     assert not any(path.is_file() for path in Path(context.attachment_media).rglob("*"))
@@ -172,7 +175,10 @@ def step_cancelled_attachment_remains(context):
 @given("a task contains zero uploaded files")
 def step_task_without_uploaded_files(context):
     step_viewing_attachment_deadline(context)
-    assert Assignment.objects.count() == 0
+    assert Assignment.objects.filter(
+        user=context.user,
+        canvas_assignment_id=101,
+    ).count() == 1
     assert StudyFile.objects.count() == 0
     assert Attachment.objects.count() == 0
 
@@ -204,6 +210,9 @@ def step_no_attachments_listed_on_card(context):
     )
     assert upload_form is not None, "Upload form is missing from the assignment card"
     assert upload_form.find("input", attrs={"name": "files"}) is not None
-    assert Assignment.objects.count() == 0, "Viewing created an Assignment row"
+    assert Assignment.objects.filter(
+        user=context.user,
+        canvas_assignment_id=101,
+    ).count() == 1, "Canvas assignment was not synchronized"
     assert StudyFile.objects.count() == 0, "Viewing created a StudyFile row"
     assert Attachment.objects.count() == 0, "Viewing created an Attachment row"

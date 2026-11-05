@@ -14,6 +14,7 @@ class Assignment(models.Model):
     title = models.CharField(max_length=200)
     course = models.CharField(max_length=100)
     due_date = models.DateTimeField(null=True, blank=True)
+    description = models.TextField(blank=True, default="")
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
