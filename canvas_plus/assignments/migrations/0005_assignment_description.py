@@ -15,9 +15,4 @@ class Migration(migrations.Migration):
             name='description',
             field=models.TextField(blank=True, null=True),
         ),
-        migrations.AddField(
-            model_name='assignment',
-            name='sync_state',
-            field=models.CharField(choices=[('synced', 'Synced'), ('missing', 'Missing'), ('failed', 'Failed')], default='synced', max_length=10),
-        ),
     ]
