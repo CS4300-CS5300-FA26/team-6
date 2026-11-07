@@ -30,6 +30,11 @@ class RecentlyGradedSectionTests(TestCase):
 
     def setUp(self):
         self.user, self.connection = configure_canvas_user(self)
+        list_all_assignments = patch(
+            "assignments.views.list_all_assignments", return_value=[]
+        )
+        list_all_assignments.start()
+        self.addCleanup(list_all_assignments.stop)
 
     @patch(
         "assignments.views.list_graded_submissions",
