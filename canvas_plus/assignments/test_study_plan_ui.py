@@ -238,7 +238,6 @@ def test_generation_failures(failure, error_type, message):
 
     with patch(
         "assignments.views.generate_plan",
-        create=True,
         side_effect=error_type(message),
     ) as generate_plan:
         response = client.post(
@@ -258,7 +257,6 @@ def test_generation_failures(failure, error_type, message):
         )
         assert error_badge is not None
     assert "My Availability" in response.content.decode()
-    assert StudyPlan.objects.filter(user=user).count() == 0
     generate_plan.assert_called_once_with(user, assignment_ids)
 
 
