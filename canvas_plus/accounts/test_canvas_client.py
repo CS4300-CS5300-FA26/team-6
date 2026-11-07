@@ -310,6 +310,48 @@ def test_all_assignments_across_courses_and_pages():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(("failure", "error_type", "expected_calls"), [
+    ("later_page_api_error", CanvasAPIError, 2),
+    ("malformed_later_page", CanvasAPIError, 2),
+    ("unsafe_pagination_link", CanvasAPIError, 1),
+    ("repeated_pagination_link", CanvasAPIError, 1),
+    ("later_page_unauthorized", CanvasAuthenticationError, 2),
+])
+def test_all_assignments_rejects_bad_later_page(failure, error_type, expected_calls):
+    """Later-page failures stay distinct and pagination never leaks the token."""
+    operation = getattr(canvas_client, "list_all_assignments", None)
+    assert callable(operation), "Canvas client has no all-assignment operation yet"
+
+    courses = [{"id": 42, "name": "CS 4300"}]
+    initial_url = "https://canvas.example.edu/api/v1/courses/42/assignments"
+    next_url = "https://canvas.example.edu/api/v1/courses/42/assignments?page=2"
+    if failure == "unsafe_pagination_link":
+        next_url = "https://untrusted.example/api/v1/assignments"
+    elif failure == "repeated_pagination_link":
+        next_url = initial_url
+
+    later_response = {
+        "later_page_api_error": response({}, status=500),
+        "malformed_later_page": response({"error": "not a list"}),
+        "later_page_unauthorized": response({}, status=401),
+    }.get(failure)
+    responses = [response([], next_url=next_url)]
+    if later_response is not None:
+        responses.append(later_response)
+
+    with patch("accounts.canvas_client.requests.get", side_effect=responses) as get:
+        with pytest.raises(error_type):
+            operation("fake-token", courses)
+
+    assert get.call_count == expected_calls
+    assert all(
+        call.args[0].startswith("https://canvas.example.edu/")
+        for call in get.call_args_list
+    )
+    assert get.call_args_list[0].args == (initial_url,)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(("due_at", "message"), [
     ("not-a-date", "invalid assignment due date"),
     ("2026-10-22T18:30:00", "invalid assignment due date"),
