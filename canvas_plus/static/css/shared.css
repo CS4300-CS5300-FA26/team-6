@@ -78,6 +78,15 @@ body.landing-page a { color: #17324d; }
 .assignment-due { max-width: 12rem; margin: 0; color: #35443e; text-align: right; overflow-wrap: anywhere; }
 
 .planning-assignments { margin: 2rem 0; }
+.planning-assignment-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); align-items: end; gap: 0.75rem; margin: 1rem 0; padding: 1rem; border: 1px solid #cbd5d1; border-radius: 4px; background: #f5f8f6; }
+.planning-assignment-filters label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+.planning-assignment-filters input:not([type="checkbox"]), .planning-assignment-filters select { width: 100%; min-width: 0; padding: 0.5rem; border: 1px solid #aebbb5; border-radius: 3px; background: #fff; color: #263b34; font: inherit; }
+.planning-assignment-filters input:focus-visible, .planning-assignment-filters select:focus-visible { outline: 2px solid #245b49; outline-offset: 2px; }
+.planning-assignment-filters .planning-no-due-date { display: flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; }
+.planning-no-due-date input { width: 1.1rem; height: 1.1rem; accent-color: #245b49; }
+.planning-filter-actions { display: flex; align-items: center; gap: 0.75rem; min-height: 2.5rem; }
+.planning-filter-actions button { padding: 0.55rem 0.75rem; border: 0; border-radius: 4px; background: #17324d; color: #fff; font: inherit; cursor: pointer; }
+.planning-filter-actions a { color: #17324d; }
 .planning-assignment-form { margin: 1rem 0; }
 .planning-assignment-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #cbd5d1; border-radius: 4px; }
 .planning-assignment-table { width: 100%; min-width: 34rem; border-collapse: collapse; table-layout: fixed; background: #fff; }
