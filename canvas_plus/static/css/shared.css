@@ -77,7 +77,26 @@ body.landing-page a { color: #17324d; }
 .assignment-course { margin: 0.25rem 0 0; color: #52615c; overflow-wrap: anywhere; }
 .assignment-due { max-width: 12rem; margin: 0; color: #35443e; text-align: right; overflow-wrap: anywhere; }
 
+.planning-assignments { margin: 2rem 0; }
+.planning-assignment-form { margin: 1rem 0; }
+.planning-assignment-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #cbd5d1; border-radius: 4px; }
+.planning-assignment-table { width: 100%; min-width: 34rem; border-collapse: collapse; table-layout: fixed; background: #fff; }
+.planning-assignment-table th, .planning-assignment-table td { padding: 0.75rem; border-bottom: 1px solid #dce3e0; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.planning-assignment-table th { background: #eef3f1; color: #263b34; font-size: 0.9rem; }
+.planning-assignment-table tbody tr:hover { background: #f5f8f6; }
+.planning-assignment-table th:first-child, .planning-assignment-table td:first-child { width: 4rem; text-align: center; }
+.planning-assignment-table th:nth-child(3), .planning-assignment-table td:nth-child(3) { width: 10rem; }
+.planning-assignment-table th:last-child, .planning-assignment-table td:last-child { width: 7rem; }
+.planning-assignment-table input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: #245b49; cursor: pointer; }
+.planning-assignment-table input[type="checkbox"]:focus-visible { outline: 2px solid #17324d; outline-offset: 3px; }
+.planning-assignment-title { font-weight: 700; overflow-wrap: anywhere; }
+.planning-generate-button { margin-top: 1rem; padding: 0.65rem 1rem; border: 0; border-radius: 4px; background: #245b49; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.planning-generate-button:hover { background: #194b3b; }
+.planning-generate-button:focus-visible { outline: 2px solid #17324d; outline-offset: 3px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 @media (max-width: 40rem) {
 	.assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
 	.assignment-due { grid-column: 2; max-width: none; text-align: left; }
+	.planning-assignment-table-scroll { border-radius: 0; }
 }
