@@ -306,6 +306,11 @@ def test_default_local_calendar_window():
         response.context["availability_entries"].values_list("date", flat=True)
     ) == [available_date]
     assert assignment_row_titles(response, titles) == set(titles[:3])
+    page = BeautifulSoup(response.content, "html.parser")
+    assert page.select_one("#assignment-due-from")["value"] == today.isoformat()
+    assert page.select_one("#assignment-due-to")["value"] == (
+        today + timedelta(days=13)
+    ).isoformat()
 
 
 @pytest.mark.django_db
