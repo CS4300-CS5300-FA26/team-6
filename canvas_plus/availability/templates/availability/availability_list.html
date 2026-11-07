@@ -66,6 +66,65 @@
             {% endif %}
         {% endif %}
 
+        {% if planning_courses %}
+            <form class="planning-assignment-filters" method="get" action="{% url 'availability:list' %}">
+                <div>
+                    <label for="assignment-search">Assignment or course</label>
+                    <input
+                        id="assignment-search"
+                        name="q"
+                        type="search"
+                        value="{{ assignment_query }}"
+                    >
+                </div>
+                <div>
+                    <label for="assignment-course">Course</label>
+                    <select id="assignment-course" name="course">
+                        <option value="">All courses</option>
+                        {% for course_name in planning_courses %}
+                            <option value="{{ course_name }}"{% if assignment_course_filter == course_name %} selected{% endif %}>{{ course_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="assignment-due-from">Due from</label>
+                    <input
+                        id="assignment-due-from"
+                        name="due_from"
+                        type="date"
+                        value="{{ assignment_due_from }}"
+                    >
+                </div>
+                <div>
+                    <label for="assignment-due-to">Due through</label>
+                    <input
+                        id="assignment-due-to"
+                        name="due_to"
+                        type="date"
+                        value="{{ assignment_due_to }}"
+                    >
+                </div>
+                <label class="planning-no-due-date" for="assignment-no-due-date">
+                    <input
+                        id="assignment-no-due-date"
+                        name="no_due_date"
+                        type="checkbox"
+                        value="1"
+                        {% if assignment_no_due_date %}checked{% endif %}
+                    >
+                    No due date
+                </label>
+                <div class="planning-filter-actions">
+                    <button type="submit">Filter assignments</button>
+                    <a href="{% url 'availability:list' %}">Clear filters</a>
+                </div>
+            </form>
+        {% endif %}
+
+        {% if assignment_filter_error %}
+            <p role="status">{{ assignment_filter_error }}</p>
+        {% endif %}
+
         {% if planning_assignments %}
             <form
                 id="study-plan-assignment-form"
@@ -123,8 +182,12 @@
                 </div>
                 <button class="planning-generate-button" type="submit">Generate study plan</button>
             </form>
-        {% elif not planning_assignments_unavailable %}
-            <p>No synced assignments are available to plan.</p>
+        {% elif not planning_assignments_unavailable and not assignment_filter_error %}
+            {% if assignment_filters_active %}
+                <p>No assignments match these filters.</p>
+            {% else %}
+                <p>No assignments are due in the default date window.</p>
+            {% endif %}
         {% endif %}
     </section>
 
