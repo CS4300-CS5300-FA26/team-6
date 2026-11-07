@@ -1,7 +1,10 @@
 """Views for creating and updating student availability."""
+from datetime import datetime, time, timedelta
+
 #imports for user login, html templates, availability form, and model.
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
 from assignments.models import Assignment
 from assignments.views import load_canvas_context
 from study_plan.selectors import study_plan_context  # pylint: disable=import-error
@@ -38,9 +41,21 @@ def availability_list(request):
         canvas_context["assignments_unavailable"]
         or canvas_context.get("assignment_sync_error")
     )
+    local_today = timezone.localdate()
+    local_timezone = timezone.get_current_timezone()
+    window_start = timezone.make_aware(
+        datetime.combine(local_today, time.min),
+        local_timezone,
+    )
+    window_end = timezone.make_aware(
+        datetime.combine(local_today + timedelta(days=14), time.min),
+        local_timezone,
+    )
     planning_assignments = Assignment.objects.filter(
         user=request.user,
         sync_state="synced",
+        due_date__gte=window_start,
+        due_date__lt=window_end,
     ).order_by("due_date", "title", "pk")
 
     #render availability page with form and saved entries

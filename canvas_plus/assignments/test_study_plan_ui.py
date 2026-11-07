@@ -65,6 +65,9 @@ def test_generate_selected_assignments():
             canvas_assignment_id=canvas_assignment_id,
             title=title,
             course="Biology",
+            due_date=timezone.make_aware(
+                datetime.combine(timezone.localdate() + timedelta(days=3), time(17))
+            ),
         )
 
     selected_assignments = [
