@@ -48,6 +48,130 @@
         <p>No availability entered yet.</p>
     {% endif %}
 
+    <section class="planning-assignments" aria-labelledby="planning-assignments-heading">
+        <h2 id="planning-assignments-heading">Assignments to plan</h2>
+
+        {% if planning_assignments_unavailable %}
+            {% if canvas_connection_missing %}
+                <p role="status">
+                    Canvas is not connected. The assignments shown may be from your last successful sync.
+                    <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+                </p>
+            {% elif assignment_sync_error %}
+                <p role="status">{{ assignment_sync_error }}</p>
+            {% elif assignments_unavailable_message %}
+                <p role="status">{{ assignments_unavailable_message }}</p>
+            {% elif not canvas_connection_expired %}
+                <p role="status">Assignment data could not be refreshed. The displayed assignments may be out of date.</p>
+            {% endif %}
+        {% endif %}
+
+        {% if planning_assignments %}
+            <form
+                id="study-plan-assignment-form"
+                class="planning-assignment-form"
+                method="post"
+                action="{% url 'generate_plan' %}"
+                data-user-id="{{ request.user.pk }}"
+            >
+                {% csrf_token %}
+                <div class="planning-assignment-table-scroll" role="region" aria-label="Assignment selection" tabindex="0">
+                    <table class="planning-assignment-table">
+                        <caption class="visually-hidden">Synced assignments available for study planning</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Select</th>
+                                <th scope="col">Assignment</th>
+                                <th scope="col">Due</th>
+                                <th scope="col">Effort</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for assignment in planning_assignments %}
+                                <tr class="planning-assignment-row" data-assignment-id="{{ assignment.pk }}">
+                                    <td class="planning-assignment-select-cell">
+                                        <input
+                                            type="checkbox"
+                                            id="planning-assignment-{{ assignment.pk }}"
+                                            name="assignment_ids"
+                                            value="{{ assignment.pk }}"
+                                            aria-label="Select {{ assignment.title }}"
+                                        >
+                                    </td>
+                                    <td>
+                                        <label class="planning-assignment-title" for="planning-assignment-{{ assignment.pk }}">{{ assignment.title }}</label>
+                                        <p class="assignment-course">{{ assignment.course }}</p>
+                                    </td>
+                                    <td>
+                                        {% if assignment.due_date %}
+                                            <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y, g:i A" }}</time>
+                                        {% else %}
+                                            <span>No due date</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if assignment.estimated_effort_minutes %}
+                                            {{ assignment.estimated_effort_minutes }} min
+                                        {% else %}
+                                            Not estimated
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <button class="planning-generate-button" type="submit">Generate study plan</button>
+            </form>
+        {% elif not planning_assignments_unavailable %}
+            <p>No synced assignments are available to plan.</p>
+        {% endif %}
+    </section>
+
+    <script>
+        (() => {
+            const form = document.getElementById("study-plan-assignment-form");
+            if (!form) return;
+
+            const storageKey = `canvas-plus-study-plan-selection:${form.dataset.userId}`;
+            let selectedIds = new Set();
+            try {
+                const savedIds = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
+                if (Array.isArray(savedIds)) {
+                    selectedIds = new Set(savedIds.filter((value) => typeof value === "string"));
+                }
+            } catch {}
+
+            const checkboxes = Array.from(
+                form.querySelectorAll('input[type="checkbox"][name="assignment_ids"]')
+            );
+            for (const checkbox of checkboxes) {
+                checkbox.checked = selectedIds.has(checkbox.value);
+                checkbox.addEventListener("change", () => {
+                    if (checkbox.checked) selectedIds.add(checkbox.value);
+                    else selectedIds.delete(checkbox.value);
+                    try {
+                        sessionStorage.setItem(storageKey, JSON.stringify(Array.from(selectedIds)));
+                    } catch {}
+                });
+            }
+
+            form.addEventListener("submit", () => {
+                const submittedIds = new Set(
+                    checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value)
+                );
+                for (const assignmentId of selectedIds) {
+                    if (submittedIds.has(assignmentId)) continue;
+                    const hiddenId = document.createElement("input");
+                    hiddenId.type = "hidden";
+                    hiddenId.name = "assignment_ids";
+                    hiddenId.value = assignmentId;
+                    form.appendChild(hiddenId);
+                }
+            });
+        })();
+    </script>
+
     <!-- The student's most recent study plan, optionally narrowed to one day. -->
     <h2>Study plan</h2>
 
