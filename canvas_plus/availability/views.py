@@ -2,6 +2,8 @@
 #imports for user login, html templates, availability form, and model.
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
+from assignments.models import Assignment
+from assignments.views import load_canvas_context
 from study_plan.selectors import study_plan_context  # pylint: disable=import-error
 from .forms import AvailabilityForm
 from .models import Availability
@@ -31,6 +33,16 @@ def availability_list(request):
         #display empty form when page is first opened
         form = AvailabilityForm()
 
+    canvas_context = load_canvas_context(request.user, sync_all_assignments=True)
+    planning_assignments_unavailable = bool(
+        canvas_context["assignments_unavailable"]
+        or canvas_context.get("assignment_sync_error")
+    )
+    planning_assignments = Assignment.objects.filter(
+        user=request.user,
+        sync_state="synced",
+    ).order_by("due_date", "title", "pk")
+
     #render availability page with form and saved entries
     return render(
         request,
@@ -38,6 +50,9 @@ def availability_list(request):
         {
             "form": form,
             "availability_entries": availability_entries,
+            **canvas_context,
+            "planning_assignments": planning_assignments,
+            "planning_assignments_unavailable": planning_assignments_unavailable,
             #study plan section; ?date= picks one day
             **study_plan_context(request.user, request.GET.get("date")),
         },
