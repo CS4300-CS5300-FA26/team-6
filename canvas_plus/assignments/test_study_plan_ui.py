@@ -214,6 +214,13 @@ def test_generation_failures(failure, error_type, message):
     assert response.status_code == 200
     assert response.wsgi_request.path == reverse("availability:list")
     assert message in response.content.decode()
+    if failure == "ineligible":
+        error_badge = BeautifulSoup(response.content, "html.parser").find(
+            "p",
+            class_="error",
+            string=message,
+        )
+        assert error_badge is not None
     assert "My Availability" in response.content.decode()
     assert StudyPlan.objects.filter(user=user).count() == 0
     generate_plan.assert_called_once_with(user, assignment_ids)
