@@ -45,4 +45,3 @@ class EffortEstimateForm(forms.ModelForm):
 
         # Return the validated value to Django.
         return estimated_minutes
-        

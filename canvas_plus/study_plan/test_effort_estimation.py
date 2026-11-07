@@ -208,4 +208,3 @@ def test_invalid_manual_effort_estimate_is_rejected(invalid_estimate):
 
     assert assignment.estimated_effort_minutes is None
     assert assignment.effort_estimate_source is None
-    
