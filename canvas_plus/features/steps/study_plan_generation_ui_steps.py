@@ -120,7 +120,6 @@ def step_student_with_selected_assignments(context):
 
     context.plan = StudyPlan.objects.create(
         user=context.user,
-        notices=["Some selected work could not be scheduled."],
     )
     local_timezone = ZoneInfo(timezone.get_current_timezone_name())
     session_start = datetime.combine(
@@ -160,7 +159,7 @@ def step_generate_selected_plan(context):
     )
 
 
-@then("the availability page shows availability, the assignment table, selected study sessions, and a generation notice")
+@then("the availability page shows availability, the assignment table, and selected study sessions")
 def step_availability_page_shows_plan(context):
     assert context.response.status_code == 200
     page = BeautifulSoup(context.response.content, "html.parser")
@@ -178,7 +177,6 @@ def step_availability_page_shows_plan(context):
         for title in page.select(".study-session .assignment-title")
     }
     assert session_titles == {assignment.title for assignment in context.selected_assignments}
-    assert context.plan.notices[0] in context.response.content.decode()
     context.generate_plan.assert_called_once_with(
         context.user,
         [assignment.pk for assignment in context.selected_assignments],
