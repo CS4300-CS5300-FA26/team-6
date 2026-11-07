@@ -1,11 +1,16 @@
 """Persist a student's normalized Canvas assignment snapshot."""
 
+from django.core.cache import cache
 from django.db import transaction
+from django.views.decorators.debug import sensitive_variables
 
 from .models import Assignment
 
 # Django wires model managers at runtime; pylint cannot infer them without pylint-django.
 # pylint: disable=no-member
+
+SYNC_CACHE_SECONDS = 60 * 60
+_SYNC_SUCCEEDED = "success"
 
 
 def sync_canvas_assignments(user, courses, canvas_assignments):
@@ -39,3 +44,28 @@ def sync_canvas_assignments(user, courses, canvas_assignments):
                 canvas_assignment_id__in=returned_assignment_ids
             )
         missing_assignments.update(sync_state="missing")
+
+
+@sensitive_variables("token")
+def sync_canvas_assignments_if_needed(
+    user,
+    courses,
+    connection,
+    assignment_fetcher,
+):
+    """Fetch and persist once per connection version, caching only committed success."""
+    cache_key = (
+        f"canvas-assignment-sync:{connection.pk}:{connection.updated_at.timestamp()}"
+    )
+    if cache.get(cache_key) == _SYNC_SUCCEEDED:
+        return False
+
+    try:
+        canvas_assignments = assignment_fetcher()
+        sync_canvas_assignments(user, courses, canvas_assignments)
+    except Exception:  # pylint: disable=broad-exception-caught
+        Assignment.objects.filter(user=user).update(sync_state="failed")
+        raise
+
+    cache.set(cache_key, _SYNC_SUCCEEDED, SYNC_CACHE_SECONDS)
+    return True
