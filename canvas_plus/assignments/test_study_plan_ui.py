@@ -18,6 +18,8 @@ import pytest
 from accounts.canvas_client import CanvasAPIError
 from accounts.models import CanvasConnection
 from assignments.models import Assignment
+from assignments.sync import sync_canvas_assignments
+from availability.models import Availability
 from study_plan.models import StudyPlan, StudySession
 from study_plan.exceptions import (
     EmptyAssignmentSelectionError,
@@ -29,13 +31,22 @@ from study_plan.exceptions import (
 
 
 def assignment_row_titles(response, titles):
-    """Return known titles rendered in one assignment table/list row each."""
+    """Return known titles rendered in assignment-table body rows."""
     soup = BeautifulSoup(response.content, "html.parser")
-    rows = soup.select("tr, li.assignment-card")
+    rows = soup.select("table tbody tr")
     return {
         title
         for title in titles
         if any(title in row.get_text(" ", strip=True) for row in rows)
+    }
+
+
+def study_session_titles(response):
+    """Return titles from the existing study-session section only."""
+    soup = BeautifulSoup(response.content, "html.parser")
+    return {
+        title.get_text(" ", strip=True)
+        for title in soup.select(".study-session .assignment-title")
     }
 
 
@@ -61,11 +72,18 @@ def test_generate_selected_assignments():
         make_assignment(102, "Selected reading response"),
     ]
     unselected_assignment = make_assignment(103, "Unselected worksheet")
+    available_date = timezone.localdate() + timedelta(days=1)
+    Availability.objects.create(
+        user=user,
+        date=available_date,
+        start_time=time(9),
+        end_time=time(12),
+    )
     plan = StudyPlan.objects.create(
         user=user,
         notices=["Some selected work could not be scheduled."],
     )
-    start = timezone.now() + timedelta(days=1)
+    start = timezone.make_aware(datetime.combine(available_date, time(9)))
     for offset, assignment in enumerate(selected_assignments):
         session_start = start + timedelta(hours=offset)
         StudySession.objects.create(
@@ -76,6 +94,28 @@ def test_generate_selected_assignments():
         )
 
     selected_ids = [assignment.pk for assignment in selected_assignments]
+    selection_page = client.get(reverse("availability:list"))
+    assert selection_page.status_code == 200
+    all_titles = [
+        assignment.title
+        for assignment in (*selected_assignments, unselected_assignment)
+    ]
+    assert assignment_row_titles(selection_page, all_titles) == set(all_titles)
+    selection_soup = BeautifulSoup(selection_page.content, "html.parser")
+    selection_form = next(
+        (
+            form
+            for form in selection_soup.find_all("form")
+            if form.select_one('input[name="assignment_ids"]')
+        ),
+        None,
+    )
+    assert selection_form is not None
+    assert selection_form.find("button", {"type": "submit"}) is not None
+    assert list(
+        selection_page.context["availability_entries"].values_list("date", flat=True)
+    ) == [available_date]
+
     with patch(
         "assignments.views.generate_plan",
         create=True,
@@ -91,10 +131,13 @@ def test_generate_selected_assignments():
     generate_plan.assert_called_once_with(user, selected_ids)
 
     study_plan_response = client.get(reverse("availability:list"))
-    assert selected_assignments[0].title in study_plan_response.content.decode()
-    assert selected_assignments[1].title in study_plan_response.content.decode()
+    assert assignment_row_titles(study_plan_response, all_titles) == set(all_titles)
+    assert study_session_titles(study_plan_response) == {
+        selected_assignments[0].title,
+        selected_assignments[1].title,
+    }
     assert plan.notices[0] in study_plan_response.content.decode()
-    assert unselected_assignment.title not in study_plan_response.content.decode()
+    assert available_date.isoformat() in study_plan_response.content.decode()
 
 
 @pytest.mark.parametrize(
@@ -165,7 +208,9 @@ def test_generation_failures(failure, error_type, message):
         )
 
     assert response.status_code == 200
+    assert response.wsgi_request.path == reverse("availability:list")
     assert message in response.content.decode()
+    assert "My Availability" in response.content.decode()
     assert StudyPlan.objects.filter(user=user).count() == 0
     generate_plan.assert_called_once_with(user, assignment_ids)
 
@@ -193,33 +238,49 @@ def test_default_local_calendar_window():
         "Start of day 15",
         "No due date",
     ]
-    upcoming = [
-        {
-            "canvas_assignment_id": index,
-            "canvas_course_id": 11,
-            "title": title,
-            "course_name": "Biology",
-            "due_date": due_date,
-            "submitted": False,
-            "priority": "Soon",
-        }
-        for index, (title, due_date) in enumerate(zip(titles, due_dates), start=301)
-    ]
-    available_context = {
-        "assignments": upcoming,
-        "assignments_unavailable": False,
-        "canvas_connection_expired": False,
-        "canvas_connection_missing": False,
-        "assignments_unavailable_message": "",
-    }
+    for index, (title, due_date) in enumerate(zip(titles, due_dates), start=301):
+        Assignment.objects.create(
+            user=user,
+            canvas_assignment_id=index,
+            canvas_course_id=11,
+            title=title,
+            course="Biology",
+            due_date=due_date,
+            sync_state="synced",
+        )
+    available_date = today + timedelta(days=1)
+    Availability.objects.create(
+        user=user,
+        date=available_date,
+        start_time=time(9),
+        end_time=time(10),
+    )
+    plan = StudyPlan.objects.create(user=user)
+    session_assignment = Assignment.objects.create(
+        user=user,
+        canvas_assignment_id=306,
+        canvas_course_id=11,
+        title="Existing study session",
+        course="Biology",
+    )
+    StudySession.objects.create(
+        plan=plan,
+        assignment=session_assignment,
+        start=fixed_now + timedelta(days=1),
+        end=fixed_now + timedelta(days=1, minutes=30),
+    )
 
     with (
-        patch("assignments.views.timezone.now", return_value=fixed_now),
-        patch("assignments.views.load_canvas_context", return_value=available_context),
+        patch("django.utils.timezone.now", return_value=fixed_now),
     ):
-        response = client.get(reverse("assignment_list"))
+        response = client.get(reverse("availability:list"))
 
     assert response.status_code == 200
+    assert "My Availability" in response.content.decode()
+    assert "Existing study session" in response.content.decode()
+    assert list(
+        response.context["availability_entries"].values_list("date", flat=True)
+    ) == [available_date]
     assert assignment_row_titles(response, titles) == set(titles[:3])
 
 
@@ -283,6 +344,7 @@ def test_assignment_search_and_filters():
         due_date=datetime(2026, 11, 11, 17, tzinfo=local_timezone),
     )
     titles = [item["title"] for item in snapshot]
+    sync_canvas_assignments(user, courses, snapshot)
     connection_settings = override_settings(
         CANVAS_BASE_URL="https://canvas.example.edu",
         CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
@@ -303,7 +365,7 @@ def test_assignment_search_and_filters():
             patch("assignments.views.list_graded_submissions", return_value=[]),
             patch("assignments.views.list_all_assignments", return_value=snapshot),
         ):
-            url = reverse("assignment_list")
+            url = reverse("availability:list")
 
             def rows(params):
                 response = client.get(url, params)
