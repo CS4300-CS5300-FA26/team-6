@@ -85,6 +85,9 @@ class AttachmentUploadTests(MediaRootTestCase):
         self.enterContext(patch(
             "assignments.views.list_graded_submissions", create=True, return_value=[],
         ))
+        self.enterContext(patch(
+            "assignments.views.list_all_assignments", create=True, return_value=[]
+        ))
 
     def post_batch(self, files, **fields):
         """Submit multipart files using the public endpoint name and Canvas identity."""

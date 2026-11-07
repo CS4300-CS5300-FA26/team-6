@@ -1,5 +1,6 @@
 """Django views"""
 import logging
+from functools import partial
 
 import requests
 from django.contrib import messages
@@ -17,6 +18,7 @@ from accounts.canvas_client import (
     canvas_base_url,
     canvas_origin,
     list_courses,
+    list_all_assignments,
     list_graded_submissions,
     list_upcoming_assignments,
 )
@@ -24,6 +26,7 @@ from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
 from .models import Attachment, Assignment
 from .priority import priority
+from .sync import sync_canvas_assignments_if_needed
 from .uploads import save_attachments, validate_batch
 from .forms import EffortEstimateForm 
 from study_plan.effort_estimation import estimate_and_save_assignment_effort
@@ -49,7 +52,7 @@ def recently_graded_context(token, courses, session):
 
 
 @sensitive_variables("token")
-def load_canvas_context(user):
+def load_canvas_context(user, *, sync_all_assignments=False):
     """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
@@ -82,6 +85,25 @@ def load_canvas_context(user):
                     cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
                 assignments = list_upcoming_assignments(token, courses, session=session)
                 graded_context = recently_graded_context(token, courses, session)
+                if sync_all_assignments:
+                    try:
+                        sync_canvas_assignments_if_needed(
+                            user,
+                            courses,
+                            connection,
+                            partial(
+                                list_all_assignments,
+                                token,
+                                courses,
+                                session=session,
+                            ),
+                        )
+                    except CanvasAuthenticationError:
+                        raise
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        graded_context["assignment_sync_error"] = (
+                            "Unable to sync Canvas assignments. Please try again."
+                        )
             now = timezone.now()
             for assignment in assignments:
                 assignment["priority"] = priority(
@@ -111,7 +133,7 @@ def load_canvas_context(user):
 @login_required
 def assignment_list(request):
     """Show the signed-in student's current upcoming Canvas assignments."""
-    context = load_canvas_context(request.user)
+    context = load_canvas_context(request.user, sync_all_assignments=True)
     if not context["assignments_unavailable"]:
         assignments_by_id = {
             item["canvas_assignment_id"]: item for item in context["assignments"]
