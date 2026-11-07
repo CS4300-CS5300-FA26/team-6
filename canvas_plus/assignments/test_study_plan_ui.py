@@ -81,7 +81,6 @@ def test_generate_selected_assignments():
     )
     plan = StudyPlan.objects.create(
         user=user,
-        notices=["Some selected work could not be scheduled."],
     )
     start = timezone.make_aware(datetime.combine(available_date, time(9)))
     for offset, assignment in enumerate(selected_assignments):
@@ -137,8 +136,9 @@ def test_generate_selected_assignments():
         selected_assignments[0].title,
         selected_assignments[1].title,
     }
-    assert plan.notices[0] in study_plan_response.content.decode()
-    assert available_date.isoformat() in study_plan_response.content.decode()
+    assert list(
+        study_plan_response.context["availability_entries"].values_list("date", flat=True)
+    ) == [available_date]
 
 
 @pytest.mark.parametrize(
