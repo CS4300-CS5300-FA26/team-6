@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from behave import given, when, then
+from bs4 import BeautifulSoup
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
@@ -19,7 +20,7 @@ from availability.models import Availability
 from study_plan.models import StudyPlan, StudySession
 
 
-@given("a student with selected eligible assignments and availability")
+@given("a student on the availability page with selected eligible assignments and availability")
 def step_student_with_selected_assignments(context):
     configured = override_settings(
         CANVAS_BASE_URL="https://canvas.example.edu",
@@ -85,31 +86,45 @@ def step_student_with_selected_assignments(context):
         patcher.start()
         context.add_cleanup(patcher.stop)
 
-    sync_response = context.client.get(reverse("assignment_list"))
-    assert sync_response.status_code == 200
+    context.available_date = timezone.localdate() + timedelta(days=1)
+    Availability.objects.create(
+        user=context.user,
+        date=context.available_date,
+        start_time=time(9),
+        end_time=time(12),
+    )
+    context.response = context.client.get(reverse("availability:list"))
+    assert context.response.status_code == 200
     context.assignments = list(
         Assignment.objects.filter(user=context.user).order_by("canvas_assignment_id")
     )
+    assert len(context.assignments) == 3
     for assignment in context.assignments:
         assignment.estimated_effort_minutes = 30
         assignment.save(update_fields=["estimated_effort_minutes"])
 
     context.selected_assignments = context.assignments[:2]
     context.unselected_assignment = context.assignments[2]
-    available_date = timezone.localdate() + timedelta(days=1)
-    Availability.objects.create(
-        user=context.user,
-        date=available_date,
-        start_time=time(9),
-        end_time=time(12),
-    )
+    page = BeautifulSoup(context.response.content, "html.parser")
+    table_rows = page.select("table tbody tr")
+    for assignment in context.assignments:
+        assert any(
+            assignment.title in row.get_text(" ", strip=True)
+            for row in table_rows
+        )
+    checkbox_ids = {
+        item.get("value")
+        for item in page.select('input[name="assignment_ids"]')
+    }
+    assert checkbox_ids == {str(assignment.pk) for assignment in context.assignments}
+
     context.plan = StudyPlan.objects.create(
         user=context.user,
         notices=["Some selected work could not be scheduled."],
     )
     local_timezone = ZoneInfo(timezone.get_current_timezone_name())
     session_start = datetime.combine(
-        available_date,
+        context.available_date,
         time(9),
         tzinfo=local_timezone,
     )
@@ -132,7 +147,7 @@ def step_student_with_selected_assignments(context):
     context.add_cleanup(generation_stub.stop)
 
 
-@when("they generate a plan")
+@when("they generate a plan from the availability page")
 def step_generate_selected_plan(context):
     context.response = context.client.post(
         reverse("generate_plan"),
@@ -145,19 +160,40 @@ def step_generate_selected_plan(context):
     )
 
 
-@then("the study plan shows the selected assignments and generation notice")
-def step_selected_assignments_and_notice_shown(context):
+@then("the availability page shows availability, the assignment table, selected study sessions, and a generation notice")
+def step_availability_page_shows_plan(context):
     assert context.response.status_code == 200
-    page = context.response.content.decode()
-    for assignment in context.selected_assignments:
-        assert assignment.title in page
-    assert context.plan.notices[0] in page
+    page = BeautifulSoup(context.response.content, "html.parser")
+    assert list(
+        context.response.context["availability_entries"].values_list("date", flat=True)
+    ) == [context.available_date]
+    table_rows = page.select("table tbody tr")
+    for assignment in context.assignments:
+        assert any(
+            assignment.title in row.get_text(" ", strip=True)
+            for row in table_rows
+        )
+    session_titles = {
+        title.get_text(" ", strip=True)
+        for title in page.select(".study-session .assignment-title")
+    }
+    assert session_titles == {assignment.title for assignment in context.selected_assignments}
+    assert context.plan.notices[0] in context.response.content.decode()
     context.generate_plan.assert_called_once_with(
         context.user,
         [assignment.pk for assignment in context.selected_assignments],
     )
 
 
-@then("the study plan omits the unselected assignment")
+@then("the availability page has no study session for the unselected assignment")
 def step_unselected_assignment_omitted(context):
-    assert context.unselected_assignment.title not in context.response.content.decode()
+    assert context.unselected_assignment.title not in study_session_titles(context.response)
+
+
+def study_session_titles(response):
+    """Return titles from study-session rows, not assignment-table rows."""
+    page = BeautifulSoup(response.content, "html.parser")
+    return {
+        title.get_text(" ", strip=True)
+        for title in page.select(".study-session .assignment-title")
+    }
