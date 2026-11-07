@@ -100,6 +100,21 @@ def test_generate_selected_assignments():
         assignment.title
         for assignment in (*selected_assignments, unselected_assignment)
     ]
+
+    with patch(
+        "assignments.views.generate_plan",
+        create=True,
+        return_value=plan,
+    ) as generate_plan:
+        response = client.post(
+            reverse("generate_plan"),
+            {"assignment_ids": [str(assignment_id) for assignment_id in selected_ids]},
+        )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("availability:list")
+    generate_plan.assert_called_once_with(user, selected_ids)
+
     assert assignment_row_titles(selection_page, all_titles) == set(all_titles)
     selection_soup = BeautifulSoup(selection_page.content, "html.parser")
     selection_form = next(
@@ -115,20 +130,6 @@ def test_generate_selected_assignments():
     assert list(
         selection_page.context["availability_entries"].values_list("date", flat=True)
     ) == [available_date]
-
-    with patch(
-        "assignments.views.generate_plan",
-        create=True,
-        return_value=plan,
-    ) as generate_plan:
-        response = client.post(
-            reverse("generate_plan"),
-            {"assignment_ids": [str(assignment_id) for assignment_id in selected_ids]},
-        )
-
-    assert response.status_code == 302
-    assert response["Location"] == reverse("availability:list")
-    generate_plan.assert_called_once_with(user, selected_ids)
 
     study_plan_response = client.get(reverse("availability:list"))
     assert assignment_row_titles(study_plan_response, all_titles) == set(all_titles)
@@ -213,6 +214,26 @@ def test_generation_failures(failure, error_type, message):
     assert "My Availability" in response.content.decode()
     assert StudyPlan.objects.filter(user=user).count() == 0
     generate_plan.assert_called_once_with(user, assignment_ids)
+
+
+@pytest.mark.django_db
+def test_generation_action_requires_login_post_and_csrf():
+    """Only authenticated CSRF-protected POST requests can start generation."""
+    url = reverse("generate_plan")
+    user = get_user_model().objects.create_user(username="plan-ui-protected-action")
+
+    anonymous_response = Client().post(url, {"assignment_ids": []})
+    assert anonymous_response.status_code == 302
+    assert anonymous_response.url.startswith(reverse("login"))
+
+    client = Client()
+    client.force_login(user)
+    assert client.get(url).status_code == 405
+
+    csrf_checked_client = Client(enforce_csrf_checks=True)
+    csrf_checked_client.force_login(user)
+    assert csrf_checked_client.post(url, {"assignment_ids": []}).status_code == 403
+    assert StudyPlan.objects.filter(user=user).count() == 0
 
 
 @pytest.mark.django_db
