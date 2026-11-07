@@ -247,7 +247,7 @@
         <label for="study-day">Day</label>
         <input type="date" id="study-day" name="date" value="{{ study_day|date:'Y-m-d' }}">
         <button type="submit">Show day</button>
-        <a href="{% url 'availability:list' %}">Show all days</a>
+        <a href="{% url 'availability:list' %}?date=">Show all days</a>
     </form>
 
     <!-- Check the error first: study_sessions is missing from the context then, not None. -->
