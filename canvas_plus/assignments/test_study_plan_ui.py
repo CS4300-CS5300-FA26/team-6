@@ -1,16 +1,42 @@
 """Request tests for generating a study plan from selected assignments."""
 
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
+from bs4 import BeautifulSoup
+from cryptography.fernet import Fernet
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 import pytest
 
+from accounts.canvas_client import CanvasAPIError
+from accounts.models import CanvasConnection
 from assignments.models import Assignment
 from study_plan.models import StudyPlan, StudySession
+from study_plan.exceptions import (
+    EmptyAssignmentSelectionError,
+    InaccessibleAssignmentError,
+    NoEligibleAssignmentsError,
+    NoUsableAvailabilityError,
+    StudyPlanRetriesExhaustedError,
+)
+
+
+def assignment_row_titles(response, titles):
+    """Return known titles rendered in one assignment table/list row each."""
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.select("tr, li.assignment-card")
+    return {
+        title
+        for title in titles
+        if any(title in row.get_text(" ", strip=True) for row in rows)
+    }
 
 
 @pytest.mark.django_db
@@ -69,3 +95,266 @@ def test_generate_selected_assignments():
     assert selected_assignments[1].title in study_plan_response.content.decode()
     assert plan.notices[0] in study_plan_response.content.decode()
     assert unselected_assignment.title not in study_plan_response.content.decode()
+
+
+@pytest.mark.parametrize(
+    ("failure", "error_type", "message"),
+    [
+        ("empty", EmptyAssignmentSelectionError, "Select at least one assignment."),
+        (
+            "inaccessible",
+            InaccessibleAssignmentError,
+            "One or more selected assignments are inaccessible.",
+        ),
+        (
+            "ineligible",
+            NoEligibleAssignmentsError,
+            "No selected assignments are eligible to plan.",
+        ),
+        (
+            "availability",
+            NoUsableAvailabilityError,
+            "No future unoccupied availability is available.",
+        ),
+        (
+            "retries_exhausted",
+            StudyPlanRetriesExhaustedError,
+            "Could not generate a valid study plan after 2 attempts.",
+        ),
+    ],
+)
+@pytest.mark.django_db
+def test_generation_failures(failure, error_type, message):
+    """Planner failures are visible and never persist a new plan."""
+    user = get_user_model().objects.create_user(username=f"plan-ui-{failure}")
+    client = Client()
+    client.force_login(user)
+    assignment_ids = []
+
+    if failure == "inaccessible":
+        other_user = get_user_model().objects.create_user(
+            username=f"plan-ui-other-{failure}"
+        )
+        assignment = Assignment.objects.create(
+            user=other_user,
+            canvas_course_id=11,
+            canvas_assignment_id=201,
+            title="Private assignment",
+            course="Biology",
+        )
+        assignment_ids = [assignment.pk]
+    elif failure != "empty":
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=11,
+            canvas_assignment_id=201,
+            title="Selected assignment",
+            course="Biology",
+        )
+        assignment_ids = [assignment.pk]
+
+    with patch(
+        "assignments.views.generate_plan",
+        create=True,
+        side_effect=error_type(message),
+    ) as generate_plan:
+        response = client.post(
+            reverse("generate_plan"),
+            {"assignment_ids": [str(assignment_id) for assignment_id in assignment_ids]},
+            follow=True,
+        )
+
+    assert response.status_code == 200
+    assert message in response.content.decode()
+    assert StudyPlan.objects.filter(user=user).count() == 0
+    generate_plan.assert_called_once_with(user, assignment_ids)
+
+
+@pytest.mark.django_db
+def test_default_local_calendar_window():
+    """The default filter includes the whole Denver day and next 13 dates."""
+    user = get_user_model().objects.create_user(username="plan-ui-date-window")
+    client = Client()
+    client.force_login(user)
+    local_timezone = ZoneInfo(settings.TIME_ZONE)
+    today = date(2026, 3, 8)
+    fixed_now = datetime.combine(today, time(12), tzinfo=local_timezone)
+    due_dates = [
+        datetime.combine(today, time(0, 1), tzinfo=local_timezone),
+        datetime.combine(today, time.min, tzinfo=local_timezone),
+        datetime.combine(today + timedelta(days=13), time.max, tzinfo=local_timezone),
+        datetime.combine(today + timedelta(days=14), time.min, tzinfo=local_timezone),
+        None,
+    ]
+    titles = [
+        "Earlier today",
+        "Start of today",
+        "End of day 14",
+        "Start of day 15",
+        "No due date",
+    ]
+    upcoming = [
+        {
+            "canvas_assignment_id": index,
+            "canvas_course_id": 11,
+            "title": title,
+            "course_name": "Biology",
+            "due_date": due_date,
+            "submitted": False,
+            "priority": "Soon",
+        }
+        for index, (title, due_date) in enumerate(zip(titles, due_dates), start=301)
+    ]
+    available_context = {
+        "assignments": upcoming,
+        "assignments_unavailable": False,
+        "canvas_connection_expired": False,
+        "canvas_connection_missing": False,
+        "assignments_unavailable_message": "",
+    }
+
+    with (
+        patch("assignments.views.timezone.now", return_value=fixed_now),
+        patch("assignments.views.load_canvas_context", return_value=available_context),
+    ):
+        response = client.get(reverse("assignment_list"))
+
+    assert response.status_code == 200
+    assert assignment_row_titles(response, titles) == set(titles[:3])
+
+
+@pytest.mark.django_db
+def test_assignment_search_and_filters():
+    """Search and filters use the student's complete synced snapshot."""
+    user = get_user_model().objects.create_user(username="plan-ui-search")
+    client = Client()
+    client.force_login(user)
+    other_user = get_user_model().objects.create_user(username="plan-ui-search-other")
+    local_timezone = ZoneInfo(settings.TIME_ZONE)
+    fixed_now = datetime(2026, 11, 7, 10, tzinfo=local_timezone)
+    courses = [
+        {"id": 11, "name": "Mathematics"},
+        {"id": 22, "name": "Biology"},
+    ]
+    snapshot = [
+        {
+            "canvas_assignment_id": 401,
+            "canvas_course_id": 11,
+            "title": "Algebra proof set",
+            "course_name": "Mathematics",
+            "due_date": datetime(2026, 11, 10, 17, tzinfo=local_timezone),
+            "submitted": False,
+            "description": "Prove the assigned identities.",
+        },
+        {
+            "canvas_assignment_id": 402,
+            "canvas_course_id": 22,
+            "title": "Biology lab report",
+            "course_name": "Biology",
+            "due_date": datetime(2026, 11, 11, 17, tzinfo=local_timezone),
+            "submitted": False,
+            "description": "Write up the lab results.",
+        },
+        {
+            "canvas_assignment_id": 403,
+            "canvas_course_id": 22,
+            "title": "Biology field notes",
+            "course_name": "Biology",
+            "due_date": datetime(2026, 11, 12, 17, tzinfo=local_timezone),
+            "submitted": False,
+            "description": "Summarize field observations.",
+        },
+        {
+            "canvas_assignment_id": 404,
+            "canvas_course_id": 22,
+            "title": "Undated lab reflection",
+            "course_name": "Biology",
+            "due_date": None,
+            "submitted": False,
+            "description": "Reflect on the lab.",
+        },
+    ]
+    Assignment.objects.create(
+        user=other_user,
+        canvas_course_id=22,
+        canvas_assignment_id=405,
+        title="Biology private assignment",
+        course="Biology",
+        due_date=datetime(2026, 11, 11, 17, tzinfo=local_timezone),
+    )
+    titles = [item["title"] for item in snapshot]
+    connection_settings = override_settings(
+        CANVAS_BASE_URL="https://canvas.example.edu",
+        CANVAS_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+    )
+
+    with connection_settings:
+        connection = CanvasConnection(
+            user=user,
+            canvas_url="https://canvas.example.edu",
+        )
+        connection.set_token("fake-plan-ui-token")
+        connection.save()
+        upcoming = [item for item in snapshot if item["due_date"] is not None]
+        with (
+            patch("assignments.views.timezone.now", return_value=fixed_now),
+            patch("assignments.views.list_courses", return_value=courses),
+            patch("assignments.views.list_upcoming_assignments", return_value=upcoming),
+            patch("assignments.views.list_graded_submissions", return_value=[]),
+            patch("assignments.views.list_all_assignments", return_value=snapshot),
+        ):
+            url = reverse("assignment_list")
+
+            def rows(params):
+                response = client.get(url, params)
+                assert response.status_code == 200
+                return assignment_row_titles(response, titles), response.content.decode()
+
+            matching, _ = rows({"q": "proof"})
+            assert matching == {"Algebra proof set"}
+
+            matching, _ = rows({"q": "Biology"})
+            assert matching == {
+                "Biology lab report",
+                "Biology field notes",
+            }
+
+            matching, _ = rows({"course": "Biology"})
+            assert matching == {
+                "Biology lab report",
+                "Biology field notes",
+            }
+            assert "Biology private assignment" not in client.get(
+                url, {"course": "Biology"}
+            ).content.decode()
+
+            matching, _ = rows(
+                {
+                    "q": "lab",
+                    "course": "Biology",
+                    "due_from": "2026-11-11",
+                    "due_to": "2026-11-11",
+                }
+            )
+            assert matching == {"Biology lab report"}
+
+            matching, _ = rows({"due_from": "", "due_to": ""})
+            assert matching == set(titles)
+
+            matching, _ = rows({"no_due_date": "1"})
+            assert matching == {"Undated lab reflection"}
+
+            matching, empty_html = rows({"q": "no assignment has this title"})
+            assert matching == set()
+            assert "No assignments" in empty_html
+
+            cache.clear()
+            with patch(
+                "assignments.views.list_courses",
+                side_effect=CanvasAPIError("Canvas is temporarily unavailable."),
+            ):
+                unavailable = client.get(url)
+            unavailable_html = unavailable.content.decode()
+            assert unavailable.status_code == 200
+            assert "Unable to load upcoming assignments" in unavailable_html
+            assert "No assignments" not in unavailable_html
