@@ -109,6 +109,7 @@ def availability_list(request):
     planning_courses = all_planning_assignments.values_list(
         "course", flat=True
     ).distinct().order_by("course")
+    default_due_to = local_today + timedelta(days=13)
 
     #render availability page with form and saved entries
     return render(
@@ -123,8 +124,12 @@ def availability_list(request):
             "planning_courses": planning_courses,
             "assignment_query": query,
             "assignment_course_filter": course,
-            "assignment_due_from": due_from or "",
-            "assignment_due_to": due_to or "",
+            "assignment_due_from": (
+                due_from if due_from is not None else local_today.isoformat()
+            ),
+            "assignment_due_to": (
+                due_to if due_to is not None else default_due_to.isoformat()
+            ),
             "assignment_no_due_date": no_due_date,
             "assignment_filter_error": assignment_filter_error,
             "assignment_filters_active": bool(
