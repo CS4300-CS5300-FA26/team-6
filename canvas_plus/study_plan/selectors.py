@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from django.utils import timezone
+
 from study_plan.models import StudyPlan, StudySession  # pylint: disable=import-error
 
 INVALID_DAY_MESSAGE = "That day is not a valid date."
@@ -24,7 +26,7 @@ def plan_sessions(user, day=None):
 
 def study_plan_context(user, raw_day):
     """Template context for the plan section; raw_day is the untrusted ?date= value."""
-    day = None
+    day = timezone.localdate() if raw_day is None else None
     if raw_day:
         try:
             day = date.fromisoformat(raw_day)

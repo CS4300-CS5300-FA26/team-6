@@ -6,5 +6,6 @@ Feature: Generate a study plan from selected assignments
   Scenario: Student generates a plan for selected assignments
     Given a student on the availability page with selected eligible assignments and availability
     When they generate a plan from the availability page
+    And they select the day of the generated sessions
     Then the availability page shows availability, the assignment table, and selected study sessions
     And the availability page has no study session for the unselected assignment

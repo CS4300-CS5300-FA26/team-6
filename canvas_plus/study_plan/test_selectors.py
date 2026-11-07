@@ -1,6 +1,7 @@
 """Tests for reading a student's study plans for display."""
 
 from datetime import date, datetime, time, timedelta
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -164,15 +165,17 @@ class StudyPlanContextTests(StudyPlanTestCase):
         self.add_session(plan, "HW3", self.local_datetime(self.day, time(14)))
         self.add_session(plan, "Lab 4", self.local_datetime(self.day + timedelta(days=1), time(9)))
 
-    def test_no_day_shows_the_whole_plan(self):
-        """Without ?date= every session is shown and no day is selected."""
-        context = study_plan_context(self.user, None)
+    def test_no_day_defaults_to_local_today(self):
+        """Without ?date= only today's sessions are shown."""
+        fixed_now = self.local_datetime(self.day, time(23))
+        with patch("django.utils.timezone.now", return_value=fixed_now):
+            context = study_plan_context(self.user, None)
 
-        self.assertEqual(self.titles(context["study_sessions"]), ["HW3", "Lab 4"])
-        self.assertIsNone(context["study_day"])
+        self.assertEqual(self.titles(context["study_sessions"]), ["HW3"])
+        self.assertEqual(context["study_day"], self.day)
 
-    def test_empty_day_is_the_same_as_no_day(self):
-        """An empty ?date= (a cleared date picker) is not an error."""
+    def test_empty_day_shows_the_whole_plan(self):
+        """An empty ?date= shows all days without an error."""
         context = study_plan_context(self.user, "")
 
         self.assertEqual(self.titles(context["study_sessions"]), ["HW3", "Lab 4"])

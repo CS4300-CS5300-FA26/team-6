@@ -51,6 +51,40 @@ def study_session_titles(response):
 
 
 @pytest.mark.django_db
+def test_study_plan_defaults_to_current_local_day():
+    """Default to the configured local date and retain the all-days option."""
+    user = get_user_model().objects.create_user(username="study-plan-local-day")
+    client = Client()
+    client.force_login(user)
+    local_timezone = ZoneInfo(settings.TIME_ZONE)
+    today = date(2026, 11, 5)
+    fixed_now = datetime.combine(today, time(23, 30), tzinfo=local_timezone)
+    plan = StudyPlan.objects.create(user=user)
+    for index, (title, day) in enumerate(
+        [("Today session", today), ("Tomorrow session", today + timedelta(days=1))],
+        start=901,
+    ):
+        assignment = Assignment.objects.create(
+            user=user, canvas_assignment_id=index, canvas_course_id=11,
+            title=title, course="Biology",
+        )
+        start = datetime.combine(day, time(9), tzinfo=local_timezone)
+        StudySession.objects.create(
+            plan=plan, assignment=assignment, start=start, end=start + timedelta(hours=1)
+        )
+
+    with patch("django.utils.timezone.now", return_value=fixed_now):
+        response = client.get(reverse("availability:list"))
+        page = BeautifulSoup(response.content, "html.parser")
+        assert page.select_one("#study-day")["value"] == today.isoformat()
+        assert study_session_titles(response) == {"Today session"}
+        all_days = client.get(page.find("a", string="Show all days")["href"])
+
+    assert study_session_titles(all_days) == {"Today session", "Tomorrow session"}
+    assert BeautifulSoup(all_days.content, "html.parser").select_one("#study-day")["value"] == ""
+
+
+@pytest.mark.django_db
 def test_generate_selected_assignments():
     """The submitted selection is passed to generation and appears in the plan."""
     user = get_user_model().objects.create_user(username="plan-ui-student")
@@ -133,7 +167,9 @@ def test_generate_selected_assignments():
         selection_page.context["availability_entries"].values_list("date", flat=True)
     ) == [available_date]
 
-    study_plan_response = client.get(reverse("availability:list"))
+    study_plan_response = client.get(
+        reverse("availability:list"), {"date": available_date.isoformat()}
+    )
     assert assignment_row_titles(study_plan_response, all_titles) == set(all_titles)
     assert study_session_titles(study_plan_response) == {
         selected_assignments[0].title,
@@ -297,8 +333,8 @@ def test_default_local_calendar_window():
     StudySession.objects.create(
         plan=plan,
         assignment=session_assignment,
-        start=fixed_now + timedelta(days=1),
-        end=fixed_now + timedelta(days=1, minutes=30),
+        start=fixed_now,
+        end=fixed_now + timedelta(minutes=30),
     )
 
     with (

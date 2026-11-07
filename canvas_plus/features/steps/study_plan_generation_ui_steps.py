@@ -157,6 +157,14 @@ def step_generate_selected_plan(context):
         },
         follow=True,
     )
+    assert context.response.status_code == 200
+
+
+@when("they select the day of the generated sessions")
+def step_select_generated_day(context):
+    context.response = context.client.get(
+        reverse("availability:list"), {"date": context.available_date.isoformat()}
+    )
 
 
 @then("the availability page shows availability, the assignment table, and selected study sessions")
