@@ -55,7 +55,7 @@ def recently_graded_context(token, courses, session):
 
 
 @sensitive_variables("token")
-def load_canvas_context(user, *, sync_all_assignments=False):
+def load_canvas_context(user, *, sync_all_assignments=False, load_upcoming=True):
     """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
@@ -86,8 +86,9 @@ def load_canvas_context(user, *, sync_all_assignments=False):
                 if courses is None:
                     courses = list_courses(token, session=session)
                     cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
-                assignments = list_upcoming_assignments(token, courses, session=session)
-                graded_context = recently_graded_context(token, courses, session)
+                if load_upcoming:
+                    assignments = list_upcoming_assignments(token, courses, session=session)
+                    graded_context = recently_graded_context(token, courses, session)
                 if sync_all_assignments:
                     try:
                         sync_canvas_assignments_if_needed(

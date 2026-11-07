@@ -37,7 +37,9 @@ def availability_list(request):
         #display empty form when page is first opened
         form = AvailabilityForm()
 
-    canvas_context = load_canvas_context(request.user, sync_all_assignments=True)
+    canvas_context = load_canvas_context(
+        request.user, sync_all_assignments=True, load_upcoming=False
+    )
     planning_assignments_unavailable = bool(
         canvas_context["assignments_unavailable"]
         or canvas_context.get("assignment_sync_error")
