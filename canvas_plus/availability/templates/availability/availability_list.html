@@ -66,6 +66,10 @@
             {% endif %}
         {% endif %}
 
+        {% if planning_assignments_unavailable and canvas_connection_expired %}
+            <p role="status">Your Canvas connection expired. The assignments shown may be out of date.</p>
+        {% endif %}
+
         {% if planning_courses %}
             <form class="planning-assignment-filters" method="get" action="{% url 'availability:list' %}">
                 <div>
