@@ -6,6 +6,10 @@
     <!-- Page heading for the student's availability section. -->
     <h1>My Availability</h1>
 
+    {% for message in messages %}
+        <p class="{{ message.tags }}" role="status">{{ message }}</p>
+    {% endfor %}
+
     <!-- Form used to create a new availability entry. -->
     <h2>Add Availability</h2>
 
