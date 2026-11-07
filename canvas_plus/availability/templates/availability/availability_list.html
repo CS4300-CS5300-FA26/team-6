@@ -6,6 +6,10 @@
     <!-- Page heading for the student's availability section. -->
     <h1>My Availability</h1>
 
+    {% for message in messages %}
+        <p class="{{ message.tags }}" role="status">{{ message }}</p>
+    {% endfor %}
+
     <!-- Form used to create a new availability entry. -->
     <h2>Add Availability</h2>
 
@@ -44,7 +48,198 @@
         <p>No availability entered yet.</p>
     {% endif %}
 
-    <!-- The student's most recent study plan, optionally narrowed to one day. -->
+    <section class="planning-assignments" aria-labelledby="planning-assignments-heading">
+        <h2 id="planning-assignments-heading">Assignments to plan</h2>
+
+        {% if planning_assignments_unavailable %}
+            {% if canvas_connection_missing %}
+                <p role="status">
+                    Canvas is not connected. The assignments shown may be from your last successful sync.
+                    <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+                </p>
+            {% elif assignment_sync_error %}
+                <p role="status">{{ assignment_sync_error }}</p>
+            {% elif assignments_unavailable_message %}
+                <p role="status">{{ assignments_unavailable_message }}</p>
+            {% elif not canvas_connection_expired %}
+                <p role="status">Assignment data could not be refreshed. The displayed assignments may be out of date.</p>
+            {% endif %}
+        {% endif %}
+
+        {% if planning_assignments_unavailable and canvas_connection_expired %}
+            <p role="status">Your Canvas connection expired. The assignments shown may be out of date.</p>
+        {% endif %}
+
+        {% if planning_courses %}
+            <form class="planning-assignment-filters" method="get" action="{% url 'availability:list' %}">
+                <div>
+                    <label for="assignment-search">Assignment or course</label>
+                    <input
+                        id="assignment-search"
+                        name="q"
+                        type="search"
+                        value="{{ assignment_query }}"
+                    >
+                </div>
+                <div>
+                    <label for="assignment-course">Course</label>
+                    <select id="assignment-course" name="course">
+                        <option value="">All courses</option>
+                        {% for course_name in planning_courses %}
+                            <option value="{{ course_name }}"{% if assignment_course_filter == course_name %} selected{% endif %}>{{ course_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="assignment-due-from">Due from</label>
+                    <input
+                        id="assignment-due-from"
+                        name="due_from"
+                        type="date"
+                        value="{{ assignment_due_from }}"
+                    >
+                </div>
+                <div>
+                    <label for="assignment-due-to">Due through</label>
+                    <input
+                        id="assignment-due-to"
+                        name="due_to"
+                        type="date"
+                        value="{{ assignment_due_to }}"
+                    >
+                </div>
+                <label class="planning-no-due-date" for="assignment-no-due-date">
+                    <input
+                        id="assignment-no-due-date"
+                        name="no_due_date"
+                        type="checkbox"
+                        value="1"
+                        {% if assignment_no_due_date %}checked{% endif %}
+                    >
+                    No due date
+                </label>
+                <div class="planning-filter-actions">
+                    <button type="submit">Filter assignments</button>
+                    <a href="{% url 'availability:list' %}">Clear filters</a>
+                </div>
+            </form>
+        {% endif %}
+
+        {% if assignment_filter_error %}
+            <p role="status">{{ assignment_filter_error }}</p>
+        {% endif %}
+
+        {% if planning_assignments %}
+            <form
+                id="study-plan-assignment-form"
+                class="planning-assignment-form"
+                method="post"
+                action="{% url 'generate_plan' %}"
+                data-user-id="{{ request.user.pk }}"
+            >
+                {% csrf_token %}
+                <div class="planning-assignment-table-scroll" role="region" aria-label="Assignment selection" tabindex="0">
+                    <table class="planning-assignment-table">
+                        <caption class="visually-hidden">Synced assignments available for study planning</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Select</th>
+                                <th scope="col">Assignment</th>
+                                <th scope="col">Due</th>
+                                <th scope="col">Effort</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for assignment in planning_assignments %}
+                                <tr class="planning-assignment-row" data-assignment-id="{{ assignment.pk }}">
+                                    <td class="planning-assignment-select-cell">
+                                        <input
+                                            type="checkbox"
+                                            id="planning-assignment-{{ assignment.pk }}"
+                                            name="assignment_ids"
+                                            value="{{ assignment.pk }}"
+                                            aria-label="Select {{ assignment.title }}"
+                                        >
+                                    </td>
+                                    <td>
+                                        <label class="planning-assignment-title" for="planning-assignment-{{ assignment.pk }}">{{ assignment.title }}</label>
+                                        <p class="assignment-course">{{ assignment.course }}</p>
+                                    </td>
+                                    <td>
+                                        {% if assignment.due_date %}
+                                            <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y, g:i A" }}</time>
+                                        {% else %}
+                                            <span>No due date</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if assignment.estimated_effort_minutes %}
+                                            {{ assignment.estimated_effort_minutes }} min
+                                        {% else %}
+                                            Not estimated
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <button class="planning-generate-button" type="submit">Generate study plan</button>
+            </form>
+        {% elif not planning_assignments_unavailable and not assignment_filter_error %}
+            {% if assignment_filters_active %}
+                <p>No assignments match these filters.</p>
+            {% else %}
+                <p>No assignments are due in the default date window.</p>
+            {% endif %}
+        {% endif %}
+    </section>
+
+    <script>
+        (() => {
+            const form = document.getElementById("study-plan-assignment-form");
+            if (!form) return;
+
+            const storageKey = `canvas-plus-study-plan-selection:${form.dataset.userId}`;
+            let selectedIds = new Set();
+            try {
+                const savedIds = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
+                if (Array.isArray(savedIds)) {
+                    selectedIds = new Set(savedIds.filter((value) => typeof value === "string"));
+                }
+            } catch {}
+
+            const checkboxes = Array.from(
+                form.querySelectorAll('input[type="checkbox"][name="assignment_ids"]')
+            );
+            for (const checkbox of checkboxes) {
+                checkbox.checked = selectedIds.has(checkbox.value);
+                checkbox.addEventListener("change", () => {
+                    if (checkbox.checked) selectedIds.add(checkbox.value);
+                    else selectedIds.delete(checkbox.value);
+                    try {
+                        sessionStorage.setItem(storageKey, JSON.stringify(Array.from(selectedIds)));
+                    } catch {}
+                });
+            }
+
+            form.addEventListener("submit", () => {
+                const submittedIds = new Set(
+                    checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value)
+                );
+                for (const assignmentId of selectedIds) {
+                    if (submittedIds.has(assignmentId)) continue;
+                    const hiddenId = document.createElement("input");
+                    hiddenId.type = "hidden";
+                    hiddenId.name = "assignment_ids";
+                    hiddenId.value = assignmentId;
+                    form.appendChild(hiddenId);
+                }
+            });
+        })();
+    </script>
+
+    <!-- The student's study plans, optionally narrowed to one day. -->
     <h2>Study plan</h2>
 
     <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
@@ -52,7 +247,7 @@
         <label for="study-day">Day</label>
         <input type="date" id="study-day" name="date" value="{{ study_day|date:'Y-m-d' }}">
         <button type="submit">Show day</button>
-        <a href="{% url 'availability:list' %}">Show all days</a>
+        <a href="{% url 'availability:list' %}?date=">Show all days</a>
     </form>
 
     <!-- Check the error first: study_sessions is missing from the context then, not None. -->
@@ -78,6 +273,6 @@
         <p>No study sessions on this day.</p>
     {% else %}
         <!-- A plan with no sessions at all, e.g. everything went into its notices. -->
-        <p>This study plan has no sessions.</p>
+        <p>Your study plans have no sessions.</p>
     {% endif %}
 {% endblock %}
