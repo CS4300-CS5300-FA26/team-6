@@ -239,7 +239,7 @@
         })();
     </script>
 
-    <!-- The student's most recent study plan, optionally narrowed to one day. -->
+    <!-- The student's study plans, optionally narrowed to one day. -->
     <h2>Study plan</h2>
 
     <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
@@ -273,6 +273,6 @@
         <p>No study sessions on this day.</p>
     {% else %}
         <!-- A plan with no sessions at all, e.g. everything went into its notices. -->
-        <p>This study plan has no sessions.</p>
+        <p>Your study plans have no sessions.</p>
     {% endif %}
 {% endblock %}

@@ -16,7 +16,7 @@ from study_plan.models import StudyPlan, StudySession
 NO_PLAN_MESSAGE = "No study plan has been generated yet."
 INVALID_DAY_MESSAGE = "That day is not a valid date."
 EMPTY_DAY_MESSAGE = "No study sessions on this day."
-EMPTY_PLAN_MESSAGE = "This study plan has no sessions."
+EMPTY_PLAN_MESSAGE = "Your study plans have no sessions."
 DEFAULT_DAY, DEFAULT_START, DEFAULT_END = "2026-11-05", "2:00 PM", "3:00 PM"
 
 

@@ -37,13 +37,13 @@ Feature: Study plan on the availability page
     When I open my availability page
     Then I am told I have no study plan yet
 
-  Scenario: Student sees only their most recent study plan
+  Scenario: Student sees sessions from all their study plans on a day
     Given I am logged in as a student
     And I had an older study plan with a session for "Old Essay"
     And my most recent study plan has a session for "Lab 4"
-    When I open my availability page
+    When I open my availability page for "2026-11-05"
     Then I see a study session for "Lab 4"
-    And I do not see a study session for "Old Essay"
+    And I see a study session for "Old Essay"
 
   # Abuse case: the other student's plan is newer than mine, so a "latest plan"
   # lookup that forgets whose plan it is would show theirs.
