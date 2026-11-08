@@ -152,6 +152,38 @@ def test_file_download_sends_the_token_only_to_canvas():
 
 
 @pytest.mark.unit
+def test_file_download_follows_storage_redirects_without_the_token():
+    """File storage may redirect again; every hop after Canvas goes without the token."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location="https://files.example.com/signed/9"),
+        file_response(status=302, location="https://bucket.example.com/9?signature=x"),
+        file_response([b"%PDF-1.7"]),
+    ]) as get:
+        assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7"
+    assert get.call_count == 3
+    for storage_call in get.call_args_list[1:]:
+        assert "Authorization" not in storage_call.kwargs.get("headers", {})
+        assert storage_call.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("location", [
+    "http://files.example.com/signed/9",
+    "https://169.254.169.254/latest/meta-data",
+    "https://127.0.0.1/admin",
+    "https://10.0.0.5/files/9",
+])
+def test_file_download_refuses_an_unsafe_redirect(location):
+    """A redirect that isn't HTTPS, or points at a private address, is never requested."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=location),
+    ]) as get:
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", FILE_URL)
+    assert get.call_count == 1
+
+
+@pytest.mark.unit
 def test_file_download_refuses_an_address_off_canvas():
     """A download address on another host is never requested with the token."""
     with patch("accounts.canvas_client.requests.get") as get:
