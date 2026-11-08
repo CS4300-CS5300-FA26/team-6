@@ -10,6 +10,7 @@ import requests
 from .canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
+    get_course_file,
     get_course_syllabus,
     list_courses,
     list_upcoming_assignments,
@@ -90,6 +91,36 @@ def test_malformed_syllabus_is_not_treated_as_success():
                return_value=response({"id": 7, "syllabus_body": 42})):
         with pytest.raises(CanvasAPIError):
             get_course_syllabus("fake-token", 7)
+
+
+@pytest.mark.unit
+def test_course_file_request_returns_its_details():
+    """Asking for one course file returns the name, size, and download address the viewer needs."""
+    with patch("accounts.canvas_client.requests.get", return_value=response({
+        "id": 9,
+        "display_name": "syllabus.pdf",
+        "size": 184910,
+        "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+    })) as get:
+        assert get_course_file("fake-token", 7, 9) == {
+            "name": "syllabus.pdf",
+            "size": 184910,
+            "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+        }
+    assert get.call_args.args == ("https://canvas.example.edu/api/v1/courses/7/files/9",)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("payload", [
+    [],
+    {"display_name": "syllabus.pdf"},
+    {"display_name": "syllabus.pdf", "size": "big", "url": "https://canvas.example.edu/f"},
+])
+def test_malformed_file_details_are_not_treated_as_success(payload):
+    """File details missing a name, size, or address are reported as a Canvas problem."""
+    with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
+        with pytest.raises(CanvasAPIError):
+            get_course_file("fake-token", 7, 9)
 
 
 @pytest.mark.unit
