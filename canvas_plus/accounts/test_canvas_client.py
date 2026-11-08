@@ -28,11 +28,20 @@ def sequential_canvas_requests(monkeypatch):
     monkeypatch.setattr("accounts.canvas_client.MAX_CONCURRENT_REQUESTS", 1)
 
 
-def response(courses, *, status=200, next_url=None):
-    """Construct a requests-like response, including its pagination links."""
+REJECTED_TOKEN_HEADERS = {"WWW-Authenticate": 'Bearer realm="canvas-lms"'}
+
+
+def response(courses, *, status=200, next_url=None, headers=None):
+    """Construct a requests-like response, including its pagination links.
+
+    A 401 carries Canvas's rejected-token header unless a test passes its own headers.
+    """
     result = Mock(status_code=status)
     result.json.return_value = courses
     result.links = {"next": {"url": next_url}} if next_url else {}
+    if headers is None:
+        headers = REJECTED_TOKEN_HEADERS if status == 401 else {}
+    result.headers = headers
     return result
 
 
@@ -81,6 +90,16 @@ def test_malformed_syllabus_is_not_treated_as_success():
                return_value=response({"id": 7, "syllabus_body": 42})):
         with pytest.raises(CanvasAPIError):
             get_course_syllabus("fake-token", 7)
+
+
+@pytest.mark.unit
+def test_unauthorized_request_keeps_the_token_valid():
+    """A 401 without Canvas's rejected-token header means not allowed, not an expired token."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=response({}, status=401, headers={})):
+        with pytest.raises(CanvasAPIError) as raised:
+            get_course_syllabus("fake-token", 7)
+    assert not isinstance(raised.value, CanvasAuthenticationError)
 
 
 @pytest.mark.unit
