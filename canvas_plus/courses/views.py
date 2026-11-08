@@ -24,7 +24,8 @@ from accounts.canvas_client import (
 )
 from accounts.models import CanvasConnection, SavedTokenError
 from .current import is_current
-from .syllabus import FILE_LINK_CLASS, clean_syllabus
+from .files import linked_files
+from .syllabus import clean_syllabus
 
 
 @sensitive_variables("token")
@@ -80,7 +81,7 @@ def course_detail(request, course_id):
         course, syllabus = found
         context["course"] = course
         context["syllabus"] = clean_syllabus(syllabus, canvas_base_url())
-        context["has_files"] = f'class="{FILE_LINK_CLASS}"' in context["syllabus"]
+        context["files"] = linked_files(syllabus, course_id)  # read before cleaning drops the links
     return render(request, "courses/course_detail.html", context)
 
 

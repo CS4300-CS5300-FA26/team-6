@@ -14,13 +14,16 @@
     <h1>{{ course.name }}</h1>
     <h2>Syllabus</h2>
     {% if syllabus %}
-      {% if has_files %}
-        <p class="syllabus-note">File previews are coming soon.</p>
-      {% endif %}
       {# safe only because clean_syllabus ran it through nh3's allowlist first #}
       <div class="syllabus">{{ syllabus|safe }}</div>
     {% else %}
       <p>No syllabus posted in Canvas for this course</p>
+    {% endif %}
+    {% if files %}
+      <h2>Files in this syllabus</h2>
+      {% for file in files %}
+        {% include "courses/includes/file_viewer.html" with course_id=course.id file=file %}
+      {% endfor %}
     {% endif %}
   {% endif %}
 {% endblock %}
