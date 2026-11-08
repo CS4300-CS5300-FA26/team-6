@@ -5,7 +5,7 @@ Feature: Assignments page
     When I open the logged-in home page
     Then both assignments are saved with descriptions while only the existing upcoming selection is displayed
 
-  Scenario: A failed assignment sync affects only the student's current courses
+  Scenario: Assignment retrieval failure affects only the student's current courses
     Given a connected student has saved assignments in current and other courses
     And another student has a saved assignment in a current course
     And the assignment sync is unavailable
@@ -13,6 +13,33 @@ Feature: Assignments page
     Then assignments in the student's current courses are marked failed, including missing assignments
     And assignments outside those courses and the other student's assignment remain unchanged
     And I see an assignment sync error
+
+  Scenario: A failed assignment save rolls back and is retried
+    Given a connected student has saved assignments in current and other courses
+    And Canvas has updated those current course assignments
+    And saving the second assignment fails
+    When I open the logged-in home page
+    Then assignments in the student's current courses are marked failed, including missing assignments
+    And the original assignment details are preserved
+    And I see an assignment sync error
+    When saving assignments is restored and I reload the logged-in home page
+    Then the updated assignments are synced successfully
+    And the assignment sync error is no longer shown
+
+  Scenario: A failed sync with no current courses leaves assignments unchanged
+    Given a connected student has saved assignments in current and other courses
+    And the student has no current Canvas courses
+    And the assignment sync is unavailable
+    When I open the logged-in home page
+    Then all saved assignment sync states remain unchanged
+    And I see an assignment sync error
+
+  Scenario: Canvas rejects the token during assignment sync
+    Given a connected student has saved assignments in current and other courses
+    And Canvas rejects the token during assignment sync
+    When I open the logged-in home page
+    Then assignments in the student's current courses are marked failed, including missing assignments
+    And I see the expired Canvas connection message and reconnect link
 
   Scenario: A student sees upcoming coursework and its due date
     Given I am a connected student with upcoming coursework due on "October 22, 2026 at 12:30 PM"
