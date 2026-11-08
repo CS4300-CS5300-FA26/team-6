@@ -334,6 +334,17 @@ def test_opening_effort_page_generates_automatic_estimate(
     # The automatic estimate should have been persisted.
     assert assignment.estimated_effort_minutes == 90
     assert assignment.effort_estimate_source == "automatic"
+    assert assignment.description == (
+        "Write a five-page research paper using at least five academic sources."
+    )
 
     # The live view should have called the estimator exactly once.
     estimate_and_save_mock.assert_called_once()
+
+    # A later visit uses the saved local assignment rather than Canvas data.
+    response = client.get(
+        reverse("edit_effort_estimate", args=[42, 101])
+    )
+
+    assert response.status_code == 200
+    assert estimate_and_save_mock.call_count == 2

@@ -294,6 +294,7 @@ def edit_effort_estimate(request, course_id, assignment_id):
             "title": local_assignment.title,
             "course_name": local_assignment.course,
             "due_date": local_assignment.due_date,
+            "description": local_assignment.description,
             "canvas_course_id": local_assignment.canvas_course_id,
             "canvas_assignment_id": local_assignment.canvas_assignment_id,
             "estimated_effort_minutes": local_assignment.estimated_effort_minutes,
@@ -313,6 +314,7 @@ def edit_effort_estimate(request, course_id, assignment_id):
                 title=canvas_assignment["title"],
                 course=canvas_assignment["course_name"],
                 due_date=canvas_assignment["due_date"],
+                description=canvas_assignment.get("description"),
             )
 
         # Bind the submitted estimate to the local Assignment.
@@ -343,22 +345,23 @@ def edit_effort_estimate(request, course_id, assignment_id):
                 title=canvas_assignment["title"],
                 course=canvas_assignment["course_name"],
                 due_date=canvas_assignment["due_date"],
+                description=canvas_assignment.get("description"),
             )
 
-            # Attempt to generate an automatic effort estimate using the assignment description supplied by Canvas.
-            # If there is not enough information, the helper returns None and the student can enter an estimate manually instead.
-            estimate_and_save_assignment_effort(
-                assignment=local_assignment,
-                assignment_information=canvas_assignment.get("description"),
-            )
+        # Attempt to generate an automatic effort estimate using the assignment description supplied by Canvas.
+        # If there is not enough information, the helper returns None and the student can enter an estimate manually instead.
+        estimate_and_save_assignment_effort(
+            assignment=local_assignment,
+            assignment_information=canvas_assignment.get("description"),
+        )
 
-            # Add any newly generated estimate to the template context.
-            canvas_assignment["estimated_effort_minutes"] = (
-                local_assignment.estimated_effort_minutes
-            )
-            canvas_assignment["effort_estimate_source"] = (
-                local_assignment.effort_estimate_source
-            )
+        # Add any newly generated estimate to the template context.
+        canvas_assignment["estimated_effort_minutes"] = (
+            local_assignment.estimated_effort_minutes
+        )
+        canvas_assignment["effort_estimate_source"] = (
+            local_assignment.effort_estimate_source
+        )
 
         # Pre-fill the form with either the saved automatic estimate or an existing manual estimate.
         form = EffortEstimateForm(instance=local_assignment)
