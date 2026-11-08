@@ -1,5 +1,6 @@
-{# One file, collapsed until opened. A lazy iframe inside a closed <details> isn't fetched until the student expands it, so no JavaScript is needed. #}
 <details class="file-viewer">
-  <summary>{{ file.name }}</summary>
-  <iframe src="{% url 'course_file' course_id file.id %}" title="{{ file.name }}" loading="lazy"></iframe>
+  <summary>{{ name }}</summary>
+  <p class="file-download"><a href="{{ url }}?download=1">Download</a></p>
+  {# loading="lazy" inside a closed <details> isn't fetched until the student opens it, so no JavaScript is needed #}
+  <iframe src="{{ url }}" title="{{ name }}" loading="lazy"></iframe>
 </details>

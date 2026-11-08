@@ -24,7 +24,7 @@ from accounts.canvas_client import (
 )
 from accounts.models import CanvasConnection, SavedTokenError
 from .current import is_current
-from .files import linked_files
+from .files import embed_file_viewers
 from .syllabus import clean_syllabus
 
 
@@ -80,8 +80,9 @@ def course_detail(request, course_id):
     if found:
         course, syllabus = found
         context["course"] = course
-        context["syllabus"] = clean_syllabus(syllabus, canvas_base_url())
-        context["files"] = linked_files(syllabus, course_id)  # read before cleaning drops the links
+        context["syllabus"] = embed_file_viewers(
+            clean_syllabus(syllabus, canvas_base_url(), course_id)
+        )
     return render(request, "courses/course_detail.html", context)
 
 
