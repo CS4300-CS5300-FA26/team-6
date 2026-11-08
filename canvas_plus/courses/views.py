@@ -123,9 +123,12 @@ def course_file(request, course_id, file_id):
 
     found, state = _load_from_canvas(request.user, load)
     if found is None:
-        if state:  # missing or expired connection, or Canvas couldn't provide the file
-            return _file_message(request, "unavailable")
-        return _file_message(request, "not_found", status=404)
+        # A state means a missing or expired connection, or Canvas couldn't provide the file.
+        reason, status = ("unavailable", 200) if state else ("not_found", 404)
+        if download:  # a download replaces the whole page, so keep the layout and a way back
+            context = {"reason": reason, "course_id": course_id}
+            return render(request, "courses/file_download_failed.html", context, status=status)
+        return _file_message(request, reason, status=status)
     info, body = found
     if download:
         response = StreamingHttpResponse(_stream(body), content_type="application/octet-stream")
