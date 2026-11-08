@@ -56,7 +56,11 @@ class CourseAccessTests(ConnectedStudentTestCase):
         """Both course pages send a signed-out visitor to sign in first."""
         self.client.logout()
 
-        for url in (reverse("course_list"), reverse("course_detail", args=[1])):
+        for url in (
+            reverse("course_list"),
+            reverse("course_detail", args=[1]),
+            reverse("course_file", args=[1, 9]),
+        ):
             with self.subTest(url=url):
                 response = self.client.get(url)
 
@@ -196,3 +200,83 @@ class CoursePageTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "Unable to load this course. Please try again.")
         self.assertNotContains(response, "No syllabus posted")
+
+
+PDF_INFO = {
+    "name": "syllabus.pdf",
+    "size": 184910,
+    "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+}
+WORD_INFO = {**PDF_INFO, "name": "notes.docx"}
+TOO_LARGE_INFO = {**PDF_INFO, "size": 26 * 1024 * 1024}
+
+
+@pytest.mark.integration
+@patch("courses.views.list_courses", return_value=[CURRENT_COURSE])
+class CourseFileTests(ConnectedStudentTestCase):
+    """A syllabus file opens inside Canvas+ as a preview or a download."""
+
+    def open_file(self, course_id=1, download=False):
+        """Open file 9 from a course as the signed-in student."""
+        url = reverse("course_file", args=[course_id, 9])
+        return self.client.get(url + ("?download=1" if download else ""))
+
+    @patch("courses.views.download_course_file", return_value=b"%PDF-1.7 pages")
+    @patch("courses.views.get_course_file", return_value=PDF_INFO)
+    def test_pdf_is_shown_inline(self, _info, _download, _list_courses):
+        """A PDF is sent for the browser to show, framed only by Canvas+ and never cached."""
+        response = self.open_file()
+
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response["Content-Disposition"].startswith("inline"))
+        self.assertEqual(response["X-Frame-Options"], "SAMEORIGIN")
+        self.assertIn("private", response["Cache-Control"])
+        self.assertEqual(response.content, b"%PDF-1.7 pages")
+
+    @patch("courses.views.download_course_file", return_value=b"PK\x03\x04 a Word file")
+    @patch("courses.views.get_course_file", return_value=WORD_INFO)
+    def test_file_that_is_not_a_pdf_offers_a_download(self, _info, _download, _list_courses):
+        """Only real PDFs are previewed; anything else gets a download link."""
+        response = self.open_file()
+
+        self.assertContains(response, "Preview isn't available for this file type")
+        self.assertContains(response, 'href="?download=1"')
+
+    @patch("courses.views.download_course_file")
+    @patch("courses.views.get_course_file", return_value=TOO_LARGE_INFO)
+    def test_file_over_25_mb_is_never_downloaded(self, _info, download_course_file, _list_courses):
+        """A file over the limit is turned away before any of it is fetched."""
+        response = self.open_file()
+
+        self.assertContains(response, "This file is too large to preview")
+        self.assertContains(response, 'href="?download=1"')
+        download_course_file.assert_not_called()
+
+    @patch("courses.views.open_course_file")
+    @patch("courses.views.get_course_file", return_value=WORD_INFO)
+    def test_download_link_sends_the_file_as_an_attachment(self, _info, open_course_file,
+                                                           _list_courses):
+        """Downloading streams the file under its own name, at any size."""
+        open_course_file.return_value.iter_content.return_value = iter([b"PK", b" rest"])
+
+        response = self.open_file(download=True)
+
+        self.assertEqual(response["Content-Type"], "application/octet-stream")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="notes.docx"')
+        self.assertEqual(b"".join(response.streaming_content), b"PK rest")
+
+    @patch("courses.views.get_course_file", side_effect=CanvasAPIError("Locked"))
+    def test_file_that_cant_be_loaded_shows_a_message(self, _info, _list_courses):
+        """A deleted or locked file, or a Canvas outage, explains itself inside the viewer."""
+        response = self.open_file()
+
+        self.assertContains(response, "This file couldn't be loaded. Please try again.")
+
+    @patch("courses.views.get_course_file")
+    def test_file_from_a_course_not_in_my_list_is_not_found(self, get_course_file,
+                                                            _list_courses):
+        """Files only open for the student's own current courses; Canvas is never asked."""
+        response = self.open_file(course_id=999)
+
+        self.assertContains(response, "File not found", status_code=404)
+        get_course_file.assert_not_called()
