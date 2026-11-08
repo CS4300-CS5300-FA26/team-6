@@ -152,6 +152,23 @@ def get_course_syllabus(token, course_id):
     return syllabus
 
 
+@sensitive_variables("token")
+def get_course_file(token, course_id, file_id):
+    """Return one course file's name, size in bytes, and download address."""
+    info, _ = _get_json(
+        f"{canvas_base_url()}/api/v1/courses/{course_id}/files/{file_id}",
+        token,
+        None,
+        "Canvas could not load this file. Please try again.",
+        None,
+    )
+    if (not isinstance(info, dict) or not isinstance(info.get("display_name"), str)
+            or not isinstance(info.get("url"), str)
+            or isinstance(info.get("size"), bool) or not isinstance(info.get("size"), int)):
+        raise CanvasAPIError("Canvas returned unexpected file data. Please try again.")
+    return {"name": info["display_name"], "size": info["size"], "url": info["url"]}
+
+
 def _validate_assignment_course(course):
     """Reject malformed course results before constructing a Canvas URL."""
     if (not isinstance(course, dict) or isinstance(course.get("id"), bool)
