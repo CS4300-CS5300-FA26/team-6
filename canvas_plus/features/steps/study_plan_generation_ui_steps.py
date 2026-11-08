@@ -17,6 +17,7 @@ from django.utils import timezone
 from accounts.models import CanvasConnection
 from assignments.models import Assignment
 from availability.models import Availability
+from study_plan.exceptions import EmptyAssignmentSelectionError
 from study_plan.models import StudyPlan, StudySession
 
 
@@ -158,6 +159,26 @@ def step_generate_selected_plan(context):
         follow=True,
     )
     assert context.response.status_code == 200
+
+
+@when("they generate a plan without selecting assignments")
+def step_generate_plan_without_assignments(context):
+    context.generate_plan.side_effect = EmptyAssignmentSelectionError(
+        "Select at least one assignment."
+    )
+    context.response = context.client.post(
+        reverse("generate_plan"),
+        {},
+        follow=True,
+    )
+    assert context.response.status_code == 200
+
+
+@then("they are told to select at least one assignment")
+def step_empty_selection_message(context):
+    page = BeautifulSoup(context.response.content, "html.parser")
+    assert "Select at least one assignment." in page.get_text(" ", strip=True)
+    context.generate_plan.assert_called_once_with(context.user, [])
 
 
 @when("they select the day of the generated sessions")
