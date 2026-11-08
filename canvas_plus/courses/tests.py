@@ -243,7 +243,7 @@ class CourseFileTests(ConnectedStudentTestCase):
         response = self.open_file()
 
         self.assertContains(response, "Preview isn't available for this file type")
-        self.assertContains(response, 'href="?download=1"')
+        self.assertContains(response, 'href="?download=1" target="_top"')
 
     @patch("courses.views.download_course_file")
     @patch("courses.views.get_course_file", return_value=TOO_LARGE_INFO)
@@ -252,7 +252,7 @@ class CourseFileTests(ConnectedStudentTestCase):
         response = self.open_file()
 
         self.assertContains(response, "This file is too large to preview")
-        self.assertContains(response, 'href="?download=1"')
+        self.assertContains(response, 'href="?download=1" target="_top"')
         download_course_file.assert_not_called()
 
     @patch("courses.views.open_course_file")
@@ -267,6 +267,15 @@ class CourseFileTests(ConnectedStudentTestCase):
         self.assertEqual(response["Content-Type"], "application/octet-stream")
         self.assertEqual(response["Content-Disposition"], 'attachment; filename="notes.docx"')
         self.assertEqual(b"".join(response.streaming_content), b"PK rest")
+
+    @patch("courses.views.get_course_file", side_effect=CanvasAPIError("Locked"))
+    def test_failed_download_offers_a_way_back_to_the_course(self, _info, _list_courses):
+        """A download that fails shows its message in the normal layout with a link back."""
+        response = self.open_file(download=True)
+
+        self.assertContains(response, "This file couldn't be loaded. Please try again.")
+        self.assertContains(response, f'href="{reverse("course_detail", args=[1])}"')
+        self.assertTemplateUsed(response, "base.html")
 
     @patch("courses.views.get_course_file", side_effect=CanvasAPIError("Locked"))
     def test_file_that_cant_be_loaded_shows_a_message(self, _info, _list_courses):
