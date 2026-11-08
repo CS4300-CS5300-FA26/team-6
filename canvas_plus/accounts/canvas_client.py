@@ -3,7 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from django.conf import settings
@@ -13,6 +13,8 @@ from django.views.decorators.debug import sensitive_variables
 MAX_COURSE_PAGES = 100
 # Matches requests' default pool of 10 connections per host; Canvas throttles more parallelism.
 MAX_CONCURRENT_REQUESTS = 10
+MAX_FILE_BYTES = 25 * 1024 * 1024
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -20,6 +22,10 @@ class CanvasAPIError(Exception):
 
 class CanvasAuthenticationError(CanvasAPIError):
     """Canvas rejected the supplied access token."""
+
+
+class CanvasFileTooLarge(CanvasAPIError):
+    """A Canvas file is bigger than Canvas+ will load."""
 
 
 def canvas_origin(url):
@@ -167,6 +173,48 @@ def get_course_file(token, course_id, file_id):
             or isinstance(info.get("size"), bool) or not isinstance(info.get("size"), int)):
         raise CanvasAPIError("Canvas returned unexpected file data. Please try again.")
     return {"name": info["display_name"], "size": info["size"], "url": info["url"]}
+
+
+@sensitive_variables("token")
+def download_course_file(token, url, max_bytes=MAX_FILE_BYTES):
+    """Return a Canvas file's bytes, sending the token only to our Canvas host.
+
+    Callers check the file's reported size first; the byte limit here is a backstop.
+    """
+    try:
+        on_canvas = canvas_origin(url) == canvas_origin(canvas_base_url())
+    except ValueError:
+        on_canvas = False
+    if not on_canvas:
+        raise CanvasAPIError("Canvas returned an unsafe file address.")
+    try:
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+            allow_redirects=False,
+            stream=True,
+        )
+        if response.status_code in REDIRECT_STATUSES:
+            # Canvas hands the file off to separate storage, which must never see the token.
+            location = urljoin(url, response.headers.get("Location", ""))
+            response.close()
+            response = requests.get(location, timeout=30, stream=True)
+    except requests.RequestException:
+        raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
+    try:
+        if response.status_code != 200:
+            raise CanvasAPIError("Canvas could not load this file. Please try again.")
+        body = bytearray()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            body.extend(chunk)
+            if len(body) > max_bytes:
+                raise CanvasFileTooLarge("This file is too large to preview.")
+        return bytes(body)
+    except requests.RequestException:  # the connection can also drop mid-download
+        raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
+    finally:
+        response.close()
 
 
 def _validate_assignment_course(course):
