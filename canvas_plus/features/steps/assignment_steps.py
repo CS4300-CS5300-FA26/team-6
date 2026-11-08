@@ -142,6 +142,64 @@ def step_saved_assignments_in_current_and_other_courses(context):
     )
 
 
+@given("Canvas has updated those current course assignments")
+def step_canvas_updated_current_course_assignments(context):
+    context.updated_assignments = [
+        {
+            "canvas_assignment_id": 201,
+            "canvas_course_id": 42,
+            "title": "Updated current assignment",
+            "course_name": COURSE["name"],
+            "due_date": django_timezone.now() + timedelta(days=3),
+            "submitted": False,
+            "description": "Updated current description",
+        },
+        {
+            "canvas_assignment_id": 202,
+            "canvas_course_id": 84,
+            "title": "Updated missing assignment",
+            "course_name": "MATH 2250",
+            "due_date": django_timezone.now() + timedelta(days=4),
+            "submitted": False,
+            "description": "Updated missing description",
+        },
+    ]
+    context.original_assignment_details = {}
+    for index, assignment in enumerate(
+        (context.current_assignment, context.missing_assignment)
+    ):
+        assignment.description = f"Original {assignment.title.lower()} description"
+        assignment.due_date = django_timezone.now() + timedelta(days=10 + index)
+        assignment.save(update_fields=["description", "due_date"])
+        context.original_assignment_details[assignment.pk] = {
+            field: getattr(assignment, field)
+            for field in ("title", "course", "due_date", "description")
+        }
+    context.canvas_all_assignments.return_value = context.updated_assignments
+
+
+@given("saving the second assignment fails")
+def step_second_assignment_save_fails(context):
+    original_save = Assignment.save
+    save_count = 0
+
+    def fail_on_second_student_assignment_save(instance, *args, **kwargs):
+        nonlocal save_count
+        if instance.user_id == context.user.pk:
+            save_count += 1
+            if save_count == 2:
+                raise RuntimeError("Injected assignment persistence failure")
+        return original_save(instance, *args, **kwargs)
+
+    context.assignment_save_patcher = patch.object(
+        Assignment,
+        "save",
+        new=fail_on_second_student_assignment_save,
+    )
+    context.assignment_save_patcher.start()
+    context.add_cleanup(context.assignment_save_patcher.stop)
+
+
 @given("another student has a saved assignment in a current course")
 def step_other_student_has_current_assignment(context):
     other_user = get_user_model().objects.create_user(username="other-canvas-student")
@@ -156,11 +214,72 @@ def step_assignment_sync_unavailable(context):
     context.canvas_all_assignments.side_effect = CanvasAPIError("Canvas sync unavailable")
 
 
+@given("the student has no current Canvas courses")
+def step_student_has_no_current_canvas_courses(context):
+    context.assignment_sync_states = {
+        assignment.pk: assignment.sync_state
+        for assignment in (
+            context.current_assignment,
+            context.missing_assignment,
+            context.outside_assignment,
+        )
+    }
+    context.canvas_courses.return_value = []
+
+
+@given("Canvas rejects the token during assignment sync")
+def step_canvas_rejects_token_during_sync(context):
+    context.canvas_all_assignments.side_effect = CanvasAuthenticationError(
+        "Rejected during assignment sync"
+    )
+
+
 @then("assignments in the student's current courses are marked failed, including missing assignments")
 def step_current_assignments_marked_failed(context):
     for assignment in (context.current_assignment, context.missing_assignment):
         assignment.refresh_from_db()
         assert assignment.sync_state == "failed", assignment.sync_state
+
+
+@then("the original assignment details are preserved")
+def step_original_assignment_details_preserved(context):
+    for assignment in (context.current_assignment, context.missing_assignment):
+        assignment.refresh_from_db()
+        expected = context.original_assignment_details[assignment.pk]
+        actual = {
+            field: getattr(assignment, field)
+            for field in expected
+        }
+        assert actual == expected
+
+
+@then("the updated assignments are synced successfully")
+def step_updated_assignments_synced(context):
+    for updated in context.updated_assignments:
+        assignment = Assignment.objects.get(
+            user=context.user,
+            canvas_assignment_id=updated["canvas_assignment_id"],
+        )
+        assert assignment.title == updated["title"]
+        assert assignment.course == updated["course_name"]
+        assert assignment.due_date == updated["due_date"]
+        assert assignment.description == updated["description"]
+        assert assignment.sync_state == "synced"
+
+
+@then("the assignment sync error is no longer shown")
+def step_assignment_sync_error_cleared(context):
+    assert context.response.status_code == 200
+    assert "Unable to sync Canvas assignments. Please try again." not in (
+        context.response.content.decode()
+    )
+
+
+@then("all saved assignment sync states remain unchanged")
+def step_all_saved_assignment_states_unchanged(context):
+    for assignment_id, sync_state in context.assignment_sync_states.items():
+        assignment = Assignment.objects.get(pk=assignment_id)
+        assert assignment.sync_state == sync_state
 
 
 @then("assignments outside those courses and the other student's assignment remain unchanged")
@@ -174,6 +293,13 @@ def step_other_assignments_unchanged(context):
 def step_assignment_sync_error_visible(context):
     assert context.response.status_code == 200
     assert "Unable to sync Canvas assignments. Please try again." in context.response.content.decode()
+
+
+@when("saving assignments is restored and I reload the logged-in home page")
+def step_restore_saving_and_reload(context):
+    context.assignment_save_patcher.stop()
+    context.response = context.client.get("/assignments/")
+    assert context.response.status_code == 200
 
 
 @given('I am viewing "{title}" for "{course}" due "{due_date}"')
