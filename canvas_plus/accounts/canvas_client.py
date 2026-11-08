@@ -176,10 +176,10 @@ def get_course_file(token, course_id, file_id):
 
 
 @sensitive_variables("token")
-def download_course_file(token, url, max_bytes=MAX_FILE_BYTES):
-    """Return a Canvas file's bytes, sending the token only to our Canvas host.
+def open_course_file(token, url):
+    """Open a streaming response for a Canvas file, sending the token only to our Canvas host.
 
-    Callers check the file's reported size first; the byte limit here is a backstop.
+    The caller must close the response.
     """
     try:
         on_canvas = canvas_origin(url) == canvas_origin(canvas_base_url())
@@ -202,9 +202,20 @@ def download_course_file(token, url, max_bytes=MAX_FILE_BYTES):
             response = requests.get(location, timeout=30, stream=True)
     except requests.RequestException:
         raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
+    if response.status_code != 200:
+        response.close()
+        raise CanvasAPIError("Canvas could not load this file. Please try again.")
+    return response
+
+
+@sensitive_variables("token")
+def download_course_file(token, url, max_bytes=MAX_FILE_BYTES):
+    """Return a Canvas file's bytes, stopping past max_bytes.
+
+    Callers check the file's reported size first; the byte limit here is a backstop.
+    """
+    response = open_course_file(token, url)
     try:
-        if response.status_code != 200:
-            raise CanvasAPIError("Canvas could not load this file. Please try again.")
         body = bytearray()
         for chunk in response.iter_content(chunk_size=64 * 1024):
             body.extend(chunk)
