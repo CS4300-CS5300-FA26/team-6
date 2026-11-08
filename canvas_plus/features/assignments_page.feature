@@ -5,7 +5,7 @@ Feature: Assignments page
     When I open the logged-in home page
     Then both assignments are saved with descriptions while only the existing upcoming selection is displayed
 
-  Scenario: A failed assignment sync affects only the student's current courses
+  Scenario: Assignment retrieval failure affects only the student's current courses
     Given a connected student has saved assignments in current and other courses
     And another student has a saved assignment in a current course
     And the assignment sync is unavailable
