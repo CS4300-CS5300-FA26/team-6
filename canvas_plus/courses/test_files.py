@@ -1,54 +1,44 @@
-"""Unit tests for finding the Canvas files a syllabus links to."""
+"""Unit tests for turning a cleaned syllabus's file links into viewers and downloads."""
 import pytest
 
-from courses.files import linked_files  # pylint: disable=import-error
+from courses.files import embed_file_viewers  # pylint: disable=import-error
 
 
-@pytest.mark.unit
-def test_finds_this_courses_files_in_link_order():
-    """Full and relative Canvas file links both count, named by their link text."""
-    html = (
-        '<a href="https://canvas.example.edu/courses/7/files/9?wrap=1"><span>Syllabus</span></a>'
-        '<a href="/courses/7/files/10/download">Lecture 1</a>'
+def file_link(title, file_id, text):
+    """A file link as the cleaner leaves it: pointing at Canvas+, opening in a new tab."""
+    return (
+        f'<a class="instructure_file_link" title="{title}" href="/courses/7/files/{file_id}/" '
+        f'target="_blank" rel="noopener noreferrer">{text}</a>'
     )
 
-    assert linked_files(html, 7) == [
-        {"id": 9, "name": "Syllabus"},
-        {"id": 10, "name": "Lecture 1"},
-    ]
+
+@pytest.mark.unit
+def test_pdf_link_becomes_a_viewer_in_place():
+    """A PDF opens right where the syllabus mentions it, with a download link too."""
+    html = embed_file_viewers(f"<p>Syllabus: {file_link('syllabus.pdf', 9, 'syllabus.pdf')}</p>")
+
+    assert html.startswith("<p>Syllabus: <details")
+    assert "<summary>syllabus.pdf</summary>" in html
+    assert '<iframe src="/courses/7/files/9/"' in html
+    assert 'href="/courses/7/files/9/?download=1"' in html
 
 
 @pytest.mark.unit
-def test_ignores_links_that_are_not_this_courses_files():
-    """Other courses' files, Canvas pages, outside sites, and nameless links are left out."""
+def test_other_file_link_becomes_a_download_link():
+    """A file that can't be previewed is just a link that downloads it."""
+    html = embed_file_viewers(file_link("Lecture 0--Overview.pptx", 10, "Lecture 0"))
+
+    assert 'href="/courses/7/files/10/?download=1"' in html
+    assert ">Lecture 0</a>" in html
+    assert "<details" not in html
+
+
+@pytest.mark.unit
+def test_rest_of_the_syllabus_is_unchanged():
+    """Headings, entities, line breaks, and outside links pass through exactly."""
     html = (
-        '<a href="/courses/8/files/9">Old course file</a>'
-        '<a href="/courses/7/modules">Modules</a>'
-        '<a href="https://xu-lab.org/">Prof. Xu</a>'
-        '<a href="/courses/7/files/11"></a>'
+        "<h4>Grading &amp; Policies</h4><p>Line<br>two</p>"
+        '<a href="https://xu-lab.org/" target="_blank" rel="noopener noreferrer">Prof. Xu</a>'
     )
 
-    assert not linked_files(html, 7)
-
-
-@pytest.mark.unit
-def test_a_file_linked_twice_is_listed_once():
-    """The same file linked in two places shows up once."""
-    html = '<a href="/courses/7/files/9">Syllabus</a> ... <a href="/courses/7/files/9">here</a>'
-
-    assert linked_files(html, 7) == [{"id": 9, "name": "Syllabus"}]
-
-
-@pytest.mark.unit
-def test_a_malformed_link_is_skipped():
-    """One broken address in a syllabus doesn't stop the other files from being found."""
-    html = '<a href="http://[broken">Bad link</a><a href="/courses/7/files/9">Syllabus</a>'
-
-    assert linked_files(html, 7) == [{"id": 9, "name": "Syllabus"}]
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("html", [None, ""])
-def test_no_syllabus_has_no_files(html):
-    """A course without a syllabus links to no files."""
-    assert not linked_files(html, 7)
+    assert embed_file_viewers(html) == html

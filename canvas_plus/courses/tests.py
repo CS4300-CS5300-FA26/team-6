@@ -26,7 +26,7 @@ FORMATTED_SYLLABUS = (
     "<table><tr><td>Week 1</td></tr></table><script>alert('x')</script>"
 )
 FILE_SYLLABUS = (
-    '<p>Syllabus: <a class="instructure_file_link" '
+    '<p>Syllabus: <a class="instructure_file_link" title="syllabus.pdf" '
     'href="https://canvas.example.edu/courses/1/files/9?wrap=1">syllabus.pdf</a></p>'
 )
 
@@ -149,22 +149,16 @@ class CoursePageTests(ConnectedStudentTestCase):
         self.assertContains(response, f'<a href="{reverse("course_list")}">← All courses</a>')
 
     @patch("courses.views.get_course_syllabus", return_value=FILE_SYLLABUS)
-    def test_syllabus_files_are_listed_with_a_viewer(self, _syllabus, _list_courses):
-        """Each linked file gets a row that opens it in Canvas+, and nothing links to Canvas."""
+    def test_syllabus_pdf_opens_in_place(self, _syllabus, _list_courses):
+        """The syllabus's PDF opens right where it's mentioned, and nothing links to Canvas."""
         response = self.open_course()
 
-        self.assertContains(response, "Files in this syllabus")
-        self.assertContains(response, "<summary>syllabus.pdf</summary>", html=True)
-        self.assertContains(response, f'src="{reverse("course_file", args=[1, 9])}"')
-        self.assertNotContains(response, "File previews are coming soon")
-        self.assertNotContains(response, 'href="https://canvas.example.edu')
-
-    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
-    def test_syllabus_without_files_has_no_files_section(self, _syllabus, _list_courses):
-        """A syllabus that links no files doesn't show an empty files section."""
-        response = self.open_course()
-
+        file_url = reverse("course_file", args=[1, 9])
+        self.assertContains(response, "<summary>syllabus.pdf</summary>")
+        self.assertContains(response, f'<iframe src="{file_url}"')
+        self.assertContains(response, f'href="{file_url}?download=1"')
         self.assertNotContains(response, "Files in this syllabus")
+        self.assertNotContains(response, 'href="https://canvas.example.edu')
 
     @patch("courses.views.get_course_syllabus", return_value=None)
     def test_missing_syllabus_shows_message(self, _syllabus, _list_courses):

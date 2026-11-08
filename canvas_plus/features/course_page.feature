@@ -13,7 +13,7 @@ Feature: Course page with syllabus
     Given my course syllabus links to a file in Canvas
     When I open that course
     Then I see the file's name
-    And I see "Files in this syllabus"
+    And I see "Download"
     And nothing on the page takes me to Canvas
 
   Scenario Outline: No syllabus posted

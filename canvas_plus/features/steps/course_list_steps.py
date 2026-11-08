@@ -105,7 +105,7 @@ FORMATTED_SYLLABUS = (
     "<h4>Grading</h4><ul><li>Quizzes 10%</li></ul><table><tr><td>Week 1</td></tr></table>"
 )
 FILE_SYLLABUS = (
-    '<p>Syllabus: <a class="instructure_file_link" '
+    '<p>Syllabus: <a class="instructure_file_link" title="syllabus.pdf" '
     'href="https://canvas.example.edu/courses/1/files/9?wrap=1">syllabus.pdf</a></p>'
 )
 SCRIPT_SYLLABUS = "<p>Grading policy</p><script>alert('x')</script>"
