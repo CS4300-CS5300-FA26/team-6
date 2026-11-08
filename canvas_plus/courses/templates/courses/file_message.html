@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Course file</title>
+    <style>
+        body { margin: 0; padding: 0.75rem 1rem; font-family: sans-serif; }
+        p { margin: 0; }
+    </style>
 </head>
-<body>
+<body class="file-message">
     {# Shown inside the file viewer, so it has no sidebar. "?download=1" keeps the same file address; #}
     {# target="_top" lets a download (or its error page) use the whole tab instead of this box. #}
     {% if reason == "not_pdf" %}
