@@ -32,7 +32,7 @@ class AttachmentActionTests(MediaRootTestCase):
         self.attachment = Attachment.objects.create(
             user=self.user, assignment=self.assignment, study_file=self.study_file,
         )
-        self.enterContext(patch("assignments.views.load_canvas_context", side_effect=lambda _: {
+        self.enterContext(patch("assignments.views.load_canvas_context", side_effect=lambda *args, **kwargs: {
             "assignments_unavailable": False,
             "assignments": [{"canvas_assignment_id": 101, "canvas_course_id": 42,
                              "title": "Project", "course_name": "CS 4300"}],

@@ -230,6 +230,55 @@ def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
 
 
 @sensitive_variables("token")
+def _list_course_all_assignments(token, course, base_url, session):
+    """Fetch every assignment page for one validated course without bucket filters."""
+    next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
+    params = {"per_page": 100}
+    visited = set()
+    assignments = []
+    while next_url:
+        _validate_pagination_url(next_url, base_url, visited)
+        visited.add(next_url)
+        page, next_url = _fetch_page(
+            next_url,
+            token,
+            params,
+            "Canvas could not load assignments. Please try again.",
+            "Canvas returned unexpected assignment data. Please try again.",
+            session,
+        )
+        assignments.extend(
+            _normalize_assignment(assignment, course["name"], course["id"])
+            for assignment in page
+        )
+        params = None
+    return assignments
+
+
+@sensitive_variables("token")
+def list_all_assignments(token, courses, session=None):
+    """Return normalized assignments across active courses, deduplicated by Canvas id."""
+    base_url = canvas_base_url()
+    for course in courses:
+        _validate_assignment_course(course)
+    with ThreadPoolExecutor(MAX_CONCURRENT_REQUESTS) as pool:
+        pages = pool.map(
+            partial(_list_course_all_assignments, token, base_url=base_url, session=session),
+            courses,
+        )
+        assignments = []
+        seen_ids = set()
+        for page in pages:
+            for assignment in page:
+                assignment_id = assignment["canvas_assignment_id"]
+                if assignment_id in seen_ids:
+                    continue
+                seen_ids.add(assignment_id)
+                assignments.append(assignment)
+    return assignments
+
+
+@sensitive_variables("token")
 def list_upcoming_assignments(token, courses, session=None):
     """Return normalized upcoming and overdue assignments with submission status."""
     base_url = canvas_base_url()

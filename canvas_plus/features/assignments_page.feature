@@ -1,5 +1,10 @@
 Feature: Assignments page
 
+  Scenario: Sync all assignments without changing the upcoming list
+    Given a connected student with upcoming and non-upcoming Canvas assignments
+    When I open the logged-in home page
+    Then both assignments are saved with descriptions while only the existing upcoming selection is displayed
+
   Scenario: A student sees upcoming coursework and its due date
     Given I am a connected student with upcoming coursework due on "October 22, 2026 at 12:30 PM"
     When I open the logged-in home page

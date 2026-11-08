@@ -15,6 +15,7 @@ from django.utils.text import slugify
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
+from assignments.models import Assignment
 
 COURSE = {"id": 42, "name": "CS 4300"}
 ASSIGNMENT_TITLE = "Canvas Project 1"
@@ -65,12 +66,14 @@ def prepare_student(context, assignments):
     context.client.force_login(context.user)
     context.canvas_courses = Mock(return_value=[COURSE])
     context.canvas_assignments = Mock(return_value=assignments)
+    context.canvas_all_assignments = Mock(return_value=[])
     context.graded_submissions = Mock(return_value=[])
 
     targets = (
         ("accounts.connections.list_courses", context.canvas_courses, False),
         ("assignments.views.list_courses", context.canvas_courses, True),
         ("assignments.views.list_upcoming_assignments", context.canvas_assignments, True),
+        ("assignments.views.list_all_assignments", context.canvas_all_assignments, True),
         ("assignments.views.list_graded_submissions", context.graded_submissions, False),
     )
     for target, replacement, create in targets:
@@ -99,6 +102,23 @@ def step_connected_student_with_upcoming_work(context, due_date):
 @given("I am a connected student with no upcoming coursework")
 def step_connected_student_with_no_upcoming_work(context):
     prepare_student(context, [])
+
+
+@given("a connected student with upcoming and non-upcoming Canvas assignments")
+def step_connected_student_with_upcoming_and_non_upcoming_work(context):
+    upcoming = assignment_result(django_timezone.now() + timedelta(days=2))
+    upcoming["description"] = "Upcoming assignment details"
+    undated = {
+        "canvas_assignment_id": 102,
+        "canvas_course_id": COURSE["id"],
+        "title": "Undated Canvas assignment",
+        "course_name": COURSE["name"],
+        "due_date": None,
+        "submitted": False,
+        "description": "Undated assignment details",
+    }
+    prepare_student(context, [upcoming])
+    context.canvas_all_assignments.return_value = [upcoming, undated]
 
 
 @given('I am viewing "{title}" for "{course}" due "{due_date}"')
@@ -142,6 +162,28 @@ def step_exact_empty_state(context, message):
     assert html.count(message) == 1
     assert "Unable to load upcoming assignments" not in html
     assert "Your Canvas connection expired." not in html
+
+
+@then("both assignments are saved with descriptions while only the existing upcoming selection is displayed")
+def step_synced_assignments_do_not_change_upcoming_selection(context):
+    assert context.response.status_code == 200
+    saved = {
+        assignment.canvas_assignment_id: assignment
+        for assignment in Assignment.objects.filter(user=context.user)
+    }
+    assert set(saved) == {101, 102}, f"Expected both Canvas assignments to be saved, got {set(saved)}"
+    assert saved[101].description == "Upcoming assignment details"
+    assert saved[102].description == "Undated assignment details"
+    assert saved[101].sync_state == "synced"
+    assert saved[102].sync_state == "synced"
+    displayed_ids = [
+        assignment["canvas_assignment_id"]
+        for assignment in context.response.context["assignments"]
+    ]
+    assert displayed_ids == [101]
+    html = context.response.content.decode()
+    assert "Canvas Project 1" in html
+    assert "Undated Canvas assignment" not in html
 
 
 @then('I see the revised due date "{revised}" instead of "{original}"')
