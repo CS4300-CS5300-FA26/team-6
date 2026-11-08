@@ -10,6 +10,8 @@ import requests
 from .canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
+    CanvasFileTooLarge,
+    download_course_file,
     get_course_file,
     get_course_syllabus,
     list_courses,
@@ -121,6 +123,58 @@ def test_malformed_file_details_are_not_treated_as_success(payload):
     with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
         with pytest.raises(CanvasAPIError):
             get_course_file("fake-token", 7, 9)
+
+
+FILE_URL = "https://canvas.example.edu/files/9/download?download_frd=1"
+
+
+def file_response(chunks=(), *, status=200, location=None):
+    """A requests-like file response that streams its body in chunks."""
+    result = Mock(status_code=status)
+    result.headers = {"Location": location} if location else {}
+    result.iter_content.return_value = iter(chunks)
+    return result
+
+
+@pytest.mark.unit
+def test_file_download_sends_the_token_only_to_canvas():
+    """Canvas gets the token; the file storage it redirects to never does."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location="https://files.example.com/signed/9"),
+        file_response([b"%PDF-1.7 ", b"pages"]),
+    ]) as get:
+        assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7 pages"
+    canvas_call, storage_call = get.call_args_list
+    assert canvas_call.args == (FILE_URL,)
+    assert canvas_call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+    assert storage_call.args == ("https://files.example.com/signed/9",)
+    assert "Authorization" not in storage_call.kwargs.get("headers", {})
+
+
+@pytest.mark.unit
+def test_file_download_refuses_an_address_off_canvas():
+    """A download address on another host is never requested with the token."""
+    with patch("accounts.canvas_client.requests.get") as get:
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", "https://untrusted.example/files/9/download")
+    get.assert_not_called()
+
+
+@pytest.mark.unit
+def test_file_over_the_size_limit_stops_downloading():
+    """Downloading stops as soon as the file passes the limit."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=file_response([b"x" * 8, b"x" * 8, b"x" * 8])):
+        with pytest.raises(CanvasFileTooLarge):
+            download_course_file("fake-token", FILE_URL, max_bytes=10)
+
+
+@pytest.mark.unit
+def test_failed_file_download_is_a_canvas_problem():
+    """A file Canvas won't hand over is a normal Canvas error, not a crash."""
+    with patch("accounts.canvas_client.requests.get", return_value=file_response(status=404)):
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", FILE_URL)
 
 
 @pytest.mark.unit
