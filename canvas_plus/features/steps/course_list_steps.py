@@ -279,6 +279,11 @@ def step_try_to_open_file(context):
     context.response = context.client.get(context.file_url)
 
 
+@when("I try to download it")
+def step_try_to_download_file(context):
+    context.response = context.client.get(context.file_url + "?download=1")
+
+
 @then("I see the PDF on the course page")
 def step_pdf_shown(context):
     assert context.response["Content-Type"] == "application/pdf"
@@ -306,6 +311,12 @@ def step_download_from_viewer(context):
 def step_course_page_still_shows(context):
     assert f"<h1>{CURRENT_COURSE['name']}</h1>" in context.course_page
     assert "Syllabus:" in context.course_page
+
+
+@then("I can go back to the course")
+def step_back_to_course(context):
+    course_url = reverse("course_detail", args=[CURRENT_COURSE["id"]])
+    assert f'<a href="{course_url}">← Back to course</a>' in page(context)
 
 
 @then("Canvas is never asked for it")

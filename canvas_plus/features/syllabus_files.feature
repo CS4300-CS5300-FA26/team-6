@@ -25,6 +25,12 @@ Feature: Preview syllabus files on the course page
     Then I see "This file couldn't be loaded. Please try again."
     And the rest of the course page still shows
 
+  Scenario: Download a file that can't be loaded
+    Given a linked file was deleted, is locked by my professor, or Canvas is down
+    When I try to download it
+    Then I see "This file couldn't be loaded. Please try again."
+    And I can go back to the course
+
   Scenario: File from a course that isn't mine
     Given a file belongs to a course not in my current list
     When I try to open it
