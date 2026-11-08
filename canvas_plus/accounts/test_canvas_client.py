@@ -126,6 +126,10 @@ def test_malformed_file_details_are_not_treated_as_success(payload):
 
 
 FILE_URL = "https://canvas.example.edu/files/9/download?download_frd=1"
+# The real redirect chain traced from UCCS Canvas: user content, then Instructure's file service.
+USER_CONTENT_URL = "https://a1-9.cluster1.canvas-user-content.com/files/9"
+FILE_SERVICE_URL = "https://inst-fs-iad-prod.inscloudgate.net/files/9"
+FILE_CDN_URL = "https://cdn.inst-fs-iad-prod.inscloudgate.net/9?signature=x"
 
 
 def file_response(chunks=(), *, status=200, location=None):
@@ -140,27 +144,28 @@ def file_response(chunks=(), *, status=200, location=None):
 def test_file_download_sends_the_token_only_to_canvas():
     """Canvas gets the token; the file storage it redirects to never does."""
     with patch("accounts.canvas_client.requests.get", side_effect=[
-        file_response(status=302, location="https://files.example.com/signed/9"),
+        file_response(status=302, location=USER_CONTENT_URL),
         file_response([b"%PDF-1.7 ", b"pages"]),
     ]) as get:
         assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7 pages"
     canvas_call, storage_call = get.call_args_list
     assert canvas_call.args == (FILE_URL,)
     assert canvas_call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
-    assert storage_call.args == ("https://files.example.com/signed/9",)
+    assert storage_call.args == (USER_CONTENT_URL,)
     assert "Authorization" not in storage_call.kwargs.get("headers", {})
 
 
 @pytest.mark.unit
 def test_file_download_follows_storage_redirects_without_the_token():
-    """File storage may redirect again; every hop after Canvas goes without the token."""
+    """Canvas's real three-hop chain works, and every hop after Canvas goes without the token."""
     with patch("accounts.canvas_client.requests.get", side_effect=[
-        file_response(status=302, location="https://files.example.com/signed/9"),
-        file_response(status=302, location="https://bucket.example.com/9?signature=x"),
+        file_response(status=302, location=USER_CONTENT_URL),
+        file_response(status=302, location=FILE_SERVICE_URL),
+        file_response(status=302, location=FILE_CDN_URL),
         file_response([b"%PDF-1.7"]),
     ]) as get:
         assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7"
-    assert get.call_count == 3
+    assert get.call_count == 4
     for storage_call in get.call_args_list[1:]:
         assert "Authorization" not in storage_call.kwargs.get("headers", {})
         assert storage_call.kwargs["allow_redirects"] is False
@@ -168,13 +173,15 @@ def test_file_download_follows_storage_redirects_without_the_token():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("location", [
-    "http://files.example.com/signed/9",
+    "http://inst-fs-iad-prod.inscloudgate.net/files/9",
+    "https://evil.example.net/files/9",
+    "https://evil-inscloudgate.net/files/9",
     "https://169.254.169.254/latest/meta-data",
     "https://127.0.0.1/admin",
     "https://10.0.0.5/files/9",
 ])
 def test_file_download_refuses_an_unsafe_redirect(location):
-    """A redirect that isn't HTTPS, or points at a private address, is never requested."""
+    """Only HTTPS redirects to Canvas or Instructure's file storage are followed."""
     with patch("accounts.canvas_client.requests.get", side_effect=[
         file_response(status=302, location=location),
     ]) as get:
