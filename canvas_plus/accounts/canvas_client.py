@@ -72,7 +72,9 @@ def _get_json(url, token, params, failure_message, session):
         )
     except requests.RequestException:
         raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
-    if response.status_code == 401:
+    # Canvas adds WWW-Authenticate only when the token itself is invalid or expired.
+    # A 401 without it means the token is fine but this item is off limits, like a locked file.
+    if response.status_code == 401 and response.headers.get("WWW-Authenticate"):
         raise CanvasAuthenticationError("Canvas rejected the token.")
     if response.status_code != 200:
         raise CanvasAPIError(failure_message)

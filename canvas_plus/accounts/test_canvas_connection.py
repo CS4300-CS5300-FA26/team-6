@@ -104,6 +104,9 @@ def fake_canvas_api(settings):
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            if not authorized:
+                # Real Canvas marks a rejected token this way; see canvas_client._get_json.
+                self.send_header("WWW-Authenticate", 'Bearer realm="canvas-lms"')
             self.end_headers()
             self.wfile.write(body)
 
