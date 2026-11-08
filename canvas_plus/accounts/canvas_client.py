@@ -1,6 +1,5 @@
 """Read enrolled courses and assignments from Canvas without exposing tokens."""
 
-import ipaddress
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
@@ -17,6 +16,9 @@ MAX_CONCURRENT_REQUESTS = 10
 MAX_FILE_BYTES = 25 * 1024 * 1024
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 MAX_FILE_REDIRECTS = 5
+# Where Canvas sends file downloads (traced from UCCS Canvas): user content, then
+# Instructure's file service and its CDN. Any other redirect target is refused.
+FILE_STORAGE_DOMAINS = ("canvas-user-content.com", "inscloudgate.net")
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -178,9 +180,9 @@ def get_course_file(token, course_id, file_id):
 
 
 def _safe_storage_url(url):
-    """Allow an HTTPS address unless its host is a private, loopback, or link-local IP.
+    """Allow only HTTPS addresses on our Canvas host or Instructure's file storage.
 
-    A host name passes: HTTPS certificate checks stop it from reaching an internal service.
+    An allowlist means a redirect can never reach a private address, however its name resolves.
     """
     try:
         parts = urlsplit(url)
@@ -189,10 +191,9 @@ def _safe_storage_url(url):
         return False
     if parts.scheme != "https" or not host:
         return False
-    try:
-        return ipaddress.ip_address(host).is_global
-    except ValueError:
+    if host == urlsplit(canvas_base_url()).hostname:
         return True
+    return any(host == domain or host.endswith(f".{domain}") for domain in FILE_STORAGE_DOMAINS)
 
 
 @sensitive_variables("token")
