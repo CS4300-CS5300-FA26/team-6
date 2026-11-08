@@ -40,6 +40,14 @@ def test_a_file_linked_twice_is_listed_once():
 
 
 @pytest.mark.unit
+def test_a_malformed_link_is_skipped():
+    """One broken address in a syllabus doesn't stop the other files from being found."""
+    html = '<a href="http://[broken">Bad link</a><a href="/courses/7/files/9">Syllabus</a>'
+
+    assert linked_files(html, 7) == [{"id": 9, "name": "Syllabus"}]
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("html", [None, ""])
 def test_no_syllabus_has_no_files(html):
     """A course without a syllabus links to no files."""
