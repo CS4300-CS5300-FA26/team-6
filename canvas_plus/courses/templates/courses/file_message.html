@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Course file</title>
+</head>
+<body>
+    {# Shown inside the file viewer, so it has no sidebar. "?download=1" keeps the same file address. #}
+    {% if reason == "not_pdf" %}
+        <p>Preview isn't available for this file type. <a href="?download=1">Download it</a></p>
+    {% elif reason == "too_large" %}
+        <p>This file is too large to preview. <a href="?download=1">Download it</a></p>
+    {% elif reason == "unavailable" %}
+        <p>This file couldn't be loaded. Please try again.</p>
+    {% else %}
+        <p>File not found</p>
+    {% endif %}
+</body>
+</html>

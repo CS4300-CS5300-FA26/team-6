@@ -1,17 +1,26 @@
 """Views for the student's current Canvas courses."""
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.http import content_disposition_header
+from django.views.decorators.cache import cache_control
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.debug import sensitive_variables
 
 from accounts.canvas_client import (
+    MAX_FILE_BYTES,
     CanvasAPIError,
     CanvasAuthenticationError,
+    CanvasFileTooLarge,
     canvas_base_url,
     canvas_origin,
+    download_course_file,
+    get_course_file,
     get_course_syllabus,
     list_courses,
+    open_course_file,
 )
 from accounts.models import CanvasConnection, SavedTokenError
 from .current import is_current
@@ -73,3 +82,57 @@ def course_detail(request, course_id):
         context["syllabus"] = clean_syllabus(syllabus, canvas_base_url())
         context["has_files"] = f'class="{FILE_LINK_CLASS}"' in context["syllabus"]
     return render(request, "courses/course_detail.html", context)
+
+
+def _stream(response):
+    """Pass a Canvas file through in pieces, closing the connection when done."""
+    try:
+        yield from response.iter_content(chunk_size=64 * 1024)
+    finally:
+        response.close()
+
+
+def _file_message(request, reason, status=200):
+    """A short message shown inside the file viewer instead of the file."""
+    return render(request, "courses/file_message.html", {"reason": reason}, status=status)
+
+
+@login_required
+@xframe_options_sameorigin
+@cache_control(private=True)
+def course_file(request, course_id, file_id):
+    """Show one syllabus file inside Canvas+: a PDF preview, or a download."""
+    download = request.GET.get("download") == "1"
+
+    @sensitive_variables("token")
+    def load(token):
+        # Same rule as the course page: only the student's own current courses are asked about.
+        if not any(course["id"] == course_id for course in _current_courses(token)):
+            return None
+        info = get_course_file(token, course_id, file_id)
+        if download:
+            return info, open_course_file(token, info["url"])  # streamed, so any size
+        if info["size"] > MAX_FILE_BYTES:
+            return info, None  # too large to preview: nothing is fetched
+        try:
+            return info, download_course_file(token, info["url"])
+        except CanvasFileTooLarge:
+            return info, None
+
+    found, state = _load_from_canvas(request.user, load)
+    if found is None:
+        if state:  # missing or expired connection, or Canvas couldn't provide the file
+            return _file_message(request, "unavailable")
+        return _file_message(request, "not_found", status=404)
+    info, body = found
+    if download:
+        response = StreamingHttpResponse(_stream(body), content_type="application/octet-stream")
+        response["Content-Disposition"] = content_disposition_header(True, info["name"])
+        return response
+    if body is None:
+        return _file_message(request, "too_large")
+    if not body.startswith(b"%PDF-"):
+        return _file_message(request, "not_pdf")  # checked from the bytes, not the file's label
+    response = HttpResponse(body, content_type="application/pdf")
+    response["Content-Disposition"] = content_disposition_header(False, info["name"])
+    return response
