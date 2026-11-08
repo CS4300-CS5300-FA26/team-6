@@ -1,5 +1,6 @@
 """Read enrolled courses and assignments from Canvas without exposing tokens."""
 
+import ipaddress
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
@@ -15,6 +16,7 @@ MAX_COURSE_PAGES = 100
 MAX_CONCURRENT_REQUESTS = 10
 MAX_FILE_BYTES = 25 * 1024 * 1024
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_FILE_REDIRECTS = 5
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -175,6 +177,24 @@ def get_course_file(token, course_id, file_id):
     return {"name": info["display_name"], "size": info["size"], "url": info["url"]}
 
 
+def _safe_storage_url(url):
+    """Allow an HTTPS address unless its host is a private, loopback, or link-local IP.
+
+    A host name passes: HTTPS certificate checks stop it from reaching an internal service.
+    """
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return False
+    if parts.scheme != "https" or not host:
+        return False
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return True
+
+
 @sensitive_variables("token")
 def open_course_file(token, url):
     """Open a streaming response for a Canvas file, sending the token only to our Canvas host.
@@ -195,11 +215,16 @@ def open_course_file(token, url):
             allow_redirects=False,
             stream=True,
         )
-        if response.status_code in REDIRECT_STATUSES:
+        for _ in range(MAX_FILE_REDIRECTS):
+            if response.status_code not in REDIRECT_STATUSES:
+                break
             # Canvas hands the file off to separate storage, which must never see the token.
-            location = urljoin(url, response.headers.get("Location", ""))
+            # Each hop is followed here, not by requests, so every address gets checked.
+            url = urljoin(url, response.headers.get("Location", ""))
             response.close()
-            response = requests.get(location, timeout=30, stream=True)
+            if not _safe_storage_url(url):
+                raise CanvasAPIError("Canvas returned an unsafe file address.")
+            response = requests.get(url, timeout=30, allow_redirects=False, stream=True)
     except requests.RequestException:
         raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
     if response.status_code != 200:
