@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from behave import given, when, then
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, override_settings
 from django.utils import timezone as django_timezone
 from django.utils.html import escape
@@ -119,6 +120,59 @@ def step_connected_student_with_upcoming_and_non_upcoming_work(context):
     }
     prepare_student(context, [upcoming])
     context.canvas_all_assignments.return_value = [upcoming, undated]
+
+
+@given("a connected student has saved assignments in current and other courses")
+def step_saved_assignments_in_current_and_other_courses(context):
+    prepare_student(context, [])
+    cache.clear()
+    context.canvas_courses.return_value = [COURSE, {"id": 84, "name": "MATH 2250"}]
+    context.current_assignment = Assignment.objects.create(
+        user=context.user, title="Current", course=COURSE["name"],
+        canvas_course_id=42, canvas_assignment_id=201, sync_state="synced",
+    )
+    context.missing_assignment = Assignment.objects.create(
+        user=context.user, title="Missing", course="MATH 2250",
+        canvas_course_id=84, canvas_assignment_id=202, sync_state="missing",
+    )
+    context.outside_assignment = Assignment.objects.create(
+        user=context.user, title="Other course", course="History",
+        canvas_course_id=999, canvas_assignment_id=203, sync_state="synced",
+    )
+
+
+@given("another student has a saved assignment in a current course")
+def step_other_student_has_current_assignment(context):
+    other_user = get_user_model().objects.create_user(username="other-canvas-student")
+    context.other_assignment = Assignment.objects.create(
+        user=other_user, title="Other student", course=COURSE["name"],
+        canvas_course_id=42, canvas_assignment_id=201, sync_state="synced",
+    )
+
+
+@given("the assignment sync is unavailable")
+def step_assignment_sync_unavailable(context):
+    context.canvas_all_assignments.side_effect = CanvasAPIError("Canvas sync unavailable")
+
+
+@then("assignments in the student's current courses are marked failed, including missing assignments")
+def step_current_assignments_marked_failed(context):
+    for assignment in (context.current_assignment, context.missing_assignment):
+        assignment.refresh_from_db()
+        assert assignment.sync_state == "failed", assignment.sync_state
+
+
+@then("assignments outside those courses and the other student's assignment remain unchanged")
+def step_other_assignments_unchanged(context):
+    for assignment in (context.outside_assignment, context.other_assignment):
+        assignment.refresh_from_db()
+        assert assignment.sync_state == "synced", assignment.sync_state
+
+
+@then("I see an assignment sync error")
+def step_assignment_sync_error_visible(context):
+    assert context.response.status_code == 200
+    assert "Unable to sync Canvas assignments. Please try again." in context.response.content.decode()
 
 
 @given('I am viewing "{title}" for "{course}" due "{due_date}"')

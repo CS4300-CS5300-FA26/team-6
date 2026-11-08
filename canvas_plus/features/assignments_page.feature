@@ -5,6 +5,15 @@ Feature: Assignments page
     When I open the logged-in home page
     Then both assignments are saved with descriptions while only the existing upcoming selection is displayed
 
+  Scenario: A failed assignment sync affects only the student's current courses
+    Given a connected student has saved assignments in current and other courses
+    And another student has a saved assignment in a current course
+    And the assignment sync is unavailable
+    When I open the logged-in home page
+    Then assignments in the student's current courses are marked failed, including missing assignments
+    And assignments outside those courses and the other student's assignment remain unchanged
+    And I see an assignment sync error
+
   Scenario: A student sees upcoming coursework and its due date
     Given I am a connected student with upcoming coursework due on "October 22, 2026 at 12:30 PM"
     When I open the logged-in home page
