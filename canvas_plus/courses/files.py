@@ -37,7 +37,11 @@ def linked_files(html, course_id):
     collector.feed(html or "")
     files, seen = [], set()
     for href, text in collector.links:
-        match = FILE_PATH.match(urlsplit(href).path)
+        try:
+            path = urlsplit(href).path
+        except ValueError:
+            continue  # a malformed address can't be a Canvas file link
+        match = FILE_PATH.match(path)
         name = " ".join("".join(text).split())
         if not match or int(match[1]) != course_id or not name:
             continue
