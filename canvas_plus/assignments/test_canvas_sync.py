@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from accounts.canvas_client import CanvasAPIError
 from assignments.models import Assignment, Attachment, StudyFile
+from assignments.sync import sync_canvas_assignments_if_needed
 from assignments.test_helpers import configure_canvas_user
 from assignments.test_models import use_temp_media_root
 
@@ -24,6 +25,50 @@ class AssignmentSyncTests(TestCase):
     def setUp(self):
         use_temp_media_root(self)
         self.user, self.connection = configure_canvas_user(self)
+
+    def test_failed_sync_only_marks_assignments_in_attempted_courses(self):
+        """A failed snapshot changes only the student's attempted course records."""
+        other_user = get_user_model().objects.create_user(username="sync-scope-other")
+        in_scope = Assignment.objects.create(
+            user=self.user, title="Current", course="Course 42",
+            canvas_course_id=42, canvas_assignment_id=401, sync_state="synced",
+        )
+        missing = Assignment.objects.create(
+            user=self.user, title="Missing", course="Course 84",
+            canvas_course_id=84, canvas_assignment_id=402, sync_state="missing",
+        )
+        outside = Assignment.objects.create(
+            user=self.user, title="Other course", course="Course 999",
+            canvas_course_id=999, canvas_assignment_id=403, sync_state="synced",
+        )
+        other_student = Assignment.objects.create(
+            user=other_user, title="Other student", course="Course 42",
+            canvas_course_id=42, canvas_assignment_id=401, sync_state="synced",
+        )
+
+        def fail_fetch():
+            raise CanvasAPIError("Canvas sync retrieval failed")
+
+        cache.clear()
+        with self.assertRaises(CanvasAPIError):
+            sync_canvas_assignments_if_needed(self.user, [], self.connection, fail_fetch)
+        for assignment in (in_scope, missing, outside, other_student):
+            assignment.refresh_from_db()
+        self.assertEqual(in_scope.sync_state, "synced")
+        self.assertEqual(missing.sync_state, "missing")
+        self.assertEqual(outside.sync_state, "synced")
+        self.assertEqual(other_student.sync_state, "synced")
+
+        with self.assertRaises(CanvasAPIError):
+            sync_canvas_assignments_if_needed(
+                self.user, [{"id": 42}, {"id": 84}], self.connection, fail_fetch
+            )
+        for assignment in (in_scope, missing, outside, other_student):
+            assignment.refresh_from_db()
+        self.assertEqual(in_scope.sync_state, "failed")
+        self.assertEqual(missing.sync_state, "failed")
+        self.assertEqual(outside.sync_state, "synced")
+        self.assertEqual(other_student.sync_state, "synced")
 
     def test_sync_upserts_and_marks_missing_without_losing_local_data(self):
         """Refresh Canvas-owned fields while retaining identity and student-owned data."""
@@ -317,6 +362,14 @@ class AssignmentSyncTests(TestCase):
             description="Original second description",
             sync_state="synced",
         )
+        outside_course_record = Assignment.objects.create(
+            user=self.user,
+            title="Outside course",
+            course="History 1010",
+            canvas_course_id=999,
+            canvas_assignment_id=303,
+            sync_state="missing",
+        )
         attachment_file = StudyFile.objects.create(
             user=self.user,
             file=SimpleUploadedFile("failure-notes.pdf", b"notes"),
@@ -394,10 +447,12 @@ class AssignmentSyncTests(TestCase):
                 self.assertContains(retrieval_failure_response, "Unable to sync")
                 first_record.refresh_from_db()
                 second_record.refresh_from_db()
+                outside_course_record.refresh_from_db()
                 self.assertEqual(first_record.title, "Original first title")
                 self.assertEqual(first_record.sync_state, "failed")
                 self.assertEqual(second_record.title, "Original second title")
                 self.assertEqual(second_record.sync_state, "failed")
+                self.assertEqual(outside_course_record.sync_state, "missing")
                 self.assertEqual(first_record.attachments.get().pk, attachment.pk)
 
                 original_save = Assignment.save
@@ -418,6 +473,7 @@ class AssignmentSyncTests(TestCase):
                 self.assertContains(persistence_failure_response, "Unable to sync")
                 first_record.refresh_from_db()
                 second_record.refresh_from_db()
+                outside_course_record.refresh_from_db()
                 self.assertEqual(first_record.title, "Original first title")
                 self.assertEqual(first_record.due_date, old_due_date)
                 self.assertEqual(first_record.description, "Original first description")
@@ -427,6 +483,7 @@ class AssignmentSyncTests(TestCase):
                 self.assertEqual(second_record.title, "Original second title")
                 self.assertEqual(second_record.description, "Original second description")
                 self.assertEqual(second_record.sync_state, "failed")
+                self.assertEqual(outside_course_record.sync_state, "missing")
                 self.assertEqual(first_record.attachments.get().pk, attachment.pk)
 
                 retry_response = self.client.get(reverse("assignment_list"))

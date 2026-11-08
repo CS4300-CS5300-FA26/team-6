@@ -64,7 +64,10 @@ def sync_canvas_assignments_if_needed(
         canvas_assignments = assignment_fetcher()
         sync_canvas_assignments(user, courses, canvas_assignments)
     except Exception:  # pylint: disable=broad-exception-caught
-        Assignment.objects.filter(user=user).update(sync_state="failed")
+        Assignment.objects.filter(
+            user=user,
+            canvas_course_id__in={course["id"] for course in courses},
+        ).update(sync_state="failed")
         raise
 
     cache.set(cache_key, _SYNC_SUCCEEDED, SYNC_CACHE_SECONDS)
