@@ -58,6 +58,10 @@ body.landing-page a { color: #17324d; }
 							 font-weight: 700; overflow-wrap: anywhere; }
 .course-card a { display: block; color: inherit; text-decoration: none; }
 .course-card a:hover, .course-card a:focus-visible { text-decoration: underline; }
+.course-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0; padding: 0; list-style: none; }
+.course-tabs a { display: block; padding: 0.65rem 1rem; border: 1px solid #cbd5d1; border-radius: 6px;
+    background: #fff; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.course-tabs a:hover, .course-tabs a:focus-visible { text-decoration: underline; }
 .syllabus { padding: 1rem; border: 1px solid #cbd5d1; border-radius: 6px; background: #fff;
 						overflow-x: auto; }
 .syllabus .instructure_file_link { font-style: italic; }

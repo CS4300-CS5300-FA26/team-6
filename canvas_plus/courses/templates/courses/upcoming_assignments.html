@@ -1,0 +1,22 @@
+<section aria-labelledby="upcoming-assignments">
+  <h2 id="upcoming-assignments">Upcoming assignments</h2>
+  {% if assignments_unavailable %}
+    <p role="status">Unable to load upcoming assignments. Please try again.</p>
+  {% elif assignments %}
+    <ul class="assignment-list">
+      {% for assignment in assignments %}
+        <li class="assignment-card">
+          <div class="assignment-details">
+            <h3 class="assignment-title">{{ assignment.title }}</h3>
+            <p class="assignment-course">{{ assignment.course_name }}</p>
+          </div>
+          {% if assignment.due_date %}
+            <p class="assignment-due">Due <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y g:i A" }}</time></p>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No upcoming assignments</p>
+  {% endif %}
+</section>

@@ -12,6 +12,7 @@
     <p role="status">Unable to load this course. Please try again.</p>
   {% elif course %}
     <h1>{{ course.name }}</h1>
+    {% include "courses/upcoming_assignments.html" %}
     <h2>Syllabus</h2>
     {% if syllabus %}
       {% if has_files %}
