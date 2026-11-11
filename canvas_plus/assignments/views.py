@@ -350,10 +350,11 @@ def edit_effort_estimate(request, course_id, assignment_id):
 
         # Attempt to generate an automatic effort estimate using the assignment description supplied by Canvas.
         # If there is not enough information, the helper returns None and the student can enter an estimate manually instead.
-        estimate_and_save_assignment_effort(
-            assignment=local_assignment,
-            assignment_information=canvas_assignment.get("description"),
-        )
+        if local_assignment.estimated_effort_minutes is None:
+            estimate_and_save_assignment_effort(
+                assignment=local_assignment,
+                assignment_information=canvas_assignment.get("description"),
+            )
 
         # Add any newly generated estimate to the template context.
         canvas_assignment["estimated_effort_minutes"] = (

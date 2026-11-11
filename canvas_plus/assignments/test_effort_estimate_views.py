@@ -63,6 +63,72 @@ def test_owner_can_update_effort_estimate(client):
 
 
 @pytest.mark.django_db
+@patch("study_plan.effort_estimation.infer")
+def test_reopening_manual_effort_estimate_preserves_saved_value(infer_mock, client):
+    """Reopening the edit page must not replace a student's estimate."""
+    user = get_user_model().objects.create_user(username="manual-estimate-owner")
+    assignment = Assignment.objects.create(
+        user=user,
+        canvas_course_id=1001,
+        canvas_assignment_id=2001,
+        title="Research Paper",
+        course="CS4300",
+        due_date=timezone.now(),
+        description="Write a research paper using academic sources.",
+        estimated_effort_minutes=90,
+        effort_estimate_source="automatic",
+    )
+    infer_mock.return_value = EffortEstimate(
+        estimated_minutes=60,
+        reason="Research and writing require focused work.",
+    )
+    client.force_login(user)
+    edit_url = reverse("edit_effort_estimate", args=[1001, 2001])
+
+    assert client.post(edit_url, {"estimated_effort_minutes": 120}).status_code == 302
+    response = client.get(edit_url)
+
+    assignment.refresh_from_db()
+    assert response.status_code == 200
+    assert assignment.estimated_effort_minutes == 120
+    assert assignment.effort_estimate_source == "manual"
+    assert response.context["form"]["estimated_effort_minutes"].value() == 120
+    infer_mock.assert_not_called()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("source", "minutes"),
+    [("automatic", 90), (None, 90), (None, 0)],
+)
+@patch("assignments.views.estimate_and_save_assignment_effort")
+def test_existing_effort_does_not_trigger_generation(estimate_mock, client, source, minutes):
+    """An existing effort value is preserved regardless of its source."""
+    user = get_user_model().objects.create_user(username="existing-effort-owner")
+    assignment = Assignment.objects.create(
+        user=user,
+        canvas_course_id=1001,
+        canvas_assignment_id=2001,
+        title="Research Paper",
+        course="CS4300",
+        due_date=timezone.now(),
+        description="Write a research paper using academic sources.",
+        estimated_effort_minutes=minutes,
+        effort_estimate_source=source,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("edit_effort_estimate", args=[1001, 2001]))
+
+    assignment.refresh_from_db()
+    assert response.status_code == 200
+    assert assignment.estimated_effort_minutes == minutes
+    assert assignment.effort_estimate_source == source
+    assert response.context["form"]["estimated_effort_minutes"].value() == minutes
+    estimate_mock.assert_not_called()
+
+
+@pytest.mark.django_db
 def test_other_student_cannot_edit_assignment(client):
     """A student cannot edit another student's assignment."""
 
@@ -348,7 +414,11 @@ def test_opening_effort_page_generates_automatic_estimate(
     )
 
     assert response.status_code == 200
-    assert estimate_and_save_mock.call_count == 2
+    assignment.refresh_from_db()
+    assert assignment.estimated_effort_minutes == 90
+    assert assignment.effort_estimate_source == "automatic"
+    assert response.context["form"]["estimated_effort_minutes"].value() == 90
+    estimate_and_save_mock.assert_called_once()
 
 
 @pytest.mark.django_db
