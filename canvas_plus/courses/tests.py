@@ -4,12 +4,22 @@ from unittest.mock import patch
 import pytest
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 # pylint: disable=import-error
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
+from courses.test_hub_helpers import (
+    active_hub_courses,
+    course_links,
+    excluded_hub_courses,
+    hub_cache_clock,
+    hub_course,
+    install_hub_canvas,
+)
 
 CURRENT_COURSE = {
     "id": 1,
@@ -196,3 +206,141 @@ class CoursePageTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "Unable to load this course. Please try again.")
         self.assertNotContains(response, "No syllabus posted")
+
+
+@pytest.mark.integration
+class CourseHubTests(ConnectedStudentTestCase):
+    """Issue #137: course navigation and coursework on the existing Courses pages."""
+
+    def setUp(self):
+        super().setUp()
+        self.active_courses = active_hub_courses()
+        self.excluded_courses = excluded_hub_courses()
+        self.canvas = install_hub_canvas(
+            self.addCleanup, self.active_courses + self.excluded_courses,
+        )
+
+    def test_dashboard_has_one_short_code_tab_per_active_course(self):
+        """Every active course has exactly one link labeled with its Canvas short code."""
+        response = self.client.get(reverse("course_list"))
+
+        self.assertEqual(response.status_code, 200)
+        links = course_links(response, self.canvas.courses)
+        self.assertCountEqual(
+            [(link["href"], link.get_text(strip=True)) for link in links],
+            [(reverse("course_detail", args=[course["id"]]), course["course_code"])
+             for course in self.active_courses],
+        )
+
+    def test_stale_and_inactive_courses_are_absent_from_dashboard(self):
+        """Ended terms and nonactive student enrollments never appear on the Hub."""
+        response = self.client.get(reverse("course_list"))
+
+        self.assertEqual(response.status_code, 200)
+        for course in self.excluded_courses:
+            with self.subTest(course=course["name"]):
+                self.assertNotContains(response, course["name"])
+                self.assertNotContains(response, course["course_code"])
+                self.assertNotContains(
+                    response, f'href="{reverse("course_detail", args=[course["id"]])}"',
+                )
+
+    def test_stale_and_inactive_courses_have_no_course_page(self):
+        """Direct URLs cannot bypass the active-course restriction."""
+        for course in self.excluded_courses:
+            with self.subTest(course=course["name"]):
+                response = self.client.get(reverse("course_detail", args=[course["id"]]))
+                self.assertContains(response, "Course not found", status_code=404)
+
+    def test_each_tab_opens_the_course_identified_by_canvas(self):
+        """Follow each actual tab link and verify the destination's full course heading."""
+        response = self.client.get(reverse("course_list"))
+        links = course_links(response, self.canvas.courses)
+        for course in self.active_courses:
+            with self.subTest(course=course["course_code"]):
+                matching = [link for link in links
+                            if link.get_text(strip=True) == course["course_code"]]
+                self.assertEqual(len(matching), 1)
+                self.assertEqual(matching[0]["href"], reverse("course_detail", args=[course["id"]]))
+                destination = self.client.get(matching[0]["href"])
+                self.assertContains(destination, f'<h1>{course["name"]}</h1>', html=True)
+
+    def test_course_page_shows_only_its_upcoming_assignments(self):
+        """Each course shows its own work and hides work belonging to every other course."""
+        for course in self.active_courses:
+            with self.subTest(course=course["course_code"]):
+                response = self.client.get(reverse("course_detail", args=[course["id"]]))
+                for course_id, assignments in self.canvas.assignments.items():
+                    for assignment in assignments:
+                        if course_id == course["id"]:
+                            self.assertContains(response, assignment["name"])
+                        else:
+                            self.assertNotContains(response, assignment["name"])
+
+    def test_dashboard_shows_upcoming_assignments_from_all_active_courses(self):
+        """The Hub combines current coursework while excluding stale or inactive coursework."""
+        response = self.client.get(reverse("course_list"))
+
+        for course in self.active_courses:
+            self.assertContains(response, self.canvas.assignments[course["id"]][0]["name"])
+        for course in self.excluded_courses:
+            self.assertNotContains(response, self.canvas.assignments[course["id"]][0]["name"])
+
+    def test_zero_active_courses_keeps_existing_empty_message(self):
+        """An account with only stale or inactive courses retains the current empty state."""
+        self.canvas.courses = self.excluded_courses
+
+        response = self.client.get(reverse("course_list"))
+
+        self.assertContains(response, "No current courses found")
+        self.assertEqual(course_links(response, self.excluded_courses), [])
+
+    def test_dashboard_caps_course_tabs_at_twenty(self):
+        """Twenty-one active courses yield twenty distinct course links, without fixing order."""
+        self.canvas.courses = [hub_course(50000 + index, f"CS {index}", f"Course {index}")
+                               for index in range(21)]
+
+        response = self.client.get(reverse("course_list"))
+
+        self.assertEqual(response.status_code, 200)
+        links = course_links(response, self.canvas.courses)
+        self.assertEqual(len(links), 20)
+        self.assertEqual(len({link["href"] for link in links}), 20)
+
+    @override_settings(CACHES=settings.LOCMEM_CACHE)
+    def test_dashboard_reuses_course_cache_for_one_hour(self):
+        """The shared course key survives 59:59, then expires after the one-hour TTL."""
+        cache.clear()
+        self.addCleanup(cache.clear)
+        # Django resolves this model field to a datetime on saved instances.
+        # pylint: disable-next=no-member
+        key = f"canvas-courses:{self.connection.pk}:{self.connection.updated_at.timestamp()}"
+        clock = hub_cache_clock(self.addCleanup)
+        first = self.client.get(reverse("course_list"))
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(self.canvas.course_calls, 1)
+        clock.return_value += 3599
+        second = self.client.get(reverse("course_list"))
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(self.canvas.course_calls, 1)
+        self.assertIsNotNone(cache.get(key))
+        clock.return_value += 2
+        third = self.client.get(reverse("course_list"))
+        self.assertEqual(third.status_code, 200)
+        self.assertEqual(self.canvas.course_calls, 2)
+
+    @override_settings(CACHES=settings.LOCMEM_CACHE)
+    def test_dashboard_reads_existing_assignments_page_course_cache(self):
+        """A course list cached under the assignments-page key prevents a Canvas courses call."""
+        cache.clear()
+        self.addCleanup(cache.clear)
+        # Django resolves this model field to a datetime on saved instances.
+        # pylint: disable-next=no-member
+        key = f"canvas-courses:{self.connection.pk}:{self.connection.updated_at.timestamp()}"
+        cache.set(key, self.active_courses, 3600)
+
+        response = self.client.get(reverse("course_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.canvas.course_calls, 0)
+        self.assertEqual(len(course_links(response, self.canvas.courses)), len(self.active_courses))
