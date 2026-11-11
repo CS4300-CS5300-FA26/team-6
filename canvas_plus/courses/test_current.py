@@ -36,3 +36,27 @@ def test_course_without_term_end_date_is_current():
 def test_course_with_unreadable_term_end_date_is_current(end_at):
     """A broken or timezone-less date can't prove the term ended, so the course stays."""
     assert is_current(course_with_term_end(end_at), NOW)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("course", [
+    {"id": 42, "name": "Advising"},
+    {"id": 42, "name": "Advising", "term": None},
+], ids=["absent-term", "null-term"])
+def test_course_without_term_information_remains_current(course):
+    """Given absent or null term information, when courses are selected, then retain the course."""
+    assert is_current(course, NOW)
+
+
+@pytest.mark.unit
+def test_course_with_offset_term_end_stops_being_current_after_equivalent_utc_instant():
+    """Given an offset term end, when its equivalent UTC instant passes, then hide the course.
+
+    Enrollment terms document offset timestamps:
+    https://developerdocs.instructure.com/services/canvas/resources/enrollment_terms
+    """
+    course = course_with_term_end("2026-10-31T06:00:00-06:00")
+    before = datetime(2026, 10, 31, 11, 59, 59, tzinfo=timezone.utc)
+    after = datetime(2026, 10, 31, 12, 0, 1, tzinfo=timezone.utc)
+    assert is_current(course, before)
+    assert not is_current(course, after)
