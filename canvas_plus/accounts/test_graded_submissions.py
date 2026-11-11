@@ -25,9 +25,10 @@ def sequential_canvas_requests(monkeypatch):
     monkeypatch.setattr("accounts.canvas_client.MAX_CONCURRENT_REQUESTS", 1)
 
 
-def response(payload, *, status=200, next_url=None):
+def response(payload, *, status=200, next_url=None, headers=None):
     """A requests-like response with pagination links."""
     result = Mock(status_code=status)
+    result.headers = headers or {}
     result.json.return_value = payload
     result.links = {"next": {"url": next_url}} if next_url else {}
     return result
@@ -139,8 +140,11 @@ def test_submissions_with_no_published_grade_are_skipped(overrides):
 
 @pytest.mark.unit
 def test_rejected_token_raises_authentication_error():
-    """A 401 means the saved token no longer works."""
-    with patch("accounts.canvas_client.requests.get", return_value=response([], status=401)):
+    """A challenged 401 means the saved token no longer works."""
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response([], status=401, headers={"WWW-Authenticate": "Bearer"}),
+    ):
         with pytest.raises(CanvasAuthenticationError):
             list_graded_submissions("fake-token", [COURSE], SINCE)
 
@@ -148,7 +152,7 @@ def test_rejected_token_raises_authentication_error():
 @pytest.mark.unit
 @pytest.mark.parametrize("status", [403, 429, 500])
 def test_other_http_failures_are_not_expired_tokens(status):
-    """Only a 401 means the token is bad; anything else is a temporary Canvas problem."""
+    """A challenged 401 means the token is bad; these other failures preserve it."""
     with patch("accounts.canvas_client.requests.get",
                return_value=response([], status=status)):
         with pytest.raises(CanvasAPIError) as raised:
