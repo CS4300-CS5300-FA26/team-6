@@ -23,6 +23,11 @@ class CanvasAssignmentsPageTests(TestCase):
 
     def setUp(self):
         self.user, self.connection = configure_canvas_user(self)
+        list_all_assignments = patch(
+            "assignments.views.list_all_assignments", return_value=[]
+        )
+        self.list_all_assignments = list_all_assignments.start()
+        self.addCleanup(list_all_assignments.stop)
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", create=True)
@@ -61,6 +66,11 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertEqual(response.context["assignments"], assignments)
         list_courses_mock.assert_called_once_with("fake-canvas-token", session=ANY)
         list_upcoming_assignments_mock.assert_called_once_with(
+            "fake-canvas-token",
+            courses,
+            session=ANY,
+        )
+        self.list_all_assignments.assert_called_once_with(
             "fake-canvas-token",
             courses,
             session=ANY,
@@ -123,7 +133,10 @@ class CanvasAssignmentsPageTests(TestCase):
         """Every Canvas request in one page load shares a single HTTP session."""
         self.client.get(reverse("assignment_list"))
 
-        sessions = {id(mock.call_args.kwargs["session"]) for mock in canvas_mocks}
+        sessions = {
+            id(mock.call_args.kwargs["session"])
+            for mock in (*canvas_mocks, self.list_all_assignments)
+        }
         self.assertEqual(len(sessions), 1)
         self.assertIsInstance(canvas_mocks[0].call_args.kwargs["session"], requests.Session)
 
@@ -304,6 +317,33 @@ class CanvasAssignmentsPageTests(TestCase):
         list_courses_mock.assert_called_once_with("fake-canvas-token", session=ANY)
         list_upcoming_assignments_mock.assert_not_called()
 
+    @patch(
+        "assignments.views.list_all_assignments",
+        side_effect=CanvasAuthenticationError("Rejected during sync"),
+    )
+    @patch("assignments.views.list_graded_submissions", return_value=[])
+    @patch("assignments.views.list_courses", return_value=[{"id": 42, "name": "CS 4300"}])
+    @patch("assignments.views.list_upcoming_assignments", return_value=[])
+    def test_rejected_token_during_sync_invalidates_connection(
+        self,
+        _list_upcoming_assignments_mock,
+        _list_courses_mock,
+        _list_graded_submissions_mock,
+        list_all_assignments_mock,
+    ):
+        """A 401 from the sync fetch follows the existing reconnect flow."""
+        response = self.client.get(reverse("assignment_list"))
+
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.is_valid)
+        self.assertContains(response, "Your Canvas connection expired. Please reconnect.")
+        self.assertNotContains(response, "Unable to sync Canvas assignments")
+        list_all_assignments_mock.assert_called_once_with(
+            "fake-canvas-token",
+            [{"id": 42, "name": "CS 4300"}],
+            session=ANY,
+        )
+
     def test_anonymous_visitor_is_redirected_to_sign_in(self):
         """Only a signed-in student can access the assignments home page."""
         self.client.logout()
@@ -339,6 +379,11 @@ class SharedTemplateTests(TestCase):
             password=None,
             token="template-canvas-token",
         )
+        list_all_assignments = patch(
+            "assignments.views.list_all_assignments", return_value=[]
+        )
+        list_all_assignments.start()
+        self.addCleanup(list_all_assignments.stop)
 
     @patch("assignments.views.list_graded_submissions", return_value=[])
     @patch("assignments.views.list_courses", return_value=[])

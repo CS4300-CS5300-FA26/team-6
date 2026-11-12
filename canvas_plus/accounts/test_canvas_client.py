@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
+from . import canvas_client
 from .canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -212,6 +213,144 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
         "description": None,
         
     }]
+
+
+@pytest.mark.unit
+def test_all_assignments_across_courses_and_pages():
+    """Fetch every assignment without bucket filtering and deduplicate by Canvas id."""
+    operation = getattr(canvas_client, "list_all_assignments", None)
+    assert callable(operation), "Canvas client has no all-assignment operation yet"
+
+    courses = [
+        {"id": 42, "name": "CS 4300"},
+        {"id": 84, "name": "MATH 2250"},
+    ]
+    next_url = "https://canvas.example.edu/api/v1/courses/42/assignments?page=2"
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{
+                "id": 101,
+                "name": "Future project",
+                "due_at": "2026-10-23T18:30:00Z",
+                "description": "Project details",
+            }], next_url=next_url),
+            response([{
+                "id": 102,
+                "name": "Undated reading",
+                "due_at": None,
+                "description": "Read chapter 4",
+            }]),
+            response([
+                {
+                    "id": 101,
+                    "name": "Duplicate project",
+                    "due_at": "2026-10-23T18:30:00Z",
+                    "description": "Duplicate record",
+                },
+                {
+                    "id": 103,
+                    "name": "Past quiz",
+                    "due_at": "2026-10-01T18:30:00Z",
+                    "description": None,
+                },
+            ]),
+        ],
+    ) as get:
+        result = operation("fake-token", courses)
+
+    assert result == [
+        {
+            "canvas_assignment_id": 101,
+            "canvas_course_id": 42,
+            "title": "Future project",
+            "course_name": "CS 4300",
+            "due_date": datetime(2026, 10, 23, 18, 30, tzinfo=timezone.utc),
+            "submitted": False,
+            "description": "Project details",
+        },
+        {
+            "canvas_assignment_id": 102,
+            "canvas_course_id": 42,
+            "title": "Undated reading",
+            "course_name": "CS 4300",
+            "due_date": None,
+            "submitted": False,
+            "description": "Read chapter 4",
+        },
+        {
+            "canvas_assignment_id": 103,
+            "canvas_course_id": 84,
+            "title": "Past quiz",
+            "course_name": "MATH 2250",
+            "due_date": datetime(2026, 10, 1, 18, 30, tzinfo=timezone.utc),
+            "submitted": False,
+            "description": None,
+        },
+    ]
+    assert get.call_count == 3
+    assert get.call_args_list[0].args == (
+        "https://canvas.example.edu/api/v1/courses/42/assignments",
+    )
+    assert get.call_args_list[1].args == (next_url,)
+    assert get.call_args_list[2].args == (
+        "https://canvas.example.edu/api/v1/courses/84/assignments",
+    )
+    assert get.call_args_list[0].kwargs["params"] == {"per_page": 100}
+    assert get.call_args_list[1].kwargs["params"] is None
+    assert get.call_args_list[2].kwargs["params"] == {"per_page": 100}
+    assert all(
+        "bucket" not in call.kwargs["params"]
+        for call in (get.call_args_list[0], get.call_args_list[2])
+    )
+    for call in get.call_args_list:
+        assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+        assert call.kwargs["timeout"] == 10
+        assert call.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("failure", "error_type", "expected_calls"), [
+    ("later_page_api_error", CanvasAPIError, 2),
+    ("malformed_later_page", CanvasAPIError, 2),
+    ("unsafe_pagination_link", CanvasAPIError, 1),
+    ("repeated_pagination_link", CanvasAPIError, 1),
+    ("later_page_unauthorized", CanvasAuthenticationError, 2),
+])
+def test_all_assignments_rejects_bad_later_page(failure, error_type, expected_calls):
+    """Later-page failures stay distinct and pagination never leaks the token."""
+    operation = getattr(canvas_client, "list_all_assignments", None)
+    assert callable(operation), "Canvas client has no all-assignment operation yet"
+
+    courses = [{"id": 42, "name": "CS 4300"}]
+    initial_url = "https://canvas.example.edu/api/v1/courses/42/assignments"
+    next_url = "https://canvas.example.edu/api/v1/courses/42/assignments?page=2"
+    if failure == "unsafe_pagination_link":
+        next_url = "https://untrusted.example/api/v1/assignments"
+    elif failure == "repeated_pagination_link":
+        next_url = initial_url
+
+    later_response = {
+        "later_page_api_error": response({}, status=500),
+        "malformed_later_page": response({"error": "not a list"}),
+        "later_page_unauthorized": response(
+            {}, status=401, headers={"WWW-Authenticate": "Bearer"}
+        ),
+    }.get(failure)
+    responses = [response([], next_url=next_url)]
+    if later_response is not None:
+        responses.append(later_response)
+
+    with patch("accounts.canvas_client.requests.get", side_effect=responses) as get:
+        with pytest.raises(error_type):
+            operation("fake-token", courses)
+
+    assert get.call_count == expected_calls
+    assert all(
+        call.args[0].startswith("https://canvas.example.edu/")
+        for call in get.call_args_list
+    )
+    assert get.call_args_list[0].args == (initial_url,)
 
 
 @pytest.mark.unit

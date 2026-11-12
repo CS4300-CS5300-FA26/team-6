@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from behave import given, when, then
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, override_settings
 from django.utils import timezone as django_timezone
 from django.utils.html import escape
@@ -15,6 +16,7 @@ from django.utils.text import slugify
 
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
+from assignments.models import Assignment
 
 COURSE = {"id": 42, "name": "CS 4300"}
 ASSIGNMENT_TITLE = "Canvas Project 1"
@@ -65,12 +67,14 @@ def prepare_student(context, assignments):
     context.client.force_login(context.user)
     context.canvas_courses = Mock(return_value=[COURSE])
     context.canvas_assignments = Mock(return_value=assignments)
+    context.canvas_all_assignments = Mock(return_value=[])
     context.graded_submissions = Mock(return_value=[])
 
     targets = (
         ("accounts.connections.list_courses", context.canvas_courses, False),
         ("assignments.views.list_courses", context.canvas_courses, True),
         ("assignments.views.list_upcoming_assignments", context.canvas_assignments, True),
+        ("assignments.views.list_all_assignments", context.canvas_all_assignments, True),
         ("assignments.views.list_graded_submissions", context.graded_submissions, False),
     )
     for target, replacement, create in targets:
@@ -99,6 +103,167 @@ def step_connected_student_with_upcoming_work(context, due_date):
 @given("I am a connected student with no upcoming coursework")
 def step_connected_student_with_no_upcoming_work(context):
     prepare_student(context, [])
+
+
+@given("a connected student with upcoming and non-upcoming Canvas assignments")
+def step_connected_student_with_upcoming_and_non_upcoming_work(context):
+    upcoming = assignment_result(django_timezone.now() + timedelta(days=2))
+    upcoming["description"] = "Upcoming assignment details"
+    undated = {
+        "canvas_assignment_id": 102,
+        "canvas_course_id": COURSE["id"],
+        "title": "Undated Canvas assignment",
+        "course_name": COURSE["name"],
+        "due_date": None,
+        "submitted": False,
+        "description": "Undated assignment details",
+    }
+    prepare_student(context, [upcoming])
+    context.canvas_all_assignments.return_value = [upcoming, undated]
+
+
+@given("a connected student has saved assignments in current and other courses")
+def step_saved_assignments_in_current_and_other_courses(context):
+    prepare_student(context, [])
+    cache.clear()
+    context.canvas_courses.return_value = [COURSE, {"id": 84, "name": "MATH 2250"}]
+    context.current_assignment = Assignment.objects.create(
+        user=context.user, title="Current", course=COURSE["name"],
+        canvas_course_id=42, canvas_assignment_id=201, sync_state="synced",
+        description="Original description", estimated_effort_minutes=60,
+    )
+    context.missing_assignment = Assignment.objects.create(
+        user=context.user, title="Missing", course="MATH 2250",
+        canvas_course_id=84, canvas_assignment_id=202, sync_state="missing",
+    )
+    context.outside_assignment = Assignment.objects.create(
+        user=context.user, title="Other course", course="History",
+        canvas_course_id=999, canvas_assignment_id=203, sync_state="synced",
+    )
+
+
+@given("another student has a saved assignment in a current course")
+def step_other_student_has_current_assignment(context):
+    other_user = get_user_model().objects.create_user(username="other-canvas-student")
+    context.other_assignment = Assignment.objects.create(
+        user=other_user, title="Other student", course=COURSE["name"],
+        canvas_course_id=42, canvas_assignment_id=201, sync_state="synced",
+    )
+
+
+@given("the assignment sync is unavailable")
+def step_assignment_sync_unavailable(context):
+    context.canvas_all_assignments.side_effect = CanvasAPIError("Canvas sync unavailable")
+
+
+@given("Canvas has updated those current course assignments")
+def step_canvas_has_updated_assignments(context):
+    context.canvas_all_assignments.return_value = [
+        {
+            "canvas_assignment_id": assignment.canvas_assignment_id,
+            "canvas_course_id": assignment.canvas_course_id,
+            "title": f"Updated {assignment.title}",
+            "course_name": assignment.course,
+            "due_date": None,
+            "description": "Updated description",
+        }
+        for assignment in (context.current_assignment, context.missing_assignment)
+    ]
+
+
+@given("saving the second assignment fails")
+def step_second_assignment_save_fails(context):
+    original_save = Assignment.save
+
+    def fail_second_save(assignment, *args, **kwargs):
+        if assignment.pk == context.missing_assignment.pk:
+            raise RuntimeError("Assignment save unavailable")
+        return original_save(assignment, *args, **kwargs)
+
+    context.save_patcher = patch.object(Assignment, "save", new=fail_second_save)
+    context.save_patcher.start()
+    context.add_cleanup(context.save_patcher.stop)
+
+
+@given("the student has no current Canvas courses")
+def step_no_current_canvas_courses(context):
+    context.canvas_courses.return_value = []
+
+
+@given("Canvas rejects the token during assignment sync")
+def step_canvas_rejects_token_during_sync(context):
+    context.canvas_all_assignments.side_effect = CanvasAuthenticationError("Rejected")
+
+
+@then("assignments in the student's current courses are marked failed, including missing assignments")
+def step_current_assignments_marked_failed(context):
+    for assignment in (context.current_assignment, context.missing_assignment):
+        assignment.refresh_from_db()
+        assert assignment.sync_state == "failed", assignment.sync_state
+
+
+@then("assignments outside those courses and the other student's assignment remain unchanged")
+def step_other_assignments_unchanged(context):
+    for assignment in (context.outside_assignment, context.other_assignment):
+        assignment.refresh_from_db()
+        assert assignment.sync_state == "synced", assignment.sync_state
+
+
+@then("all saved assignment sync states remain unchanged")
+def step_all_saved_sync_states_unchanged(context):
+    for assignment, state in (
+        (context.current_assignment, "synced"),
+        (context.missing_assignment, "missing"),
+        (context.outside_assignment, "synced"),
+    ):
+        assignment.refresh_from_db()
+        assert assignment.sync_state == state, assignment.sync_state
+
+
+@then("the original assignment details are preserved")
+def step_original_assignment_details_preserved(context):
+    context.current_assignment.refresh_from_db()
+    context.missing_assignment.refresh_from_db()
+    assert context.current_assignment.title == "Current"
+    assert context.current_assignment.description == "Original description"
+    assert context.current_assignment.estimated_effort_minutes == 60
+    assert context.missing_assignment.title == "Missing"
+    context.outside_assignment.refresh_from_db()
+    assert context.outside_assignment.sync_state == "synced"
+
+
+@then("I see an assignment sync error")
+def step_assignment_sync_error_visible(context):
+    assert context.response.status_code == 200
+    assert "Unable to sync Canvas assignments. Please try again." in context.response.content.decode()
+
+
+@when("saving assignments is restored and I reload the logged-in home page")
+def step_restore_save_and_reload(context):
+    context.save_patcher.stop()
+    context.response = context.client.get("/assignments/")
+
+
+@then("the updated assignments are synced successfully")
+def step_updated_assignments_synced(context):
+    for assignment, title in (
+        (context.current_assignment, "Updated Current"),
+        (context.missing_assignment, "Updated Missing"),
+    ):
+        assignment.refresh_from_db()
+        assert assignment.title == title, assignment.title
+        assert assignment.description == "Updated description"
+        assert assignment.sync_state == "synced", assignment.sync_state
+    assert context.current_assignment.estimated_effort_minutes == 60
+    assert context.canvas_all_assignments.call_count == 2
+    context.outside_assignment.refresh_from_db()
+    assert context.outside_assignment.sync_state == "synced"
+
+
+@then("the assignment sync error is no longer shown")
+def step_assignment_sync_error_not_visible(context):
+    assert context.response.status_code == 200
+    assert "Unable to sync Canvas assignments" not in context.response.content.decode()
 
 
 @given('I am viewing "{title}" for "{course}" due "{due_date}"')
@@ -142,6 +307,28 @@ def step_exact_empty_state(context, message):
     assert html.count(message) == 1
     assert "Unable to load upcoming assignments" not in html
     assert "Your Canvas connection expired." not in html
+
+
+@then("both assignments are saved with descriptions while only the existing upcoming selection is displayed")
+def step_synced_assignments_do_not_change_upcoming_selection(context):
+    assert context.response.status_code == 200
+    saved = {
+        assignment.canvas_assignment_id: assignment
+        for assignment in Assignment.objects.filter(user=context.user)
+    }
+    assert set(saved) == {101, 102}, f"Expected both Canvas assignments to be saved, got {set(saved)}"
+    assert saved[101].description == "Upcoming assignment details"
+    assert saved[102].description == "Undated assignment details"
+    assert saved[101].sync_state == "synced"
+    assert saved[102].sync_state == "synced"
+    displayed_ids = [
+        assignment["canvas_assignment_id"]
+        for assignment in context.response.context["assignments"]
+    ]
+    assert displayed_ids == [101]
+    html = context.response.content.decode()
+    assert "Canvas Project 1" in html
+    assert "Undated Canvas assignment" not in html
 
 
 @then('I see the revised due date "{revised}" instead of "{original}"')
