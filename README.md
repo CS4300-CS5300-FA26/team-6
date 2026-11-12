@@ -235,12 +235,14 @@ preconditions and the contract for #49 estimates.
 ## Course Hub
 
 The **Courses** sidebar link opens the Course Hub at `/courses/`. Its tabs use
-Canvas course codes and open each course's page. The Hub shows upcoming coursework
-across all current courses, with at most 20 course tabs; the tab limit does not
-limit the courses contributing assignments. Course pages show only their own
-coursework and retain their syllabus. The Hub does not show syllabi or contact cards.
-Course lists share the assignments page's one-hour cache, refreshed when the
-saved Canvas connection changes.
+Canvas course codes and open each course's page. The Hub lists coursework due in
+the next 7 days across all current courses, grouped by due day in the app's time
+zone (`TIME_ZONE`), with a link to the assignments page showing the full count.
+It has at most 20 course tabs; the tab limit does not limit the courses
+contributing assignments. Course pages show only their own coursework, grouped
+the same way without the 7-day limit, and retain their syllabus. The Hub does not
+show syllabi or contact cards. Course lists share the assignments page's one-hour
+cache, refreshed when the saved Canvas connection changes.
 
 ## Dashboard known limitations
 

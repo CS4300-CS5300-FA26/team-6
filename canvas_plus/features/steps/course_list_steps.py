@@ -219,7 +219,7 @@ def step_script_removed(context):
     assert "alert(" not in page(context)  # the sidebar has its own <script>, so check the payload
 
 
-# Issue #137: tests only; course navigation and assignments await implementation.
+# Issue #137: Course Hub tabs, cache reuse and the Option A upcoming list.
 
 @given("I am a connected Course Hub student")
 def step_hub_student(context):
