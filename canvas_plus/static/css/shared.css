@@ -1,8 +1,8 @@
 * { box-sizing: border-box; }
 body { display: flex; min-height: 100vh; margin: 0; font-family: sans-serif; overflow-wrap: anywhere; }
-nav { display: flex; flex: 0 0 12rem; flex-direction: column; min-height: 100vh; padding: 1rem; background: #17324d; color: white; }
-nav a { display: block; padding: 0.5rem; border-radius: 0.25rem; color: inherit; text-decoration: none; }
-nav a:hover, nav a:focus-visible { background: #284b6d; text-decoration: underline; }
+body > nav { display: flex; flex: 0 0 12rem; flex-direction: column; min-height: 100vh; padding: 1rem; background: #17324d; color: white; }
+body > nav a { display: block; padding: 0.5rem; border-radius: 0.25rem; color: inherit; text-decoration: none; }
+body > nav a:hover, body > nav a:focus-visible { background: #284b6d; text-decoration: underline; }
 .nav-links { flex: 1; }
 .nav-links form { margin: 0; }
 .nav-links .logout-item { margin-top: auto; }
@@ -17,7 +17,7 @@ main { flex: 1; min-width: 0; max-width: 72rem; margin: 0 auto; padding: 1rem; }
 .connection-alert a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 
 @media (max-width: 40rem) {
-	nav { flex-basis: 8rem; padding: 0.5rem; }
+	body > nav { flex-basis: 8rem; padding: 0.5rem; }
 	.menu-toggle { display: inline-block; padding: 0.5rem; }
 	.nav-links { margin-top: 1rem; }
 	.nav-links[hidden] { display: none; }
@@ -58,6 +58,10 @@ body.landing-page a { color: #17324d; }
 							 font-weight: 700; overflow-wrap: anywhere; }
 .course-card a { display: block; color: inherit; text-decoration: none; }
 .course-card a:hover, .course-card a:focus-visible { text-decoration: underline; }
+.course-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0; padding: 0; list-style: none; }
+.course-tabs a { display: block; padding: 0.65rem 1rem; border: 1px solid #cbd5d1; border-radius: 6px;
+    background: #fff; color: #17324d; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.course-tabs a:hover, .course-tabs a:focus-visible { background: #eef3f8; border-color: #17324d; text-decoration: underline; }
 .syllabus { padding: 1rem; border: 1px solid #cbd5d1; border-radius: 6px; background: #fff;
 						overflow-x: auto; }
 .syllabus .instructure_file_link { font-style: italic; }
@@ -73,9 +77,23 @@ body.landing-page a { color: #17324d; }
 .assignment-status--past-due { background: #fbe3e1; color: #9b1c13; }
 .assignment-status--submitted { background: #eceeed; color: #6b7570; }
 .assignment-details { min-width: 0; }
+/* Course Hub cards have no status pill, so the details take its column too. */
+.assignment-card > .assignment-details:first-child { grid-column: 1 / 3; }
 .assignment-title { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
 .assignment-course { margin: 0.25rem 0 0; color: #52615c; overflow-wrap: anywhere; }
 .assignment-due { max-width: 12rem; margin: 0; color: #35443e; text-align: right; overflow-wrap: anywhere; }
+
+/* Upcoming assignments on the Course Hub and course pages, grouped by due day. */
+.upcoming-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
+.upcoming-scope { margin: 0; color: #52615c; font-size: 0.9rem; }
+.upcoming .due-day { margin: 1.25rem 0 0.5rem; color: #52615c; font-size: 0.75rem; font-weight: 700;
+	letter-spacing: 0.07em; text-transform: uppercase; }
+.upcoming .assignment-list { margin: 0; }
+.course-chip { display: inline-block; margin-right: 0.35rem; padding: 0.05rem 0.4rem; border-radius: 3px;
+	background: #eef3f8; color: #17324d; font-size: 0.75rem; font-weight: 700; vertical-align: 0.1em; }
+.upcoming .assignment-due { white-space: nowrap; }
+.view-all { margin: 1rem 0 0; }
+.view-all a { color: #17324d; }
 
 @media (max-width: 40rem) {
 	.assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }

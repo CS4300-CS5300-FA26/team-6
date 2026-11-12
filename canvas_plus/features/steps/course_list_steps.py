@@ -4,13 +4,28 @@
 from unittest.mock import Mock, patch
 
 from behave import given, when, then
+from bs4 import BeautifulSoup
 from cryptography.fernet import Fernet
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, override_settings
 from django.urls import reverse
 
-from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
+from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError, list_courses
 from accounts.models import CanvasConnection
+from courses.test_hub_helpers import (
+    HUB_NOW,
+    active_hub_courses,
+    course_links,
+    excluded_hub_courses,
+    hub_cache_clock,
+    hub_course,
+    hub_day_groups,
+    hub_week_assignments,
+    install_hub_canvas,
+    upcoming_section,
+)
 
 CURRENT_COURSE = {
     "id": 1,
@@ -202,3 +217,223 @@ def step_syllabus_text(context):
 @then("the script does not run")
 def step_script_removed(context):
     assert "alert(" not in page(context)  # the sidebar has its own <script>, so check the payload
+
+
+# Issue #137: Course Hub tabs, cache reuse and the Option A upcoming list.
+
+@given("I am a connected Course Hub student")
+def step_hub_student(context):
+    connect_student(context)
+    # Keep the existing connection setup but exercise the real Canvas client
+    # against a fake HTTP service, including its active-student query filters.
+    context.canvas_courses.side_effect = list_courses
+    context.hub_active = active_hub_courses()
+    context.hub_excluded = excluded_hub_courses()
+    context.hub_canvas = install_hub_canvas(
+        context.add_cleanup, context.hub_active + context.hub_excluded,
+    )
+
+
+@given("Canvas also has ended, concluded, invited, and teacher courses")
+def step_hub_excluded_courses(context):
+    assert all(course in context.hub_canvas.courses for course in context.hub_excluded)
+
+
+@given("every course has distinct upcoming assignments")
+def step_hub_assignments(context):
+    titles = [assignment["name"] for assignments in context.hub_canvas.assignments.values()
+              for assignment in assignments]
+    assert len(titles) == len(context.hub_canvas.courses)
+    assert len(set(titles)) == len(titles)
+
+
+@given("I have zero active Course Hub courses")
+def step_hub_zero_courses(context):
+    context.hub_canvas.courses = context.hub_excluded
+
+
+@given("I have twenty-one active Course Hub courses")
+def step_hub_twenty_one_courses(context):
+    context.hub_canvas.courses = [
+        hub_course(50000 + index, f"CS {index}", f"Course {index}") for index in range(21)
+    ]
+
+
+@when("I open the Course Hub dashboard")
+def step_open_hub(context):
+    context.response = context.client.get(reverse("course_list"))
+    assert context.response.status_code == 200
+
+
+@then("I see exactly these Course Hub tabs")
+def step_hub_tabs(context):
+    links = course_links(context.response, context.hub_canvas.courses)
+    actual = [link.get_text(strip=True) for link in links]
+    expected = [row["course_code"] for row in context.table]
+    assert sorted(actual) == sorted(expected), (actual, expected)
+
+
+@then("the excluded courses have no dashboard entry")
+def step_hub_excluded_entries(context):
+    assert not course_links(context.response, context.hub_excluded)
+    for course in context.hub_excluded:
+        assert course["name"] not in page(context)
+        assert course["course_code"] not in page(context)
+
+
+@then("opening any excluded course shows Course not found")
+def step_hub_excluded_pages(context):
+    for course in context.hub_excluded:
+        response = context.client.get(reverse("course_detail", args=[course["id"]]))
+        assert response.status_code == 404
+        assert "Course not found" in response.content.decode()
+
+
+@then("each short-code tab links to its Canvas course ID and opens its matching heading")
+def step_hub_destinations(context):
+    links = course_links(context.response, context.hub_canvas.courses)
+    for course in context.hub_active:
+        matching = [link for link in links if link.get_text(strip=True) == course["course_code"]]
+        assert len(matching) == 1, f"Expected one tab for {course['course_code']}"
+        assert matching[0]["href"] == reverse("course_detail", args=[course["id"]])
+        response = context.client.get(matching[0]["href"])
+        assert response.status_code == 200
+        heading = BeautifulSoup(response.content, "html.parser").select_one("main h1")
+        assert heading is not None
+        assert heading.get_text(strip=True) == course["name"]
+
+
+@when("I visit each active course page")
+def step_hub_visit_course_pages(context):
+    context.hub_pages = {
+        course["id"]: context.client.get(reverse("course_detail", args=[course["id"]]))
+        for course in context.hub_active
+    }
+
+
+@then("each page shows only that course's upcoming assignments")
+def step_hub_course_assignments(context):
+    for course_id, response in context.hub_pages.items():
+        assert response.status_code == 200
+        for owner_id, assignments in context.hub_canvas.assignments.items():
+            for assignment in assignments:
+                assert (assignment["name"] in response.content.decode()) == (owner_id == course_id)
+
+
+@then("I see upcoming assignments from every active course only")
+def step_hub_all_assignments(context):
+    active_ids = {course["id"] for course in context.hub_active}
+    for owner_id, assignments in context.hub_canvas.assignments.items():
+        for assignment in assignments:
+            assert (assignment["name"] in page(context)) == (owner_id in active_ids)
+
+
+@then("the Course Hub shows No current courses found and no course tabs")
+def step_hub_empty_message(context):
+    assert "No current courses found" in page(context)
+    assert not course_links(context.response, context.hub_canvas.courses)
+
+
+@then("I see exactly twenty distinct course tabs")
+def step_hub_tab_cap(context):
+    links = course_links(context.response, context.hub_canvas.courses)
+    assert len(links) == 20, f"Expected 20 course tabs, got {len(links)}"
+    assert len({link["href"] for link in links}) == 20
+
+
+@given("Course Hub course caching is enabled")
+def step_hub_cache_enabled(context):
+    configured = override_settings(CACHES=settings.LOCMEM_CACHE)
+    configured.enable()
+    context.add_cleanup(configured.disable)
+    cache.clear()
+    context.add_cleanup(cache.clear)
+    context.hub_cache_key = (
+        f"canvas-courses:{context.connection.pk}:{context.connection.updated_at.timestamp()}"
+    )
+    context.hub_clock = hub_cache_clock(context.add_cleanup)
+
+
+@given("my courses are already cached under the assignments-page key")
+def step_hub_cache_seeded(context):
+    cache.set(context.hub_cache_key, context.hub_active, 3600)
+
+
+@when("I reopen the Course Hub just before an hour has passed")
+def step_hub_cache_within_hour(context):
+    context.hub_clock.return_value += 3599
+    step_open_hub(context)
+
+
+@then("Canvas has been asked for courses only once")
+def step_hub_one_course_call(context):
+    assert context.hub_canvas.course_calls == 1, context.hub_canvas.course_calls
+
+
+@then("the courses are stored under the shared course-list cache key")
+def step_hub_shared_cache_key(context):
+    assert cache.get(context.hub_cache_key) is not None
+
+
+@when("I reopen the Course Hub after the hour has passed")
+def step_hub_cache_expired(context):
+    context.hub_clock.return_value += 2
+    step_open_hub(context)
+
+
+@then("Canvas has been asked for courses twice")
+def step_hub_two_course_calls(context):
+    assert context.hub_canvas.course_calls == 2, context.hub_canvas.course_calls
+
+
+@then("Canvas has not been asked for courses")
+def step_hub_no_course_call(context):
+    assert context.hub_canvas.course_calls == 0, context.hub_canvas.course_calls
+
+
+@given("it is Wednesday, November 11 at 5:00 PM in Denver")
+def step_hub_clock(context):
+    configured = override_settings(TIME_ZONE="America/Denver")
+    configured.enable()
+    context.add_cleanup(configured.disable)
+    clock = patch("django.utils.timezone.now", return_value=HUB_NOW)
+    clock.start()
+    context.add_cleanup(clock.stop)
+
+
+@given("my active courses have work due this week and one overdue assignment")
+def step_hub_week(context):
+    context.hub_canvas.courses = context.hub_active
+    context.hub_canvas.assignments = hub_week_assignments(context.hub_active)
+
+
+@then('the upcoming list reads "{scope}"')
+def step_hub_scope(context, scope):
+    section = upcoming_section(context.response)
+    assert section.find("h2").get_text(strip=True) == "Upcoming assignments"
+    assert scope in section.get_text(" ", strip=True)
+
+
+@then("I see this week's work grouped by due day")
+def step_hub_day_groups(context):
+    expected = []
+    for row in context.table:
+        card = (row["course_code"], row["title"], row["course_name"], row["due"])
+        if expected and expected[-1][0] == row["day"]:
+            expected[-1][1].append(card)
+        else:
+            expected.append((row["day"], [card]))
+    actual = hub_day_groups(context.response)
+    assert actual == expected, (actual, expected)
+
+
+@then("I don't see \"{title}\" on the dashboard")
+def step_hub_absent(context, title):
+    assert title not in page(context)
+
+
+@then('the dashboard links to the assignments page with "{text}"')
+def step_hub_view_all(context, text):
+    link = upcoming_section(context.response).find("a", href=reverse("assignment_list"))
+    assert link is not None, "No link to the assignments page in the upcoming list"
+    assert link.get_text(strip=True) == text, link.get_text(strip=True)

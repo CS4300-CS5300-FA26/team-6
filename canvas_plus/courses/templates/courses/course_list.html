@@ -1,19 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}Courses{% endblock %}
+{% block title %}Course Hub{% endblock %}
 
 {% block content %}
-  <h1>Courses</h1>
+  <h1>Course Hub</h1>
   {% if canvas_connection_missing %}
     <p role="status">Connect Canvas to see your courses. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.</p>
   {% elif canvas_unavailable %}
     <p role="status">Unable to load your courses. Please try again.</p>
   {% elif courses %}
-    <ul class="course-list">
-      {% for course in courses %}
-        <li class="course-card"><a href="{% url 'course_detail' course.id %}">{{ course.name }}</a></li>
-      {% endfor %}
-    </ul>
+    <nav aria-label="Active courses">
+      <ul class="course-tabs">
+        {% for course in courses|slice:":20" %}
+          <li><a href="{% url 'course_detail' course.id %}" title="{{ course.name }}">{{ course.course_code|default:course.name }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+    {% include "courses/upcoming_assignments.html" with hub=True %}
   {% elif not canvas_connection_expired %}
     <p>No current courses found</p>
   {% endif %}

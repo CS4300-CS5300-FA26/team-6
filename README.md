@@ -232,6 +232,18 @@ The [assignment model guide](docs/assignment-models.md) describes the user-owned
 assignment, reusable file, and attachment schema for #42, including migration
 preconditions and the contract for #49 estimates.
 
+## Course Hub
+
+The **Courses** sidebar link opens the Course Hub at `/courses/`. Its tabs use
+Canvas course codes and open each course's page. The Hub lists coursework due in
+the next 7 days across all current courses, grouped by due day in the app's time
+zone (`TIME_ZONE`), with a link to the assignments page showing the full count.
+It has at most 20 course tabs; the tab limit does not limit the courses
+contributing assignments. Course pages show only their own coursework, grouped
+the same way without the 7-day limit, and retain their syllabus. The Hub does not
+show syllabi or contact cards. Course lists share the assignments page's one-hour
+cache, refreshed when the saved Canvas connection changes.
+
 ## Dashboard known limitations
 
 - Overdue work stays listed for as long as the course is active, even if it is months old.
@@ -363,3 +375,7 @@ Jackson McGuire used Claude Code to help build the course list. Jackson ran ever
 #### Generating Study Sessiosn [Backend]
 
 Stephen used ai to write tests and implement code for the generate study session behavior. 
+#### Course Hub tab bar (issue 137)
+
+Joshua Douglas used Claude Code and Codex to generate test cases which were manually verified and fixed.
+Joshua Douglas used Claude Code and Codex to build the html involved in displaying courses on the course page in alignment with agreed upon new design
