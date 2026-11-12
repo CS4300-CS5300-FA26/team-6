@@ -83,6 +83,18 @@ body.landing-page a { color: #17324d; }
 .assignment-course { margin: 0.25rem 0 0; color: #52615c; overflow-wrap: anywhere; }
 .assignment-due { max-width: 12rem; margin: 0; color: #35443e; text-align: right; overflow-wrap: anywhere; }
 
+/* Upcoming assignments on the Course Hub and course pages, grouped by due day. */
+.upcoming-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
+.upcoming-scope { margin: 0; color: #52615c; font-size: 0.9rem; }
+.upcoming .due-day { margin: 1.25rem 0 0.5rem; color: #52615c; font-size: 0.75rem; font-weight: 700;
+	letter-spacing: 0.07em; text-transform: uppercase; }
+.upcoming .assignment-list { margin: 0; }
+.course-chip { display: inline-block; margin-right: 0.35rem; padding: 0.05rem 0.4rem; border-radius: 3px;
+	background: #eef3f8; color: #17324d; font-size: 0.75rem; font-weight: 700; vertical-align: 0.1em; }
+.upcoming .assignment-due { white-space: nowrap; }
+.view-all { margin: 1rem 0 0; }
+.view-all a { color: #17324d; }
+
 @media (max-width: 40rem) {
 	.assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
 	.assignment-due { grid-column: 2; max-width: none; text-align: left; }

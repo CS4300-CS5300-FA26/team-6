@@ -20,6 +20,7 @@ from accounts.course_cache import cached_courses
 from accounts.models import CanvasConnection, SavedTokenError
 from .current import is_current
 from .syllabus import FILE_LINK_CLASS, clean_syllabus
+from .upcoming import due_this_week, group_by_day
 
 
 @sensitive_variables("token")
@@ -53,14 +54,20 @@ def _current_courses(connection, token, session):
 
 
 @sensitive_variables("token")
-def _assignments_context(token, courses, session):
-    """Keep course navigation available when coursework temporarily cannot load."""
+def _assignments_context(token, courses, session, this_week=False):
+    """Group coursework by due day; keep course navigation when it can't load."""
     try:
-        return {"assignments": list_upcoming_assignments(token, courses, session=session)}
+        assignments = list_upcoming_assignments(token, courses, session=session)
     except CanvasAuthenticationError:
         raise
     except CanvasAPIError:
         return {"assignments_unavailable": True}
+    codes = {course["id"]: course.get("course_code") or course["name"] for course in courses}
+    for assignment in assignments:
+        assignment["course_code"] = codes[assignment["canvas_course_id"]]
+    now = timezone.now()
+    shown = due_this_week(assignments, now) if this_week else assignments
+    return {"assignment_days": group_by_day(shown, now), "assignment_total": len(assignments)}
 
 
 @login_required
@@ -69,7 +76,8 @@ def course_list(request):
     @sensitive_variables("token")
     def load(connection, token, session):
         courses = _current_courses(connection, token, session)
-        return {"courses": courses, **_assignments_context(token, courses, session)}
+        return {"courses": courses,
+                **_assignments_context(token, courses, session, this_week=True)}
 
     context, state = _load_from_canvas(request.user, load)
     return render(request, "courses/course_list.html", {**(context or {}), **state})

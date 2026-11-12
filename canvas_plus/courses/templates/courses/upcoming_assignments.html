@@ -1,22 +1,32 @@
-<section aria-labelledby="upcoming-assignments">
-  <h2 id="upcoming-assignments">Upcoming assignments</h2>
+{# Pass hub=True on the Course Hub for its scope line and view-all link. #}
+<section class="upcoming" aria-labelledby="upcoming-assignments">
+  <div class="upcoming-header">
+    <h2 id="upcoming-assignments">Upcoming assignments</h2>
+    {% if hub %}<p class="upcoming-scope">All courses · next 7 days</p>{% endif %}
+  </div>
   {% if assignments_unavailable %}
     <p role="status">Unable to load upcoming assignments. Please try again.</p>
-  {% elif assignments %}
-    <ul class="assignment-list">
-      {% for assignment in assignments %}
-        <li class="assignment-card">
-          <div class="assignment-details">
-            <h3 class="assignment-title">{{ assignment.title }}</h3>
-            <p class="assignment-course">{{ assignment.course_name }}</p>
-          </div>
-          {% if assignment.due_date %}
-            <p class="assignment-due">Due <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y g:i A" }}</time></p>
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
   {% else %}
-    <p>No upcoming assignments</p>
+    {% for day in assignment_days %}
+      <h3 class="due-day">{{ day.label }}</h3>
+      <ul class="assignment-list">
+        {% for assignment in day.assignments %}
+          <li class="assignment-card">
+            <div class="assignment-details">
+              <h4 class="assignment-title"><span class="course-chip">{{ assignment.course_code }}</span> {{ assignment.title }}</h4>
+              <p class="assignment-course">{{ assignment.course_name }}</p>
+            </div>
+            {% if assignment.due_date %}
+              <p class="assignment-due"><time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|time:"g:i A" }}</time></p>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% empty %}
+      <p>{% if hub %}No assignments due in the next 7 days{% else %}No upcoming assignments{% endif %}</p>
+    {% endfor %}
+    {% if hub and assignment_total %}
+      <p class="view-all"><a href="{% url 'assignment_list' %}">View all {{ assignment_total }} assignment{{ assignment_total|pluralize }} →</a></p>
+    {% endif %}
   {% endif %}
 </section>

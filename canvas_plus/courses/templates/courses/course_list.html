@@ -16,7 +16,7 @@
         {% endfor %}
       </ul>
     </nav>
-    {% include "courses/upcoming_assignments.html" %}
+    {% include "courses/upcoming_assignments.html" with hub=True %}
   {% elif not canvas_connection_expired %}
     <p>No current courses found</p>
   {% endif %}
