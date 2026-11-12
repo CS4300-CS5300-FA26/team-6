@@ -28,9 +28,10 @@ def sequential_canvas_requests(monkeypatch):
     monkeypatch.setattr("accounts.canvas_client.MAX_CONCURRENT_REQUESTS", 1)
 
 
-def response(courses, *, status=200, next_url=None):
+def response(courses, *, status=200, next_url=None, headers=None):
     """Construct a requests-like response, including its pagination links."""
     result = Mock(status_code=status)
+    result.headers = headers or {}
     result.json.return_value = courses
     result.links = {"next": {"url": next_url}} if next_url else {}
     return result
@@ -125,7 +126,7 @@ def test_rejected_credentials_on_a_later_page_expire_the_connection():
     """Authentication must be checked for every page, not just the first."""
     with patch("accounts.canvas_client.requests.get", side_effect=[
         response([], next_url="https://canvas.example.edu/api/v1/courses?page=2"),
-        response({}, status=401),
+        response({}, status=401, headers={"WWW-Authenticate": "Bearer"}),
     ]):
         with pytest.raises(CanvasAuthenticationError):
             list_courses("fake-token")
@@ -407,7 +408,7 @@ def test_upcoming_assignments_raise_authentication_error_for_401():
     courses = [{"id": 42, "name": "CS 4300"}]
     with patch(
         "accounts.canvas_client.requests.get",
-        return_value=response({}, status=401),
+        return_value=response({}, status=401, headers={"WWW-Authenticate": "Bearer"}),
     ):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
@@ -563,7 +564,9 @@ def test_overdue_request_rejected_token_raises_authentication_error():
     courses = [{"id": 42, "name": "CS 4300"}]
     with patch(
         "accounts.canvas_client.requests.get",
-        side_effect=[response([]), response({}, status=401)],
+        side_effect=[
+            response([]), response({}, status=401, headers={"WWW-Authenticate": "Bearer"})
+        ],
     ):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
@@ -638,7 +641,10 @@ def test_rejected_token_during_a_concurrent_load(monkeypatch):
     """A revoked token is still reported as an authentication failure."""
     monkeypatch.undo()  # opt back in to real concurrency
     courses = [{"id": course_id, "name": f"Course {course_id}"} for course_id in (41, 42, 43)]
-    with patch("accounts.canvas_client.requests.get", return_value=response({}, status=401)):
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response({}, status=401, headers={"WWW-Authenticate": "Bearer"}),
+    ):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
 
