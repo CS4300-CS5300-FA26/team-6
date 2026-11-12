@@ -333,7 +333,9 @@ def test_all_assignments_rejects_bad_later_page(failure, error_type, expected_ca
     later_response = {
         "later_page_api_error": response({}, status=500),
         "malformed_later_page": response({"error": "not a list"}),
-        "later_page_unauthorized": response({}, status=401),
+        "later_page_unauthorized": response(
+            {}, status=401, headers={"WWW-Authenticate": "Bearer"}
+        ),
     }.get(failure)
     responses = [response([], next_url=next_url)]
     if later_response is not None:
