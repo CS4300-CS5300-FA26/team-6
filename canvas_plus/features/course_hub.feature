@@ -65,3 +65,22 @@ Feature: Course Hub course tabs
       | MATH 2150   |
       | ENGL 1310   |
       | HIST 1010   |
+
+  Scenario: The dashboard lists this week's work by local due day
+    Given it is Wednesday, November 11 at 5:00 PM in Denver
+    And my active courses have work due this week and one overdue assignment
+    When I open the Course Hub dashboard
+    Then the upcoming list reads "All courses · next 7 days"
+    And I see this week's work grouped by due day
+      | day                | course_code | title                             | course_name          | due      |
+      | Today · Wed Nov 11 | CS 4300     | Sprint 4 retrospective            | Software Engineering | 11:59 PM |
+      | Thursday · Nov 12  | MATH 2150   | Problem set 7                     | Discrete Mathematics | 9:00 AM  |
+      | Thursday · Nov 12  | ENGL 1310   | Annotated bibliography draft      | Rhetoric and Writing | 11:59 PM |
+      | Monday · Nov 16    | HIST 1010   | Reading response: Silk Road trade | World History        | 5:00 PM  |
+
+  Scenario: The dashboard keeps to the next seven days and links to all work
+    Given it is Wednesday, November 11 at 5:00 PM in Denver
+    And my active courses have work due this week and one overdue assignment
+    When I open the Course Hub dashboard
+    Then I don't see "Sprint 3 demo" on the dashboard
+    And the dashboard links to the assignments page with "View all 5 assignments →"

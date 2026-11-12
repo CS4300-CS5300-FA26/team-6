@@ -207,6 +207,60 @@ def active_hub_courses():
     ]
 
 
+# Wednesday, November 11, 2026 at 5:00 PM in America/Denver (MST, UTC-7).
+HUB_NOW = datetime(2026, 11, 12, 0, 0, tzinfo=dt_timezone.utc)
+
+
+def _due(course, assignment_id, name, local_due):
+    """A hub assignment with its own ID and name, due at a Denver wall-clock time."""
+    due = datetime.fromisoformat(f"{local_due}-07:00")
+    return dict(hub_assignment(course, due), id=assignment_id, name=name)
+
+
+def hub_week_assignments(courses):
+    """The Option A week relative to HUB_NOW, plus one overdue item, keyed by course ID.
+
+    Bibliography is due 11:59 PM Thursday in Denver, which is already Friday in UTC.
+    """
+    software, discrete, rhetoric, history = courses
+    return {
+        software["id"]: [
+            _due(software, 1, "Sprint 3 demo", "2026-11-10T23:59"),
+            _due(software, 2, "Sprint 4 retrospective", "2026-11-11T23:59"),
+        ],
+        discrete["id"]: [_due(discrete, 3, "Problem set 7", "2026-11-12T09:00")],
+        rhetoric["id"]: [_due(rhetoric, 4, "Annotated bibliography draft", "2026-11-12T23:59")],
+        history["id"]: [_due(history, 5, "Reading response: Silk Road trade",
+                             "2026-11-16T17:00")],
+    }
+
+
+def upcoming_section(response):
+    """The page's upcoming-assignments region."""
+    soup = BeautifulSoup(response.content, "html.parser")
+    return soup.select_one('section[aria-labelledby="upcoming-assignments"]')
+
+
+def hub_day_groups(response):
+    """[(day heading, [(chip, title, course line, due text), ...]), ...] in page order."""
+    groups = []
+    for heading in upcoming_section(response).find_all("h3"):
+        cards = []
+        for card in heading.find_next_sibling("ul").find_all("li", recursive=False):
+            chip = card.select_one(".course-chip").get_text(strip=True)
+            # Removing the chip as a prefix also proves it comes before the title.
+            title = card.find("h4").get_text(" ", strip=True)
+            assert title.startswith(chip), (chip, title)
+            cards.append((
+                chip,
+                title.removeprefix(chip).strip(),
+                card.select_one(".assignment-course").get_text(strip=True),
+                card.find("time").get_text(strip=True),
+            ))
+        groups.append((heading.get_text(strip=True), cards))
+    return groups
+
+
 def excluded_hub_courses():
     """Cover ended terms, inactive students, and active nonstudent enrollments."""
     return [

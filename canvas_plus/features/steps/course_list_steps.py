@@ -15,12 +15,16 @@ from django.urls import reverse
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError, list_courses
 from accounts.models import CanvasConnection
 from courses.test_hub_helpers import (
+    HUB_NOW,
     active_hub_courses,
     course_links,
     excluded_hub_courses,
     hub_cache_clock,
     hub_course,
+    hub_day_groups,
+    hub_week_assignments,
     install_hub_canvas,
+    upcoming_section,
 )
 
 CURRENT_COURSE = {
@@ -385,3 +389,51 @@ def step_hub_two_course_calls(context):
 @then("Canvas has not been asked for courses")
 def step_hub_no_course_call(context):
     assert context.hub_canvas.course_calls == 0, context.hub_canvas.course_calls
+
+
+@given("it is Wednesday, November 11 at 5:00 PM in Denver")
+def step_hub_clock(context):
+    configured = override_settings(TIME_ZONE="America/Denver")
+    configured.enable()
+    context.add_cleanup(configured.disable)
+    clock = patch("django.utils.timezone.now", return_value=HUB_NOW)
+    clock.start()
+    context.add_cleanup(clock.stop)
+
+
+@given("my active courses have work due this week and one overdue assignment")
+def step_hub_week(context):
+    context.hub_canvas.courses = context.hub_active
+    context.hub_canvas.assignments = hub_week_assignments(context.hub_active)
+
+
+@then('the upcoming list reads "{scope}"')
+def step_hub_scope(context, scope):
+    section = upcoming_section(context.response)
+    assert section.find("h2").get_text(strip=True) == "Upcoming assignments"
+    assert scope in section.get_text(" ", strip=True)
+
+
+@then("I see this week's work grouped by due day")
+def step_hub_day_groups(context):
+    expected = []
+    for row in context.table:
+        card = (row["course_code"], row["title"], row["course_name"], row["due"])
+        if expected and expected[-1][0] == row["day"]:
+            expected[-1][1].append(card)
+        else:
+            expected.append((row["day"], [card]))
+    actual = hub_day_groups(context.response)
+    assert actual == expected, (actual, expected)
+
+
+@then("I don't see \"{title}\" on the dashboard")
+def step_hub_absent(context, title):
+    assert title not in page(context)
+
+
+@then('the dashboard links to the assignments page with "{text}"')
+def step_hub_view_all(context, text):
+    link = upcoming_section(context.response).find("a", href=reverse("assignment_list"))
+    assert link is not None, "No link to the assignments page in the upcoming list"
+    assert link.get_text(strip=True) == text, link.get_text(strip=True)

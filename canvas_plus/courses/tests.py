@@ -13,12 +13,16 @@ from django.urls import reverse
 from accounts.canvas_client import CanvasAPIError, CanvasAuthenticationError
 from accounts.models import CanvasConnection
 from courses.test_hub_helpers import (
+    HUB_NOW,
     active_hub_courses,
     course_links,
     excluded_hub_courses,
     hub_cache_clock,
     hub_course,
+    hub_day_groups,
+    hub_week_assignments,
     install_hub_canvas,
+    upcoming_section,
 )
 
 CURRENT_COURSE = {
@@ -344,3 +348,92 @@ class CourseHubTests(ConnectedStudentTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.canvas.course_calls, 0)
         self.assertEqual(len(course_links(response, self.canvas.courses)), len(self.active_courses))
+
+
+@pytest.mark.integration
+@override_settings(TIME_ZONE="America/Denver")
+class CourseHubFocusedListTests(ConnectedStudentTestCase):
+    """Option A: the hub lists this week's work by local due day."""
+
+    def setUp(self):
+        super().setUp()
+        self.active_courses = active_hub_courses()
+        self.canvas = install_hub_canvas(self.addCleanup, self.active_courses)
+        self.canvas.assignments = hub_week_assignments(self.active_courses)
+        clock = patch("django.utils.timezone.now", return_value=HUB_NOW)
+        clock.start()
+        self.addCleanup(clock.stop)
+
+    def test_dashboard_groups_this_weeks_work_by_local_due_day(self):
+        """Chips, titles, course names and due times sit under each local day header."""
+        response = self.client.get(reverse("course_list"))
+
+        self.assertEqual(hub_day_groups(response), [
+            ("Today · Wed Nov 11", [
+                ("CS 4300", "Sprint 4 retrospective", "Software Engineering", "11:59 PM"),
+            ]),
+            ("Thursday · Nov 12", [
+                ("MATH 2150", "Problem set 7", "Discrete Mathematics", "9:00 AM"),
+                ("ENGL 1310", "Annotated bibliography draft", "Rhetoric and Writing", "11:59 PM"),
+            ]),
+            ("Monday · Nov 16", [
+                ("HIST 1010", "Reading response: Silk Road trade", "World History", "5:00 PM"),
+            ]),
+        ])
+
+    def test_dashboard_header_names_its_scope(self):
+        """The header names the list and says it covers all courses for 7 days."""
+        section = upcoming_section(self.client.get(reverse("course_list")))
+
+        self.assertEqual(section.find("h2").get_text(strip=True), "Upcoming assignments")
+        self.assertIn("All courses · next 7 days", section.get_text(" ", strip=True))
+
+    def test_dashboard_leaves_out_work_outside_the_next_seven_days(self):
+        """Overdue work stays on the assignments page, not the hub."""
+        response = self.client.get(reverse("course_list"))
+
+        self.assertNotContains(response, "Sprint 3 demo")
+
+    def test_dashboard_links_to_every_upcoming_assignment(self):
+        """The link counts all upcoming work, including what the 7-day list leaves out."""
+        section = upcoming_section(self.client.get(reverse("course_list")))
+
+        link = section.find("a", href=reverse("assignment_list"))
+        self.assertIsNotNone(link)
+        self.assertEqual(link.get_text(strip=True), "View all 5 assignments →")
+
+    def test_empty_week_says_so_and_still_links_to_all_work(self):
+        """With only overdue work, the hub says nothing is due and points to the full list."""
+        self.canvas.assignments = {
+            course_id: [a for a in assignments if a["name"] == "Sprint 3 demo"]
+            for course_id, assignments in self.canvas.assignments.items()
+        }
+
+        section = upcoming_section(self.client.get(reverse("course_list")))
+
+        self.assertIn("No assignments due in the next 7 days", section.get_text(" ", strip=True))
+        self.assertEqual(section.find("a", href=reverse("assignment_list")).get_text(strip=True),
+                         "View all 1 assignment →")
+
+    def test_unavailable_assignments_show_no_view_all_link(self):
+        """A failed assignments load can't report a count, so the link is left out."""
+        with patch("courses.views.list_upcoming_assignments",
+                   side_effect=CanvasAPIError("down")):
+            response = self.client.get(reverse("course_list"))
+
+        self.assertContains(response, "Unable to load upcoming assignments. Please try again.")
+        # The sidebar also links there, so look only inside the assignments section.
+        self.assertIsNone(upcoming_section(response).find("a", href=reverse("assignment_list")))
+
+    def test_course_page_has_no_hub_scope_or_view_all_link(self):
+        """A course page lists its own work by day without the hub's scope line or link."""
+        software = self.active_courses[0]
+
+        response = self.client.get(reverse("course_detail", args=[software["id"]]))
+
+        section = upcoming_section(response)
+        self.assertNotIn("All courses", section.get_text(" ", strip=True))
+        self.assertIsNone(section.find("a", href=reverse("assignment_list")))
+        self.assertEqual([title for _, cards in hub_day_groups(response)
+                          for _, title, _, _ in cards],
+                         ["Sprint 3 demo", "Sprint 4 retrospective"])
