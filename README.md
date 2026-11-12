@@ -375,3 +375,7 @@ Jackson McGuire used Claude Code to help build the course list. Jackson ran ever
 #### Generating Study Sessiosn [Backend]
 
 Stephen used ai to write tests and implement code for the generate study session behavior. 
+#### Course Hub tab bar (issue 137)
+
+Joshua Douglas used Claude Code and Codex to generate test cases which were manually verified and fixed.
+Joshua Douglas used Claude Code and Codex to build the html involved in displaying courses on the course page in alignment with agreed upon new design
