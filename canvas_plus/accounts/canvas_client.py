@@ -82,9 +82,9 @@ def _get_json(url, token, params, failure_message, session):
         )
     except requests.RequestException:
         raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
-    # Canvas adds WWW-Authenticate only when the token itself is invalid or expired.
-    # A 401 without it means the token is fine but this item is off limits, like a locked file.
-    if response.status_code == 401 and response.headers.get("WWW-Authenticate"):
+    # Canvas uses an authentication challenge to distinguish revoked tokens
+    # from resource permission failures, which must preserve the connection.
+    if response.status_code == 401 and "WWW-Authenticate" in response.headers:
         raise CanvasAuthenticationError("Canvas rejected the token.")
     if response.status_code != 200:
         raise CanvasAPIError(failure_message)
@@ -330,6 +330,55 @@ def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
         )
 
         params = None
+    return assignments
+
+
+@sensitive_variables("token")
+def _list_course_all_assignments(token, course, base_url, session):
+    """Fetch every assignment page for one validated course without bucket filters."""
+    next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
+    params = {"per_page": 100}
+    visited = set()
+    assignments = []
+    while next_url:
+        _validate_pagination_url(next_url, base_url, visited)
+        visited.add(next_url)
+        page, next_url = _fetch_page(
+            next_url,
+            token,
+            params,
+            "Canvas could not load assignments. Please try again.",
+            "Canvas returned unexpected assignment data. Please try again.",
+            session,
+        )
+        assignments.extend(
+            _normalize_assignment(assignment, course["name"], course["id"])
+            for assignment in page
+        )
+        params = None
+    return assignments
+
+
+@sensitive_variables("token")
+def list_all_assignments(token, courses, session=None):
+    """Return normalized assignments across active courses, deduplicated by Canvas id."""
+    base_url = canvas_base_url()
+    for course in courses:
+        _validate_assignment_course(course)
+    with ThreadPoolExecutor(MAX_CONCURRENT_REQUESTS) as pool:
+        pages = pool.map(
+            partial(_list_course_all_assignments, token, base_url=base_url, session=session),
+            courses,
+        )
+        assignments = []
+        seen_ids = set()
+        for page in pages:
+            for assignment in page:
+                assignment_id = assignment["canvas_assignment_id"]
+                if assignment_id in seen_ids:
+                    continue
+                seen_ids.add(assignment_id)
+                assignments.append(assignment)
     return assignments
 
 

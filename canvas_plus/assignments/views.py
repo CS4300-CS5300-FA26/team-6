@@ -1,5 +1,6 @@
 """Django views"""
 import logging
+from functools import partial
 
 import requests
 from django.contrib import messages
@@ -17,6 +18,7 @@ from accounts.canvas_client import (
     canvas_base_url,
     canvas_origin,
     list_courses,
+    list_all_assignments,
     list_graded_submissions,
     list_upcoming_assignments,
 )
@@ -24,6 +26,7 @@ from accounts.models import CanvasConnection, SavedTokenError
 from .grades import RECENT_WINDOW, recent_grades
 from .models import Attachment, Assignment
 from .priority import priority
+from .sync import sync_canvas_assignments_if_needed
 from .uploads import save_attachments, validate_batch
 from .forms import EffortEstimateForm 
 from study_plan.effort_estimation import estimate_and_save_assignment_effort
@@ -49,7 +52,7 @@ def recently_graded_context(token, courses, session):
 
 
 @sensitive_variables("token")
-def load_canvas_context(user):
+def load_canvas_context(user, *, sync_all_assignments=False):
     """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
@@ -82,6 +85,25 @@ def load_canvas_context(user):
                     cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
                 assignments = list_upcoming_assignments(token, courses, session=session)
                 graded_context = recently_graded_context(token, courses, session)
+                if sync_all_assignments:
+                    try:
+                        sync_canvas_assignments_if_needed(
+                            user,
+                            courses,
+                            connection,
+                            partial(
+                                list_all_assignments,
+                                token,
+                                courses,
+                                session=session,
+                            ),
+                        )
+                    except CanvasAuthenticationError:
+                        raise
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        graded_context["assignment_sync_error"] = (
+                            "Unable to sync Canvas assignments. Please try again."
+                        )
             now = timezone.now()
             for assignment in assignments:
                 assignment["priority"] = priority(
@@ -111,7 +133,7 @@ def load_canvas_context(user):
 @login_required
 def assignment_list(request):
     """Show the signed-in student's current upcoming Canvas assignments."""
-    context = load_canvas_context(request.user)
+    context = load_canvas_context(request.user, sync_all_assignments=True)
     if not context["assignments_unavailable"]:
         assignments_by_id = {
             item["canvas_assignment_id"]: item for item in context["assignments"]
@@ -272,6 +294,7 @@ def edit_effort_estimate(request, course_id, assignment_id):
             "title": local_assignment.title,
             "course_name": local_assignment.course,
             "due_date": local_assignment.due_date,
+            "description": local_assignment.description,
             "canvas_course_id": local_assignment.canvas_course_id,
             "canvas_assignment_id": local_assignment.canvas_assignment_id,
             "estimated_effort_minutes": local_assignment.estimated_effort_minutes,
@@ -291,6 +314,7 @@ def edit_effort_estimate(request, course_id, assignment_id):
                 title=canvas_assignment["title"],
                 course=canvas_assignment["course_name"],
                 due_date=canvas_assignment["due_date"],
+                description=canvas_assignment.get("description"),
             )
 
         # Bind the submitted estimate to the local Assignment.
@@ -321,22 +345,24 @@ def edit_effort_estimate(request, course_id, assignment_id):
                 title=canvas_assignment["title"],
                 course=canvas_assignment["course_name"],
                 due_date=canvas_assignment["due_date"],
+                description=canvas_assignment.get("description"),
             )
 
-            # Attempt to generate an automatic effort estimate using the assignment description supplied by Canvas.
-            # If there is not enough information, the helper returns None and the student can enter an estimate manually instead.
+        # Attempt to generate an automatic effort estimate using the assignment description supplied by Canvas.
+        # If there is not enough information, the helper returns None and the student can enter an estimate manually instead.
+        if local_assignment.estimated_effort_minutes is None:
             estimate_and_save_assignment_effort(
                 assignment=local_assignment,
                 assignment_information=canvas_assignment.get("description"),
             )
 
-            # Add any newly generated estimate to the template context.
-            canvas_assignment["estimated_effort_minutes"] = (
-                local_assignment.estimated_effort_minutes
-            )
-            canvas_assignment["effort_estimate_source"] = (
-                local_assignment.effort_estimate_source
-            )
+        # Add any newly generated estimate to the template context.
+        canvas_assignment["estimated_effort_minutes"] = (
+            local_assignment.estimated_effort_minutes
+        )
+        canvas_assignment["effort_estimate_source"] = (
+            local_assignment.effort_estimate_source
+        )
 
         # Pre-fill the form with either the saved automatic estimate or an existing manual estimate.
         form = EffortEstimateForm(instance=local_assignment)
