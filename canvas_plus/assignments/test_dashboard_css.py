@@ -72,3 +72,11 @@ def test_narrow_screens_drop_the_empty_day_height(rules):
     """Stacked days are only as tall as their chips."""
     narrow = rules.get((NARROW, ".week-day"), {})
     assert narrow.get("min-height") == "0", "stacked days should shrink to their chips"
+
+
+def test_dashboard_cards_keep_everything_but_the_badge_in_column_two(rules):
+    """Only the badge sits in a dashboard card's first column, so it stays badge-wide."""
+    not_badge = ".dashboard-panel .assignment-card > :not(.assignment-status)"
+    assert rules.get((None, not_badge), {}).get("grid-column") == "2", (
+        "every card child except the badge should be placed in column 2"
+    )

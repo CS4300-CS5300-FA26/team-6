@@ -84,7 +84,9 @@ body.landing-page a { color: #17324d; }
 .dashboard > .this-week, .dashboard > [role="status"] { grid-column: 1 / -1; }  /* full width */
 /* Panels are narrower than the page, so cards use the two-column small-screen layout. */
 .dashboard-panel .assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
-.dashboard-panel .assignment-due { grid-column: 2; max-width: none; text-align: left; }
+.dashboard-panel .assignment-due { max-width: none; text-align: left; }
+/* Badge on the left; everything else, including later additions, stacks in column 2. */
+.dashboard-panel .assignment-card > :not(.assignment-status) { grid-column: 2; }
 .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
 .week-day { min-height: 8rem; padding: 0.5rem; border: 1px solid #cbd5d1; border-radius: 4px; background: #fff; }
 .week-day h3 { margin: 0 0 0.5rem; font-size: 0.9rem; }
