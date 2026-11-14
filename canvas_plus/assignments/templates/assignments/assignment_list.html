@@ -1,15 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %} Upcoming Assignments {% endblock %}
+{% block title %} Dashboard {% endblock %}
 
 {% block content %}
-  <h1>Upcoming Assignments</h1>
+  <h1>Dashboard</h1>
   {% for message in messages %}
     <p class="{{ message.tags }}" role="status">{{ message }}</p>
   {% endfor %}
   {% if assignment_sync_error %}
     <p role="status">{{ assignment_sync_error }}</p>
   {% endif %}
+  <div class="dashboard">
+  <section class="dashboard-panel">
+  <h2>Upcoming Assignments</h2>
   {% if assignments_unavailable %}
     {% if not canvas_connection_expired %}
       <p role="status">
@@ -26,7 +29,7 @@
         <li class="assignment-card">
           <span class="assignment-status assignment-status--{{ assignment.priority|slugify }}">{{ assignment.priority }}</span>
           <div class="assignment-details">
-            <h2 class="assignment-title">{{ assignment.title }}</h2>
+            <h3 class="assignment-title">{{ assignment.title }}</h3>
             <p class="assignment-course">{{ assignment.course_name }}</p>
           </div>
           {% if assignment.due_date %}
@@ -54,9 +57,12 @@
   {% elif not canvas_connection_expired %}
     <p>No upcoming assignments</p>
   {% endif %}
+  </section>
 
+  {% if show_recently_graded or recently_graded_error %}
+  <section class="dashboard-panel">
   {% if show_recently_graded %}
-    <h2>Recently graded</h2>
+    <h2>Recently Graded</h2>
     {% if recently_graded %}
       <ul class="assignment-list">
         {% for g in recently_graded %}
@@ -76,4 +82,29 @@
   {% elif recently_graded_error %}
     <p role="status">{{ recently_graded_error }}</p>
   {% endif %}
+  </section>
+  {% endif %}
+
+  {% if this_week %}
+    <div class="this-week">
+      <h2>This Week</h2>
+      <div class="week-grid">
+        {% for day, assignments in this_week %}
+          <section class="week-day" aria-label="{{ day|date:'l' }}">
+            <h3>{{ day|date:"D" }}</h3>
+            {% if assignments %}
+              <ul class="week-chips">
+                {% for a in assignments %}
+                  <li class="week-chip">{{ a.title }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </div>
+  {% elif this_week_error %}
+    <p role="status">{{ this_week_error }}</p>
+  {% endif %}
+  </div>
 {% endblock %}

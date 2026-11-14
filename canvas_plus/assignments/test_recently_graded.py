@@ -108,4 +108,4 @@ class RecentlyGradedSectionTests(TestCase):
 
         response = self.client.get(reverse("assignment_list"))
 
-        self.assertNotContains(response, "Recently graded")
+        self.assertNotContains(response, "Recently Graded")
