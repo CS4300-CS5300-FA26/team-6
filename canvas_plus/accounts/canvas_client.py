@@ -3,7 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from django.conf import settings
@@ -13,6 +13,12 @@ from django.views.decorators.debug import sensitive_variables
 MAX_COURSE_PAGES = 100
 # Matches requests' default pool of 10 connections per host; Canvas throttles more parallelism.
 MAX_CONCURRENT_REQUESTS = 10
+MAX_FILE_BYTES = 25 * 1024 * 1024
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_FILE_REDIRECTS = 5
+# Where Canvas sends file downloads (traced from UCCS Canvas): user content, then
+# Instructure's file service and its CDN. Any other redirect target is refused.
+FILE_STORAGE_DOMAINS = ("canvas-user-content.com", "inscloudgate.net")
 
 class CanvasAPIError(Exception):
     """Canvas could not provide a usable response; credentials may still be valid."""
@@ -20,6 +26,10 @@ class CanvasAPIError(Exception):
 
 class CanvasAuthenticationError(CanvasAPIError):
     """Canvas rejected the supplied access token."""
+
+
+class CanvasFileTooLarge(CanvasAPIError):
+    """A Canvas file is bigger than Canvas+ will load."""
 
 
 def canvas_origin(url):
@@ -150,6 +160,98 @@ def get_course_syllabus(token, course_id):
     if syllabus is not None and not isinstance(syllabus, str):
         raise CanvasAPIError("Canvas returned unexpected course data. Please try again.")
     return syllabus
+
+
+@sensitive_variables("token")
+def get_course_file(token, course_id, file_id):
+    """Return one course file's name, size in bytes, and download address."""
+    info, _ = _get_json(
+        f"{canvas_base_url()}/api/v1/courses/{course_id}/files/{file_id}",
+        token,
+        None,
+        "Canvas could not load this file. Please try again.",
+        None,
+    )
+    if (not isinstance(info, dict) or not isinstance(info.get("display_name"), str)
+            or not isinstance(info.get("url"), str)
+            or isinstance(info.get("size"), bool) or not isinstance(info.get("size"), int)):
+        raise CanvasAPIError("Canvas returned unexpected file data. Please try again.")
+    return {"name": info["display_name"], "size": info["size"], "url": info["url"]}
+
+
+def _safe_storage_url(url):
+    """Allow only HTTPS addresses on our Canvas host or Instructure's file storage.
+
+    An allowlist means a redirect can never reach a private address, however its name resolves.
+    """
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return False
+    if parts.scheme != "https" or not host:
+        return False
+    if host == urlsplit(canvas_base_url()).hostname:
+        return True
+    return any(host == domain or host.endswith(f".{domain}") for domain in FILE_STORAGE_DOMAINS)
+
+
+@sensitive_variables("token")
+def open_course_file(token, url):
+    """Open a streaming response for a Canvas file, sending the token only to our Canvas host.
+
+    The caller must close the response.
+    """
+    try:
+        on_canvas = canvas_origin(url) == canvas_origin(canvas_base_url())
+    except ValueError:
+        on_canvas = False
+    if not on_canvas:
+        raise CanvasAPIError("Canvas returned an unsafe file address.")
+    try:
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+            allow_redirects=False,
+            stream=True,
+        )
+        for _ in range(MAX_FILE_REDIRECTS):
+            if response.status_code not in REDIRECT_STATUSES:
+                break
+            # Canvas hands the file off to separate storage, which must never see the token.
+            # Each hop is followed here, not by requests, so every address gets checked.
+            url = urljoin(url, response.headers.get("Location", ""))
+            response.close()
+            if not _safe_storage_url(url):
+                raise CanvasAPIError("Canvas returned an unsafe file address.")
+            response = requests.get(url, timeout=30, allow_redirects=False, stream=True)
+    except requests.RequestException:
+        raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
+    if response.status_code != 200:
+        response.close()
+        raise CanvasAPIError("Canvas could not load this file. Please try again.")
+    return response
+
+
+@sensitive_variables("token")
+def download_course_file(token, url, max_bytes=MAX_FILE_BYTES):
+    """Return a Canvas file's bytes, stopping past max_bytes.
+
+    Callers check the file's reported size first; the byte limit here is a backstop.
+    """
+    response = open_course_file(token, url)
+    try:
+        body = bytearray()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            body.extend(chunk)
+            if len(body) > max_bytes:
+                raise CanvasFileTooLarge("This file is too large to preview.")
+        return bytes(body)
+    except requests.RequestException:  # the connection can also drop mid-download
+        raise CanvasAPIError("Canvas is temporarily unavailable. Please try again.") from None
+    finally:
+        response.close()
 
 
 def _validate_assignment_course(course):

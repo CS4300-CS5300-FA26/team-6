@@ -14,10 +14,8 @@
     <h1>{{ course.name }}</h1>
     <h2>Syllabus</h2>
     {% if syllabus %}
-      {% if has_files %}
-        <p class="syllabus-note">File previews are coming soon.</p>
-      {% endif %}
-      {# safe only because clean_syllabus ran it through nh3's allowlist first #}
+      {# safe only because clean_syllabus ran it through nh3's allowlist first; #}
+      {# embed_file_viewers then adds only our own escaped viewer markup #}
       <div class="syllabus">{{ syllabus|safe }}</div>
     {% else %}
       <p>No syllabus posted in Canvas for this course</p>

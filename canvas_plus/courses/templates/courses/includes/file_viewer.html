@@ -1,0 +1,8 @@
+<details class="file-viewer">
+  <summary>{{ name }}</summary>
+  <p class="file-download"><a href="{{ url }}?download=1">Download</a></p>
+  {# loading="lazy" inside a closed <details> isn't fetched until the student opens it, so no JavaScript is needed. #}
+  {# The optional onload only shrinks the box to fit one of our own short messages; without it the box stays full size. #}
+  <iframe src="{{ url }}" title="{{ name }}" loading="lazy"
+          onload="const page = this.contentDocument?.body; if (page?.classList.contains('file-message')) this.style.height = page.scrollHeight + 'px';"></iframe>
+</details>
