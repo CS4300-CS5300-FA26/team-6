@@ -7,6 +7,7 @@ from django.db import transaction
 from ai_inference import infer
 from ai_inference.exceptions import AIInferenceError
 from assignments.models import Assignment
+from study_plan.effort_estimation import estimate_and_save_assignment_effort
 from study_plan.availability_windows import prepare_availability_windows
 from study_plan.exceptions import (
     EmptyAssignmentSelectionError,
@@ -57,6 +58,7 @@ def generate_plan(user, assignment_ids, allow_late=False):
             "One or more selected assignments are inaccessible."
         )
 
+    _estimate_missing_effort(assignments)
     eligible_assignments, notices = _filter_eligible_assignments(assignments)
 
     if not eligible_assignments:
@@ -105,6 +107,21 @@ def generate_plan(user, assignment_ids, allow_late=False):
             ]
         )
     return persisted_plan
+
+
+def _estimate_missing_effort(assignments):
+    """Estimate missing effort without replacing saved positive estimates."""
+    for assignment in assignments:
+        estimate = getattr(assignment, "estimated_effort_minutes", None)
+        if isinstance(estimate, int) and not isinstance(estimate, bool) and estimate > 0:
+            continue
+        try:
+            estimate_and_save_assignment_effort(
+                assignment,
+                assignment.description,
+            )
+        except AIInferenceError:
+            continue
 
 
 def _filter_eligible_assignments(assignments):
