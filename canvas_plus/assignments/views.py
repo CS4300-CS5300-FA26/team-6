@@ -28,6 +28,7 @@ from .models import Attachment, Assignment
 from .priority import priority
 from .sync import sync_canvas_assignments_if_needed
 from .uploads import save_attachments, validate_batch
+from .week import this_week_context
 from .forms import EffortEstimateForm 
 from study_plan.effort_estimation import estimate_and_save_assignment_effort
 
@@ -172,6 +173,7 @@ def assignment_list(request):
             assignments_by_id[attachment.assignment.canvas_assignment_id]["attachments"].append(
                 attachment
             )
+    context.update(this_week_context(request.user, context, timezone.localdate()))
     return render(request, "assignments/assignment_list.html", context)
 
 

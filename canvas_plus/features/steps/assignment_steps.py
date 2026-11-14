@@ -424,7 +424,7 @@ def step_assignment_marked(context, title, label):
     assert actual == label, f'Expected "{title}" marked "{label}", got "{actual}"'
 
     html = context.response.content.decode()
-    heading = f'<h2 class="assignment-title">{escape(title)}</h2>'
+    heading = f'<h3 class="assignment-title">{escape(title)}</h3>'
     cards = [
         fragment.split("</li>", 1)[0]
         for fragment in html.split('<li class="assignment-card">')[1:]
