@@ -6,6 +6,8 @@ from django.utils import timezone
 
 from .models import Assignment
 
+UNAVAILABLE_MESSAGE = "This Week cannot be loaded right now."
+
 
 def this_week(user, today):
     """Seven (day, assignments) pairs, Monday through Sunday, for the week containing today."""
@@ -21,3 +23,14 @@ def this_week(user, today):
     for assignment in assignments:
         by_day[timezone.localtime(assignment.due_date).date()].append(assignment)
     return [(day, by_day[day]) for day in days]
+
+
+def this_week_context(user, canvas_context, today):
+    """The This Week part of the dashboard context, given what loading Canvas produced."""
+    # Checked first: the view also marks assignments unavailable when there is no connection,
+    # and the page already shows the connect or reconnect prompt then.
+    if canvas_context["canvas_connection_missing"] or canvas_context["canvas_connection_expired"]:
+        return {}
+    if canvas_context["assignments_unavailable"] or "assignment_sync_error" in canvas_context:
+        return {"this_week_error": UNAVAILABLE_MESSAGE}
+    return {"this_week": this_week(user, today)}
