@@ -9,7 +9,7 @@ from django.test import TestCase
 
 # pylint: disable=import-error
 from assignments.models import Assignment
-from assignments.week import this_week
+from assignments.week import UNAVAILABLE_MESSAGE, this_week, this_week_context
 
 TODAY = date(2020, 11, 12)  # a past Thursday, so code ignoring today can't pass
 MONDAY = date(2020, 11, 9)
@@ -130,3 +130,55 @@ class ThisWeekTests(TestCase):
 
         with self.assertNumQueries(1):
             self.titles_by_day(this_week(self.user, TODAY))
+
+
+class ThisWeekContextTests(TestCase):
+    """Show the week only after a successful load; otherwise a message or nothing."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="planner")
+
+    def context_for(self, **flags):
+        """this_week_context for a loaded-Canvas dict with only the given problems set."""
+        canvas_context = {
+            "canvas_connection_missing": False,
+            "canvas_connection_expired": False,
+            "assignments_unavailable": False,
+            **flags,
+        }
+        return this_week_context(self.user, canvas_context, TODAY)
+
+    def test_missing_connection_shows_nothing(self):
+        """The page already prompts to connect, so there is no week and no message."""
+        self.assertEqual(self.context_for(canvas_connection_missing=True), {})
+
+    def test_expired_connection_shows_nothing(self):
+        """The page already prompts to reconnect, so there is no week and no message."""
+        self.assertEqual(self.context_for(canvas_connection_expired=True), {})
+
+    def test_canvas_outage_shows_the_message(self):
+        """When assignments could not load, an empty week would mislead."""
+        self.assertEqual(
+            self.context_for(assignments_unavailable=True),
+            {"this_week_error": UNAVAILABLE_MESSAGE},
+        )
+
+    def test_sync_error_shows_the_message(self):
+        """A failed sync leaves stale rows, so the week is not shown."""
+        self.assertEqual(
+            self.context_for(assignment_sync_error="Unable to sync Canvas assignments."),
+            {"this_week_error": UNAVAILABLE_MESSAGE},
+        )
+
+    def test_successful_load_shows_the_week(self):
+        """With nothing wrong, the context carries the grouped week."""
+        context = self.context_for()
+
+        self.assertEqual(list(context), ["this_week"])
+        self.assertEqual([day for day, _ in context["this_week"]][0], date(2020, 11, 9))
+
+    def test_missing_connection_wins_over_unavailable(self):
+        """The view also sets unavailable for a missing connection; no message then."""
+        self.assertEqual(
+            self.context_for(canvas_connection_missing=True, assignments_unavailable=True), {}
+        )
