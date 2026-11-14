@@ -77,7 +77,24 @@ body.landing-page a { color: #17324d; }
 .assignment-course { margin: 0.25rem 0 0; color: #52615c; overflow-wrap: anywhere; }
 .assignment-due { max-width: 12rem; margin: 0; color: #35443e; text-align: right; overflow-wrap: anywhere; }
 
+/* Dashboard: Upcoming and Recently Graded side by side, This Week full width below. */
+.dashboard { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1.25rem; align-items: start; }
+.dashboard-panel, .this-week { padding: 1rem; border: 1px solid #cbd5d1; border-radius: 6px; }
+.dashboard-panel h2, .this-week h2 { margin: 0; font-size: 1.15rem; }
+.this-week { grid-column: 1 / -1; }
+/* Panels are narrower than the page, so cards use the two-column small-screen layout. */
+.dashboard-panel .assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
+.dashboard-panel .assignment-due { grid-column: 2; max-width: none; text-align: left; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
+.week-day { min-height: 8rem; padding: 0.5rem; border: 1px solid #cbd5d1; border-radius: 4px; background: #fff; }
+.week-day h3 { margin: 0 0 0.5rem; font-size: 0.9rem; }
+.week-chips { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.week-chip { padding: 0.3rem 0.4rem; border: 1px solid #9aa8a3; border-radius: 3px; background: #eceeed;
+						 font-size: 0.8rem; overflow-wrap: anywhere; }
+
 @media (max-width: 40rem) {
 	.assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
 	.assignment-due { grid-column: 2; max-width: none; text-align: left; }
+	.dashboard, .week-grid { grid-template-columns: minmax(0, 1fr); }
+	.week-day { min-height: 0; }
 }
