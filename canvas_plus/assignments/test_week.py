@@ -11,9 +11,9 @@ from django.test import TestCase
 from assignments.models import Assignment
 from assignments.week import this_week
 
-TODAY = date(2026, 11, 12)  # a Thursday, so tests never depend on when they run
-MONDAY = date(2026, 11, 9)
-SUNDAY = date(2026, 11, 15)
+TODAY = date(2020, 11, 12)  # a past Thursday, so code ignoring today can't pass
+MONDAY = date(2020, 11, 9)
+SUNDAY = date(2020, 11, 15)
 
 
 class ThisWeekTests(TestCase):
@@ -59,18 +59,18 @@ class ThisWeekTests(TestCase):
 
     def test_each_assignment_is_on_its_due_day(self):
         """Assignments land on the day they are due."""
-        self.add("HW3", self.due(date(2026, 11, 10)))
-        self.add("Lab 4", self.due(date(2026, 11, 13)))
+        self.add("HW3", self.due(date(2020, 11, 10)))
+        self.add("Lab 4", self.due(date(2020, 11, 13)))
 
         by_day = self.titles_by_day(this_week(self.user, TODAY))
 
-        self.assertEqual(by_day[date(2026, 11, 10)], ["HW3"])
-        self.assertEqual(by_day[date(2026, 11, 13)], ["Lab 4"])
+        self.assertEqual(by_day[date(2020, 11, 10)], ["HW3"])
+        self.assertEqual(by_day[date(2020, 11, 13)], ["Lab 4"])
         self.assertEqual(sum(len(titles) for titles in by_day.values()), 2)
 
     def test_same_day_assignments_come_in_due_time_order(self):
         """Within a day, the earliest deadline comes first, whatever the save order."""
-        friday = date(2026, 11, 13)
+        friday = date(2020, 11, 13)
         self.add("Evening", self.due(friday, time(23, 59)))
         self.add("Morning", self.due(friday, time(9)))
         self.add("Noon", self.due(friday, time(12)))
@@ -102,13 +102,13 @@ class ThisWeekTests(TestCase):
 
     def test_another_students_assignment_is_not_included(self):
         """A week holds only the requesting student's assignments."""
-        self.add("Their Project", self.due(date(2026, 11, 11)), user=self.other_user)
+        self.add("Their Project", self.due(date(2020, 11, 11)), user=self.other_user)
 
-        self.assertEqual(self.titles_on(date(2026, 11, 11)), [])
+        self.assertEqual(self.titles_on(date(2020, 11, 11)), [])
 
     def test_missing_assignments_are_excluded_but_failed_ones_are_kept(self):
         """Removed from Canvas means gone; a failed sync elsewhere does not hide real work."""
-        thursday = date(2026, 11, 12)
+        thursday = date(2020, 11, 12)
         self.add("Synced", self.due(thursday, time(9)))
         self.add("Failed", self.due(thursday, time(10)), sync_state="failed")
         self.add("Dropped Lab", self.due(thursday, time(11)), sync_state="missing")
