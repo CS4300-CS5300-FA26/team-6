@@ -246,3 +246,47 @@ def test_anonymous_search_redirects_to_login(client):
 
     assert response.status_code == 302
     assert "/login" in response.url
+
+@pytest.mark.django_db
+def test_search_result_keeps_canvas_link_for_invalid_connection(client):
+    """A saved Canvas host should still be used when the token is invalid."""
+
+    # Create and log in the student.
+    user = get_user_model().objects.create_user(
+        username="invalid-connection-search-user",
+    )
+    client.force_login(user)
+
+    # Save a Canvas connection whose token has been marked invalid.
+    # The Canvas host is still usable for constructing assignment URLs.
+    CanvasConnection.objects.create(
+        user=user,
+        canvas_url="https://canvas.example.edu",
+        is_valid=False,
+    )
+
+    # Create a synced assignment that should appear in search results.
+    Assignment.objects.create(
+        user=user,
+        canvas_course_id=42,
+        canvas_assignment_id=101,
+        title="Lab 3: Recursion",
+        course="CS 4300",
+        description="Practice recursion.",
+        sync_state="synced",
+    )
+
+    # Search for the assignment.
+    response = client.get(
+        reverse("search_assignments"),
+        {"q": "recursion"},
+    )
+
+    # The result should still link back to Canvas even though
+    # the saved token is no longer valid.
+    assert response.status_code == 200
+    assert (
+        b"https://canvas.example.edu/courses/42/assignments/101"
+        in response.content
+    )
+    assert b'target="_blank"' in response.content

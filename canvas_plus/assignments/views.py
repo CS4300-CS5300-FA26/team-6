@@ -164,7 +164,6 @@ def search_assignments(request):
     # to construct assignment links; the search itself remains local.
     connection = CanvasConnection.objects.filter(
         user=request.user,
-        is_valid=True,
     ).first()
 
     # Build Canvas assignment URLs from IDs already stored locally.
