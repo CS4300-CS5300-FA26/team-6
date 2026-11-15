@@ -162,6 +162,32 @@ def get_course_syllabus(token, course_id):
     return syllabus
 
 
+def _readable_enrollment(enrollment):
+    """True when an enrollment's current score is a number or absent, and its letter is text."""
+    if not isinstance(enrollment, dict):
+        return False
+    score = enrollment.get("computed_current_score")
+    letter = enrollment.get("computed_current_grade")
+    return ((score is None or isinstance(score, (int, float)))
+            and (letter is None or isinstance(letter, str)))
+
+
+@sensitive_variables("token")
+def get_course_grade(token, course_id):
+    """Return one course with my enrollments' current scores and whether totals are hidden."""
+    course, _ = _get_json(
+        f"{canvas_base_url()}/api/v1/courses/{course_id}",
+        token,
+        {"include[]": "total_scores"},
+        "Canvas could not load your grade. Please try again.",
+        None,
+    )
+    enrollments = (course.get("enrollments") or []) if isinstance(course, dict) else None
+    if not isinstance(enrollments, list) or not all(map(_readable_enrollment, enrollments)):
+        raise CanvasAPIError("Canvas returned unexpected grade data. Please try again.")
+    return course
+
+
 @sensitive_variables("token")
 def get_course_file(token, course_id, file_id):
     """Return one course file's name, size in bytes, and download address."""
