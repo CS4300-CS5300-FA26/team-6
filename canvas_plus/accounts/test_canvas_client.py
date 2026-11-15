@@ -341,7 +341,7 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
         "due_date": datetime(2026, 10, 23, 0, 30, tzinfo=timezone.utc),
         "submitted": False,
         "description": None,
-        
+
     }]
     assert get.call_args_list[0].args == (
         "https://canvas.example.edu/api/v1/courses/42/assignments",
@@ -377,7 +377,7 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
         "due_date": None,
         "submitted": False,
         "description": None,
-        
+
     }]
 
 
@@ -832,7 +832,7 @@ def test_submission_status_is_normalized(submission, submitted):
         "due_date": None,
         "submitted": submitted,
         "description": None,
-        
+
     }]
 
 
