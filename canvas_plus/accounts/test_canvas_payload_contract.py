@@ -106,7 +106,7 @@ def test_no_syllabus_in_course_detail_shows_no_syllabus_message(
     assert response.status_code == 200
     assert b"No syllabus posted in Canvas for this course" in response.content
     detail_calls = [params for url, params in canvas_http["calls"] if url.endswith("/courses/42")]
-    assert detail_calls == [{"include[]": "syllabus_body"}] * 2
+    assert detail_calls == [{"include[]": "syllabus_body"}] * 2 + [{"include[]": "total_scores"}]
     connected_student.refresh_from_db()
     assert connected_student.is_valid
 

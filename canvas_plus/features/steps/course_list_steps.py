@@ -115,9 +115,14 @@ def course_with_syllabus(context, syllabus):
     """A connected student enrolled in one current course whose syllabus Canvas returns."""
     connect_student(context)
     context.canvas_courses.return_value = [CURRENT_COURSE]
-    patcher = patch("courses.views.get_course_syllabus", Mock(return_value=syllabus))
-    patcher.start()
-    context.add_cleanup(patcher.stop)
+    context.canvas_grade = Mock(return_value={"enrollments": []})
+    for target, fake in (
+        ("courses.views.get_course_syllabus", Mock(return_value=syllabus)),
+        ("courses.views.get_course_grade", context.canvas_grade),
+    ):
+        patcher = patch(target, fake)
+        patcher.start()
+        context.add_cleanup(patcher.stop)
 
 
 def page(context):
