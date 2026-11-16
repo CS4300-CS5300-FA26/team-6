@@ -9,7 +9,6 @@ from behave import given, when, then
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.core.cache import cache
 from django.test import Client, override_settings
 from django.utils import timezone as django_timezone
 from django.utils.html import escape
@@ -244,8 +243,6 @@ def step_second_assignment_save_fails(context):
     context.add_cleanup(context.save_patcher.stop)
 
 
-@given("the student has no current Canvas courses")
-def step_no_current_canvas_courses(context):
 @given("the student has no current Canvas courses")
 def step_student_has_no_current_canvas_courses(context):
     context.assignment_sync_states = {
