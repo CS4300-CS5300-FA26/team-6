@@ -202,7 +202,7 @@ The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an a
 
 ## Production deployment
 
-Live application: https://canvas-plus-1dc9dd2e56ac.herokuapp.com/
+Live application: https://canvas-plus.dev
 
 ## Connecting a Canvas account
 
