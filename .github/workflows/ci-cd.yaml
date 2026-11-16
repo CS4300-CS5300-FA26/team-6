@@ -14,6 +14,9 @@ jobs:
   lint_and_test:
     name: Lint and Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "fake-secret-key"
@@ -61,6 +64,13 @@ jobs:
         run: |
           coverage run --source=canvas_plus -m pytest
           coverage report -m --fail-under=80
+
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: always
 
   # Sends each pull request's changes to OpenAI and posts the review as a PR comment.
   # Separate from lint_and_test, so an OpenAI problem never blocks the tests.
