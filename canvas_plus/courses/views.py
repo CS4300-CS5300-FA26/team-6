@@ -18,6 +18,7 @@ from accounts.canvas_client import (
     canvas_origin,
     download_course_file,
     get_course_file,
+    get_course_grade,
     get_course_syllabus,
     list_courses,
     open_course_file,
@@ -25,6 +26,7 @@ from accounts.canvas_client import (
 from accounts.models import CanvasConnection, SavedTokenError
 from .current import is_current
 from .files import embed_file_viewers
+from .grades import current_grade
 from .syllabus import clean_syllabus
 
 
@@ -62,6 +64,17 @@ def course_list(request):
     return render(request, "courses/course_list.html", {"courses": courses or [], **state})
 
 
+@sensitive_variables("token")
+def _grade_line(token, course_id):
+    """My current grade line; if only the grade can't load, the rest of the page still shows."""
+    try:
+        return current_grade(get_course_grade(token, course_id))
+    except CanvasAuthenticationError:
+        raise
+    except CanvasAPIError:
+        return "Unable to load your current grade. Please try again."
+
+
 @login_required
 def course_detail(request, course_id):
     """Show one of the student's current courses with its cleaned syllabus."""
@@ -71,14 +84,16 @@ def course_detail(request, course_id):
         # Only courses in the student's own list are requested, so Canvas is never
         # asked about a course that could reject the token and expire the connection.
         course = next((c for c in _current_courses(token) if c["id"] == course_id), None)
-        return None if course is None else (course, get_course_syllabus(token, course_id))
+        if course is None:
+            return None
+        return course, get_course_syllabus(token, course_id), _grade_line(token, course_id)
 
     found, state = _load_from_canvas(request.user, load)
     if found is None and not state:
         return render(request, "courses/course_detail.html", {"not_found": True}, status=404)
     context = dict(state)
     if found:
-        course, syllabus = found
+        course, syllabus, context["grade"] = found
         context["course"] = course
         context["syllabus"] = embed_file_viewers(
             clean_syllabus(syllabus, canvas_base_url(), course_id)
