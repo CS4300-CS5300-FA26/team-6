@@ -5,6 +5,8 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.test import override_settings
 from django.utils import timezone
 from icalendar import Calendar
@@ -21,6 +23,42 @@ def calendar_events(user):
     """Return parsed VEVENT components from the user's generated feed."""
     calendar = Calendar.from_ical(generate_feed(user))
     return [component for component in calendar.walk() if component.name == "VEVENT"]
+
+
+def calendar_summaries(user):
+    """Return normalized event summaries for retention assertions."""
+    return [str(event["SUMMARY"]) for event in calendar_events(user)]
+
+
+def create_retention_assignment(user, title, due_date, identity):
+    """Create a local assignment used to exercise one retention boundary."""
+    return Assignment.objects.create(
+        user=user,
+        title=title,
+        course=f"Course {identity}",
+        due_date=due_date,
+        canvas_course_id=1200 + identity,
+        canvas_assignment_id=1300 + identity,
+    )
+
+
+def create_retention_session(user, title, end, identity):
+    """Create a session ending at the supplied retention boundary."""
+    assignment = create_retention_assignment(user, title, None, identity)
+    plan = StudyPlan.objects.create(user=user)
+    return StudySession.objects.create(
+        plan=plan,
+        assignment=assignment,
+        start=end - timedelta(hours=1),
+        end=end,
+    )
+
+
+def assert_invalid_retention_rejected(user, retention):
+    """Reject invalid retention settings before generating a calendar."""
+    with override_settings(CALENDAR_FEED_RETENTION_DAYS=retention):
+        with pytest.raises(ImproperlyConfigured):
+            generate_feed(user)
 
 
 def test_feed_includes_stored_due_dates_for_every_sync_state(
@@ -197,3 +235,64 @@ def test_feed_uses_configured_timezone_across_dst(django_user_model):
     assert encoded_due.utcoffset() == due_instant.astimezone(configured_timezone).utcoffset()
     assert encoded_start.utcoffset() == session_start.astimezone(configured_timezone).utcoffset()
     assert encoded_end.utcoffset() == session_end.astimezone(configured_timezone).utcoffset()
+
+
+def test_events_obey_elapsed_retention_cutoffs(django_user_model):
+    """Events expire at elapsed-day cutoffs but future events remain eligible."""
+    user = django_user_model.objects.create_user(username="retention-calendar-owner")
+    now = datetime(2026, 6, 1, 12, 0, tzinfo=datetime_timezone.utc)
+    default_cutoff = now - timedelta(days=112)
+    retention_sources = (
+        ("default-before-assignment", default_cutoff + timedelta(seconds=1)),
+        ("default-at-assignment", default_cutoff),
+        ("default-after-assignment", default_cutoff - timedelta(seconds=1)),
+        ("zero-before-assignment", now + timedelta(seconds=1)),
+        ("zero-at-assignment", now),
+        ("zero-after-assignment", now - timedelta(seconds=1)),
+        ("future-assignment", now + timedelta(days=1000)),
+    )
+    for identity, (title, due_date) in enumerate(retention_sources, start=1):
+        create_retention_assignment(user, title, due_date, identity)
+
+    session_sources = (
+        ("default-before-session", default_cutoff + timedelta(seconds=1)),
+        ("default-at-session", default_cutoff),
+        ("default-after-session", default_cutoff - timedelta(seconds=1)),
+        ("zero-before-session", now + timedelta(seconds=1)),
+        ("zero-at-session", now),
+        ("zero-after-session", now - timedelta(seconds=1)),
+        ("future-session", now + timedelta(days=1000)),
+    )
+    for identity, (title, session_end) in enumerate(session_sources, start=20):
+        create_retention_session(user, title, session_end, identity)
+
+    with patch("django.utils.timezone.now", return_value=now):
+        default_summaries = calendar_summaries(user)
+    assert settings.CALENDAR_FEED_RETENTION_DAYS == 112
+    assert any("default-before-assignment" in summary for summary in default_summaries)
+    assert any("default-before-session" in summary for summary in default_summaries)
+    for expired_title in (
+        "default-at-assignment",
+        "default-after-assignment",
+        "default-at-session",
+        "default-after-session",
+    ):
+        assert all(expired_title not in summary for summary in default_summaries)
+
+    with override_settings(CALENDAR_FEED_RETENTION_DAYS=0):
+        with patch("django.utils.timezone.now", return_value=now):
+            zero_day_summaries = calendar_summaries(user)
+    assert any("zero-before-assignment" in summary for summary in zero_day_summaries)
+    assert any("zero-before-session" in summary for summary in zero_day_summaries)
+    assert any("future-assignment" in summary for summary in zero_day_summaries)
+    assert any("future-session" in summary for summary in zero_day_summaries)
+    for expired_title in (
+        "zero-at-assignment",
+        "zero-after-assignment",
+        "zero-at-session",
+        "zero-after-session",
+    ):
+        assert all(expired_title not in summary for summary in zero_day_summaries)
+
+    for invalid_retention in (-1, 1.5, "112", True):
+        assert_invalid_retention_rejected(user, invalid_retention)
