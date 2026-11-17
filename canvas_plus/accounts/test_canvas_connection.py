@@ -140,6 +140,16 @@ def test_settings_replaces_the_old_connection_page(student_client):
     assert client.get(RETIRED_CONNECT_URL).status_code == 404
 
 
+def test_navigation_shows_settings_and_not_connect_canvas(student_client):
+    """Authenticated navigation links to Settings, not the old Connect Canvas link."""
+    client, _user = student_client
+    page = PageContent(client.get(CONNECT_URL))
+    assert "Settings" in page.list_items
+    assert "Connect Canvas" not in page.list_items
+    assert CONNECT_URL in page.links
+    assert RETIRED_CONNECT_URL not in page.links
+
+
 def connect_successfully(client):
     """Establish the Given state through the same page a student will use."""
     page = client.get(CONNECT_URL)
