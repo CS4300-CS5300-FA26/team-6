@@ -127,10 +127,11 @@ body.landing-page a { color: #17324d; }
 .dashboard-panel h2, .this-week h2 { margin: 0; font-size: 1.15rem; }
 .dashboard > .this-week, .dashboard > [role="status"] { grid-column: 1 / -1; }  /* full width */
 /* Panels are narrower than the page, so cards use the two-column small-screen layout. */
-.dashboard-panel .assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
-.dashboard-panel .assignment-due { max-width: none; text-align: left; }
+.dashboard-panel .assignment-card, .study-plan-panel .assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
+.dashboard-panel .assignment-due, .study-plan-panel .assignment-due { max-width: none; text-align: left; }
 /* Badge on the left; everything else, including later additions, stacks in column 2. */
-.dashboard-panel .assignment-card > :not(.assignment-status) { grid-column: 2; }
+.dashboard-panel .assignment-card > :not(.assignment-status),
+.study-plan-panel .assignment-card > :not(.assignment-status) { grid-column: 2; }
 .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
 .week-day { min-height: 8rem; padding: 0.5rem; border: 1px solid #cbd5d1; border-radius: 4px; background: #fff; }
 .week-day h3 { margin: 0 0 0.5rem; font-size: 0.9rem; }
@@ -184,4 +185,50 @@ body.landing-page a { color: #17324d; }
 @media (max-width: 60rem) {
 	.dashboard, .week-grid { grid-template-columns: minmax(0, 1fr); }
 	.week-day { min-height: 0; }
+}
+
+/* Study Plan: My Availability and Generated Plan side by side, like the dashboard.
+   Kept at the end of the file, away from the spot where other changes collide. */
+.study-plan-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1.5rem; align-items: start; margin-bottom: 1.5rem; }
+.study-plan-panel { padding: 1rem; border: 1px solid #cbd5d1; border-radius: 6px; }
+.study-plan-panel h2 { margin: 0 0 0.75rem; font-size: 1.15rem; }
+
+/* The week grid. --block is one hour's height and --head the day names' row, so the
+   hour labels and the blocks always line up. */
+.availability-grid { --block: 2rem; --head: 1.75rem; display: grid; grid-template-columns: auto repeat(7, minmax(0, 1fr)); }
+/* Each label sits on the line above its block; the 13th, on the bottom line, takes no height. */
+.grid-hours { padding: var(--head) 0.5rem 0 0; color: #52615c; font-size: 0.75rem; }
+.grid-hours span { display: block; height: var(--block); line-height: 1; text-align: right; white-space: nowrap; transform: translateY(-0.5em); }
+.grid-hours span:last-child { height: 0; }
+/* Fieldsets have built-in quirks: reset them, and float the legend so it acts like a block. */
+.grid-day { min-width: 0; margin: 0; padding: 0; border: 0; }
+.grid-day legend { float: left; width: 100%; height: var(--head); overflow: hidden; padding: 0; color: #35443e; font-size: 0.8rem;
+				   font-weight: 700; line-height: var(--head); text-align: center; white-space: nowrap; }  /* never spill into the cells */
+.grid-day label { display: block; clear: both; }
+/* The checkbox is the cell. appearance: none only removes its look; Tab, Space and screen readers still work.
+   Cells draw their right and bottom edges; the first row and first day add the top and left. */
+.grid-day input { appearance: none; display: block; box-sizing: border-box; width: 100%; height: var(--block); margin: 0;
+				  border: solid #84948e; border-width: 0 1px 1px 0; border-radius: 0; background: #fff; cursor: pointer; }
+.grid-day label:first-of-type input { border-top-width: 1px; }
+.grid-day:first-of-type input { border-left-width: 1px; }
+.grid-day input:not(:disabled):hover { background: #e7f2ee; }
+.grid-day input:checked, .grid-day input:checked:not(:disabled):hover { background: #245b49; }
+/* Past days can't change, but still show what was saved there. */
+.grid-day input:disabled { background: #eef1f0; cursor: not-allowed; }
+.grid-day input:checked:disabled { background: #8fb5a6; }
+/* A negative offset keeps the outline inside the cell, where neighbours can't cover it. */
+.grid-day input:focus-visible { outline: 2px solid #17324d; outline-offset: -2px; }
+.grid-day input:checked:focus-visible { outline-color: #fff; outline-offset: -4px; }
+.availability-grid + button { margin-top: 0.75rem; }
+
+@media (max-width: 60rem) {
+	/* The panels stack; the grid keeps its seven days, which stay above the 24px touch target. */
+	.study-plan-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 40rem) {
+	/* Give the seven days every pixel the panel can spare, so each block stays above 24px wide. */
+	.study-plan-panel { padding: 0.5rem; }
+	.grid-hours { padding-right: 0.25rem; font-size: 0.65rem; }
+	.grid-day legend { font-size: 0.65rem; }
 }

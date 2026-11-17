@@ -1,4 +1,4 @@
-"""Checks that shared.css stacks the dashboard on narrow screens.
+"""Checks that shared.css stacks the dashboard and Study Plan panels on narrow screens.
 
 The project has no browser tests, so these read the stylesheet's rules
 rather than the rendered layout.
@@ -52,14 +52,14 @@ def fixture_rules():
     return parse_rules(CSS_PATH.read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize("selector", [".dashboard", ".week-grid"])
+@pytest.mark.parametrize("selector", [".dashboard", ".week-grid", ".study-plan-layout"])
 def test_wide_screens_use_several_columns(rules, selector):
     """Guard: the panels and days sit side by side on wide screens."""
     columns = rules[(None, selector)]["grid-template-columns"]
     assert columns != ONE_COLUMN, f"{selector} should have several columns on wide screens"
 
 
-@pytest.mark.parametrize("selector", [".dashboard", ".week-grid"])
+@pytest.mark.parametrize("selector", [".dashboard", ".week-grid", ".study-plan-layout"])
 def test_narrow_screens_stack_into_one_column(rules, selector):
     """Panels and days stack vertically on narrow screens."""
     narrow = rules.get((NARROW, selector), {})
@@ -74,9 +74,21 @@ def test_narrow_screens_drop_the_empty_day_height(rules):
     assert narrow.get("min-height") == "0", "stacked days should shrink to their chips"
 
 
-def test_dashboard_cards_keep_everything_but_the_badge_in_column_two(rules):
-    """Only the badge sits in a dashboard card's first column, so it stays badge-wide."""
-    not_badge = ".dashboard-panel .assignment-card > :not(.assignment-status)"
+@pytest.mark.parametrize("panel", [".dashboard-panel", ".study-plan-panel"])
+def test_panel_cards_keep_everything_but_the_badge_in_column_two(rules, panel):
+    """Only the badge sits in a panel card's first column, so it stays badge-wide."""
+    card = rules.get((None, f"{panel} .assignment-card"), {})
+    assert card.get("grid-template-columns") == "auto minmax(0, 1fr)", (
+        f"cards in {panel} should use the two-column layout"
+    )
+    not_badge = f"{panel} .assignment-card > :not(.assignment-status)"
     assert rules.get((None, not_badge), {}).get("grid-column") == "2", (
         "every card child except the badge should be placed in column 2"
     )
+
+
+def test_the_availability_grid_keeps_seven_days_on_narrow_screens(rules):
+    """A week that stacks one day under another stops being a calendar."""
+    assert "repeat(7," in rules[(None, ".availability-grid")]["grid-template-columns"]
+    narrow = rules.get((NARROW, ".availability-grid"), {})
+    assert "grid-template-columns" not in narrow, "the grid should not be stacked"
