@@ -147,6 +147,14 @@ body.landing-page a { color: #17324d; }
 	background: #eef3f8; color: #17324d; font-size: 0.75rem; font-weight: 700; vertical-align: 0.1em; }
 .upcoming .assignment-due { white-space: nowrap; }
 .view-all { margin: 1rem 0 0; }
+/* A course page's name in a bar, with my current grade at its far right (wrapping below on phones). */
+.course-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+	gap: 0.5rem 1rem; margin: 1rem 0 1.25rem; padding: 0.75rem 1rem; border: 1px solid #17324d;
+	border-radius: 6px; background: #e8eef4; color: #17324d; }
+.course-header h1 { margin: 0; font-size: 1.6rem; }
+.current-grade { margin: 0; padding: 0.35rem 0.75rem; border: 1px solid #17324d; border-radius: 6px;
+	background: #fff; color: #17324d; font-size: 1.05rem; font-weight: 700;
+	font-variant-numeric: tabular-nums; }
 .view-all a { color: #17324d; }
 .planning-assignments { margin: 2rem 0; }
 .planning-assignment-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); align-items: end; gap: 0.75rem; margin: 1rem 0; padding: 1rem; border: 1px solid #cbd5d1; border-radius: 4px; background: #f5f8f6; }

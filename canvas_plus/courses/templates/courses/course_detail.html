@@ -11,8 +11,10 @@
   {% elif canvas_unavailable %}
     <p role="status">Unable to load this course. Please try again.</p>
   {% elif course %}
-    <h1>{{ course.name }}</h1>
-    {% if grade %}<p class="current-grade">{{ grade }}</p>{% endif %}
+    <div class="course-header">
+      <h1>{{ course.name }}</h1>
+      {% if grade %}<p class="current-grade">{{ grade }}</p>{% endif %}
+    </div>
     {% include "courses/upcoming_assignments.html" %}
     <h2>Syllabus</h2>
     {% if syllabus %}
