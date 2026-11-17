@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Availability{% endblock %}
+{% block title %}Study Plan{% endblock %}
 
 {% block content %}
     <h1>Study Plan</h1>
@@ -9,45 +9,50 @@
         <p class="{{ message.tags }}" role="status">{{ message }}</p>
     {% endfor %}
 
-    {% include "availability/week_grid.html" %}
+    <!-- The wireframe's two panels: the grid beside the generated plan. -->
+    <div class="study-plan-layout">
+        <section class="study-plan-panel">
+            {% include "availability/week_grid.html" %}
+        </section>
+        <section class="study-plan-panel">
+            <!-- The student's study plans, optionally narrowed to one day. -->
+            <h2>Generated Plan</h2>
 
-    <!-- Form used to create a new availability entry. -->
-    <h2>Add Availability</h2>
+            <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
+            <form method="get">
+                <label for="study-day">Day</label>
+                <input type="date" id="study-day" name="date" value="{{ study_day|date:'Y-m-d' }}">
+                <button type="submit">Show day</button>
+                <a class="button-secondary" href="{% url 'availability:list' %}?date=">Show all days</a>
+            </form>
 
-    <form method="post">
-
-        <!-- Django requires this token on POST forms for security. -->
-        {% csrf_token %}
-
-        <!-- Render the date, start-time, and end-time fields. -->
-        {{ form.as_p }}
-
-        <!-- Submit the new availability entry. -->
-        <button type="submit">Save Availability</button>
-    </form>
-
-    <!-- Display the student's currently saved availability entries. -->
-    <h2>Saved Availability</h2>
-
-    {% if availability_entries %}
-        <ul>
-            {% for entry in availability_entries %}
-                <li>
-                    <!-- Display the saved database values. -->
-                    {{ entry.date }}:
-                    {{ entry.start_time }} - {{ entry.end_time }}
-
-                    <!-- Allow the student to edit this availability entry. -->
-                    <a class="button-secondary" href="{% url 'availability:edit' entry.id %}">
-                        Edit
-                    </a>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <!-- Show a clear message when no availability has been entered. -->
-        <p>No availability entered yet.</p>
-    {% endif %}
+            <!-- Check the error first: study_sessions is missing from the context then, not None. -->
+            {% if study_day_error %}
+                <p role="status">{{ study_day_error }}</p>
+            {% elif study_sessions is None %}
+                <p>No study plan has been generated yet.</p>
+            {% elif study_sessions %}
+                <ul class="assignment-list">
+                    {% for session in study_sessions %}
+                        <li class="assignment-card study-session">
+                            <span class="assignment-status">Study</span>
+                            <div class="assignment-details">
+                                <h3 class="assignment-title">{{ session.assignment.title }}</h3>
+                            </div>
+                            <!-- date and time filters convert the stored UTC times to local time. -->
+                            <p class="assignment-due">{{ session.start|date:"M j, Y" }} · {{ session.start|time:"g:i A" }} to {{ session.end|time:"g:i A" }}</p>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% elif study_day %}
+                <!-- A plan exists, but nothing is scheduled on the chosen day. -->
+                <p>No study sessions on this day.</p>
+            {% else %}
+                <!-- A plan with no sessions at all, e.g. everything went into its notices. -->
+                <p>Your study plans have no sessions.</p>
+            {% endif %}
+        </section>
+    </div>
 
     <section class="planning-assignments" aria-labelledby="planning-assignments-heading">
         <h2 id="planning-assignments-heading">Assignments to plan</h2>
@@ -240,40 +245,47 @@
         })();
     </script>
 
-    <!-- The student's study plans, optionally narrowed to one day. -->
-    <h2>Generated Plan</h2>
+    <!-- The original form, kept for times the grid cannot show, such as 9:30.
+         It opens by itself when a submitted time was rejected, so the error is seen. -->
+    <details{% if form.errors %} open{% endif %}>
+        <summary>Add a time that is not on the hour</summary>
 
-    <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
-    <form method="get">
-        <label for="study-day">Day</label>
-        <input type="date" id="study-day" name="date" value="{{ study_day|date:'Y-m-d' }}">
-        <button type="submit">Show day</button>
-        <a class="button-secondary" href="{% url 'availability:list' %}?date=">Show all days</a>
-    </form>
+        <!-- Form used to create a new availability entry. -->
+        <h2>Add Availability</h2>
 
-    <!-- Check the error first: study_sessions is missing from the context then, not None. -->
-    {% if study_day_error %}
-        <p role="status">{{ study_day_error }}</p>
-    {% elif study_sessions is None %}
-        <p>No study plan has been generated yet.</p>
-    {% elif study_sessions %}
-        <ul class="assignment-list">
-            {% for session in study_sessions %}
-                <li class="assignment-card study-session">
-                    <span class="assignment-status">Study</span>
-                    <div class="assignment-details">
-                        <h3 class="assignment-title">{{ session.assignment.title }}</h3>
-                    </div>
-                    <!-- date and time filters convert the stored UTC times to local time. -->
-                    <p class="assignment-due">{{ session.start|date:"M j, Y" }} · {{ session.start|time:"g:i A" }} to {{ session.end|time:"g:i A" }}</p>
-                </li>
-            {% endfor %}
-        </ul>
-    {% elif study_day %}
-        <!-- A plan exists, but nothing is scheduled on the chosen day. -->
-        <p>No study sessions on this day.</p>
-    {% else %}
-        <!-- A plan with no sessions at all, e.g. everything went into its notices. -->
-        <p>Your study plans have no sessions.</p>
-    {% endif %}
+        <form method="post">
+
+            <!-- Django requires this token on POST forms for security. -->
+            {% csrf_token %}
+
+            <!-- Render the date, start-time, and end-time fields. -->
+            {{ form.as_p }}
+
+            <!-- Submit the new availability entry. -->
+            <button type="submit">Save Availability</button>
+        </form>
+
+        <!-- Display the student's currently saved availability entries. -->
+        <h2>Saved Availability</h2>
+
+        {% if availability_entries %}
+            <ul>
+                {% for entry in availability_entries %}
+                    <li>
+                        <!-- Display the saved database values. -->
+                        {{ entry.date }}:
+                        {{ entry.start_time }} - {{ entry.end_time }}
+
+                        <!-- Allow the student to edit this availability entry. -->
+                        <a class="button-secondary" href="{% url 'availability:edit' entry.id %}">
+                            Edit
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <!-- Show a clear message when no availability has been entered. -->
+            <p>No availability entered yet.</p>
+        {% endif %}
+    </details>
 {% endblock %}
