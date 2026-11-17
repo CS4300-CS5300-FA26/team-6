@@ -54,6 +54,50 @@
         </section>
     </div>
 
+    <!-- The original form, kept for times the grid cannot show, such as 9:30.
+         It opens by itself when a submitted time was rejected, so the error is seen. -->
+    <details{% if form.errors %} open{% endif %}>
+        <summary>View your availability...</summary>
+
+        <!-- Form used to create a new availability entry. -->
+        <h2>Add Availability</h2>
+
+        <form method="post">
+
+            <!-- Django requires this token on POST forms for security. -->
+            {% csrf_token %}
+
+            <!-- Render the date, start-time, and end-time fields. -->
+            {{ form.as_p }}
+
+            <!-- Submit the new availability entry. -->
+            <button type="submit">Save Availability</button>
+        </form>
+
+        <!-- Display the student's currently saved availability entries. -->
+        <h2>Saved Availability</h2>
+
+        {% if availability_entries %}
+            <ul>
+                {% for entry in availability_entries %}
+                    <li>
+                        <!-- Display the saved database values. -->
+                        {{ entry.date }}:
+                        {{ entry.start_time }} - {{ entry.end_time }}
+
+                        <!-- Allow the student to edit this availability entry. -->
+                        <a class="button-secondary" href="{% url 'availability:edit' entry.id %}">
+                            Edit
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <!-- Show a clear message when no availability has been entered. -->
+            <p>No availability entered yet.</p>
+        {% endif %}
+    </details>
+
     <section class="planning-assignments" aria-labelledby="planning-assignments-heading">
         <h2 id="planning-assignments-heading">Assignments to plan</h2>
 
@@ -244,48 +288,4 @@
             });
         })();
     </script>
-
-    <!-- The original form, kept for times the grid cannot show, such as 9:30.
-         It opens by itself when a submitted time was rejected, so the error is seen. -->
-    <details{% if form.errors %} open{% endif %}>
-        <summary>Add a time manually...</summary>
-
-        <!-- Form used to create a new availability entry. -->
-        <h2>Add Availability</h2>
-
-        <form method="post">
-
-            <!-- Django requires this token on POST forms for security. -->
-            {% csrf_token %}
-
-            <!-- Render the date, start-time, and end-time fields. -->
-            {{ form.as_p }}
-
-            <!-- Submit the new availability entry. -->
-            <button type="submit">Save Availability</button>
-        </form>
-
-        <!-- Display the student's currently saved availability entries. -->
-        <h2>Saved Availability</h2>
-
-        {% if availability_entries %}
-            <ul>
-                {% for entry in availability_entries %}
-                    <li>
-                        <!-- Display the saved database values. -->
-                        {{ entry.date }}:
-                        {{ entry.start_time }} - {{ entry.end_time }}
-
-                        <!-- Allow the student to edit this availability entry. -->
-                        <a class="button-secondary" href="{% url 'availability:edit' entry.id %}">
-                            Edit
-                        </a>
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <!-- Show a clear message when no availability has been entered. -->
-            <p>No availability entered yet.</p>
-        {% endif %}
-    </details>
 {% endblock %}
