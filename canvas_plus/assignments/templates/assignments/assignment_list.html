@@ -3,7 +3,14 @@
 {% block title %} Upcoming Assignments {% endblock %}
 
 {% block content %}
-  <h1>Upcoming Assignments</h1>
+  <div class="assignment-header">
+    <h1>Upcoming Assignments</h1>
+
+    {# Give students a visible way to open assignment keyword search. #}
+    <a href="{% url 'search_assignments' %}">
+      Search
+    </a>
+  </div>
   {% for message in messages %}
     <p class="{{ message.tags }}" role="status">{{ message }}</p>
   {% endfor %}

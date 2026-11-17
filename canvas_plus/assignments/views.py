@@ -8,9 +8,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from django.db.models import Q
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -30,7 +32,10 @@ from .sync import sync_canvas_assignments_if_needed
 from .uploads import save_attachments, validate_batch
 from .forms import EffortEstimateForm 
 from study_plan.effort_estimation import estimate_and_save_assignment_effort
+from study_plan.exceptions import StudyPlanError
+from study_plan.generate import generate_plan
 
+MAX_ASSIGNMENT_PRIMARY_KEY = (1 << 63) - 1
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +55,7 @@ def recently_graded_context(token, courses, session):
 
 
 @sensitive_variables("token")
-def load_canvas_context(user, *, sync_all_assignments=False):
+def load_canvas_context(user, *, sync_all_assignments=False, load_upcoming=True):
     """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
@@ -77,8 +82,9 @@ def load_canvas_context(user, *, sync_all_assignments=False):
             token = connection.get_token()
             with requests.Session() as session:
                 courses = cached_courses(connection, token, session, list_courses)
-                assignments = list_upcoming_assignments(token, courses, session=session)
-                graded_context = recently_graded_context(token, courses, session)
+                if load_upcoming:
+                    assignments = list_upcoming_assignments(token, courses, session=session)
+                    graded_context = recently_graded_context(token, courses, session)
                 if sync_all_assignments:
                     try:
                         sync_canvas_assignments_if_needed(
@@ -123,6 +129,70 @@ def load_canvas_context(user, *, sync_all_assignments=False):
         **graded_context,
     }
 
+@login_required
+def search_assignments(request):
+    """Search the signed-in student's locally indexed Canvas assignments."""
+
+    # Normalize the search term so whitespace-only searches are treated
+    # the same as an empty search.
+    search_term = request.GET.get("q", "").strip()
+
+    # Start with no results. An empty search must not query assignments.
+    results = Assignment.objects.none()
+    search_ran = False
+
+    if search_term:
+        search_ran = True
+
+        # Search only assignments owned by the signed-in student and
+        # currently marked as successfully synchronized from Canvas.
+        results = Assignment.objects.filter(
+            user=request.user,
+            sync_state="synced",
+        ).filter(
+            # A match in either the assignment title or description
+            # should include the assignment in the results.
+            Q(title__icontains=search_term)
+            | Q(description__icontains=search_term)
+        ).order_by(
+            "course",
+            "title",
+        )
+
+    # CanvasConnection stores the student's Canvas host. We only use it
+    # to construct assignment links; the search itself remains local.
+    connection = CanvasConnection.objects.filter(
+        user=request.user,
+    ).first()
+
+    # Build Canvas assignment URLs from IDs already stored locally.
+    search_results = []
+    for assignment in results:
+        canvas_url = None
+
+        if connection is not None:
+            canvas_url = (
+                f"{connection.canvas_url.rstrip('/')}"
+                f"/courses/{assignment.canvas_course_id}"
+                f"/assignments/{assignment.canvas_assignment_id}"
+            )
+
+        search_results.append(
+            {
+                "assignment": assignment,
+                "canvas_url": canvas_url,
+            }
+        )
+
+    return render(
+        request,
+        "assignments/search_assignments.html",
+        {
+            "search_term": search_term,
+            "search_ran": search_ran,
+            "search_results": search_results,
+        },
+    )
 
 @login_required
 def assignment_list(request):
@@ -167,6 +237,34 @@ def assignment_list(request):
                 attachment
             )
     return render(request, "assignments/assignment_list.html", context)
+
+
+@login_required
+@require_POST
+def generate_study_plan(request):
+    """Generate a study plan for the signed-in student's submitted assignments."""
+    raw_assignment_ids = request.POST.getlist("assignment_ids")
+    if any(
+        not value.isascii() or not value.isdecimal() or len(value) > 19
+        for value in raw_assignment_ids
+    ):
+        messages.error(request, "Select valid assignments.")
+        return redirect("availability:list")
+
+    assignment_ids = [int(value) for value in raw_assignment_ids]
+    if any(
+        assignment_id < 1 or assignment_id > MAX_ASSIGNMENT_PRIMARY_KEY
+        for assignment_id in assignment_ids
+    ):
+        messages.error(request, "Select valid assignments.")
+        return redirect("availability:list")
+
+    try:
+        generate_plan(request.user, assignment_ids)
+    except StudyPlanError as error:
+        messages.error(request, str(error))
+        return redirect("availability:list")
+    return redirect(f"{reverse('availability:list')}?date=")
 
 
 @login_required

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Search Assignments</h1>
+
+  {# Use GET so the search term appears in the URL and can be repeated/bookmarked. #}
+  <form method="get" action="{% url 'search_assignments' %}">
+    <label for="assignment-search">Search assignments</label>
+
+    <input
+      id="assignment-search"
+      type="search"
+      name="q"
+      value="{{ search_term }}"
+      placeholder="Search assignments"
+    >
+
+    <button type="submit">Search</button>
+  </form>
+
+  {% if not search_term %}
+    <p>Enter a search term</p>
+
+  {% elif search_ran and not search_results %}
+    <p>No results for '{{ search_term }}'</p>
+
+  {% else %}
+    <section aria-label="Assignment search results">
+      {% for result in search_results %}
+        <article>
+          <h2>{{ result.assignment.title }}</h2>
+
+          <p>
+            Course: {{ result.assignment.course }}
+          </p>
+
+          {% if result.canvas_url %}
+            {# Canvas must open in a new tab per the acceptance criteria. #}
+            <a
+              href="{{ result.canvas_url }}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Canvas
+            </a>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+{% endblock %}
