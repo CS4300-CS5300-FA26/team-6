@@ -20,4 +20,6 @@ urlpatterns = [
         views.availability_edit,
         name="edit",
     ),
+    #save the weekly grid's ticked blocks
+    path("week/", views.availability_save_week, name="save_week"),
 ]
