@@ -47,14 +47,20 @@ team-6/
 │   │   ├── urls.py
 │   │   ├── views.py
 │   │   └── wsgi.py
-│   ├── courses/                        # Current course list and course pages
+│   ├── courses/                        # Current course list, course pages, and syllabus files
 │   │   ├── templates/courses/
+│   │   │   ├── includes/
+│   │   │   │   └── file_viewer.html    # In-place PDF viewer with a download link
 │   │   │   ├── course_detail.html
-│   │   │   └── course_list.html
+│   │   │   ├── course_list.html
+│   │   │   ├── file_download_failed.html
+│   │   │   └── file_message.html       # Messages shown inside the file viewer
 │   │   ├── apps.py
 │   │   ├── current.py                  # Which courses count as current
+│   │   ├── files.py                    # Turns syllabus file links into viewers and downloads
 │   │   ├── syllabus.py                 # Makes Canvas syllabus HTML safe to show
 │   │   ├── test_current.py
+│   │   ├── test_files.py
 │   │   ├── test_syllabus.py
 │   │   ├── tests.py
 │   │   ├── urls.py
@@ -359,6 +365,14 @@ Stephen used AI to assist with creating the inference function, content builder,
 #### Current course list
 
 Jackson McGuire used Claude Code to help build the course list. Jackson ran every test red and green himself and verified the page against his real Canvas courses on a local server.
+
+#### Course page with syllabus
+
+Jackson McGuire used Claude Code to help build the course page. Jackson ran every test red and green himself and verified the page against his real Canvas syllabi on a local server.
+
+#### Syllabus file preview
+
+Jackson McGuire used Claude Code to help build the syllabus file preview. Jackson ran every test red and green himself and verified previews, downloads, and locked files against his real Canvas courses on a local server.
 
 #### Generating Study Sessiosn [Backend]
 

@@ -3,8 +3,10 @@
 This feature generates and persists study sessions for a student's selected
 assignments. It prepares the student's remaining availability, asks the AI
 inference layer for a structured schedule, validates the proposal locally, and
-only then saves the plan. The generation entry point is a backend service; this
-branch does not add a page or HTTP endpoint for it.
+only then saves the plan. Before eligibility filtering, it automatically
+estimates effort for selected assignments that do not already have a positive
+saved estimate. The generation entry point remains a backend service; this
+feature does not add UI wiring or an HTTP endpoint.
 
 **User story:** As a student, I want my selected assignments scheduled into my
 free time before their deadlines, so that I can see a practical study plan
@@ -17,18 +19,20 @@ without overlapping existing commitments.
 | `canvas_plus/study_plan/generate.py` | The orchestration, assignment scoping and eligibility, bounded inference retry, and atomic persistence. |
 | `canvas_plus/study_plan/availability_windows.py` | User-specific availability preparation, time-zone and daylight-saving resolution, interval merging, and removal of existing sessions. |
 | `canvas_plus/study_plan/prompt.py` | Earliest-deadline-first ordering and the structured assignment/window payload sent to inference. |
+| `canvas_plus/study_plan/effort_estimation.py` | Assignment effort estimation, persistence, and validation of the estimate input. |
 | `canvas_plus/study_plan/schema.py` | The Pydantic response contract for sessions and notices. |
 | `canvas_plus/study_plan/validation.py` | Local checks for time windows, overlaps, deadlines, late flags, and estimated effort. |
 | `canvas_plus/study_plan/models.py` | The persisted plan and session records. |
 | `canvas_plus/study_plan/exceptions.py` | The service-level errors callers can handle. |
 | `canvas_plus/study_plan/test_generate_plan.py` | Integration coverage for selection, retries, persistence, deadlines, and remaining effort. |
+| `canvas_plus/study_plan/test_effort_estimation.py` | Focused coverage for estimation inputs, estimate persistence, and manual overrides. |
 | `canvas_plus/study_plan/test_availability_windows.py` and `canvas_plus/study_plan/test_validation.py` | Focused tests for interval preparation and proposal rules. |
 
 ## Models at a glance
 
 | Model | Purpose | Key rules |
 | --- | --- | --- |
-| `Assignment` | A Canvas assignment selected for planning | `estimated_effort_minutes` is nullable; an assignment is schedulable only when it has a due date and a positive effort estimate. |
+| `Assignment` | A Canvas assignment selected for planning | Stores its description, nullable `estimated_effort_minutes`, and estimate source; an assignment is schedulable only when it has a due date and a positive effort estimate. |
 | `StudyPlan` | One generated plan for a user | Required user FK (CASCADE); `created_at`; JSON `notices` list. |
 | `StudySession` | One scheduled block in a plan | Required plan and assignment FKs (CASCADE); aware `start` and `end`; `late` records whether the session ends after its assignment deadline. |
 
@@ -46,19 +50,33 @@ generate/validate/persist flow:
 2. Assignments are queried by both primary key and user. If any requested ID is
    not owned by that user or does not exist, the call raises
    `InaccessibleAssignmentError`; it does not silently plan a partial selection.
-3. Assignments without a due date or a positive integer effort estimate are
-   excluded. If none remain, `NoEligibleAssignmentsError` is raised.
-4. The user's availability is trimmed to the future, overlapping or adjacent
+3. Before eligibility filtering, each assignment without a positive saved
+   estimate is passed to the existing effort estimator with its title, due
+   date, and description. Successful estimates are saved as positive minutes
+   and marked automatic. Existing positive manual or automatic estimates are
+   reused without being refreshed.
+4. An assignment that cannot be estimated because required information is
+   missing or estimation raises `AIInferenceError` remains without a usable
+   estimate. Eligibility filtering skips it with a notice; other selected
+   assignments continue. Assignments without due dates are also skipped. If no
+   eligible assignments remain, `NoEligibleAssignmentsError` is raised.
+5. The user's availability is trimmed to the future, overlapping or adjacent
    windows are merged, and sessions from their earlier plans are subtracted.
    If no free interval remains, `NoUsableAvailabilityError` is raised.
-5. Eligible assignments are ordered by due date and serialized with the free
+6. Eligible assignments are ordered by due date and serialized with the free
    windows. Inference returns a `StudyPlan` response containing one or more
    sessions and optional notices.
-6. Every proposal is validated. An inference or validation failure triggers
+7. Every proposal is validated. A planning inference or validation failure triggers
    one retry; after two failed attempts, the service raises
    `StudyPlanRetriesExhaustedError`.
-7. Once a proposal passes, the plan and all its sessions are written in one
+8. Once a proposal passes, the plan and all its sessions are written in one
    database transaction. Invalid or failed proposals create no plan rows.
+
+Effort estimates are saved separately as they are generated. If a later
+availability check or planning attempt fails, those estimates remain on their
+assignments and are reused on a subsequent request. Estimation failures are
+handled per assignment and do not consume the planner's inference retry
+attempts.
 
 ## Scheduling rules
 
@@ -121,10 +139,11 @@ The return value is a persisted `StudyPlan`; its sessions are available through
 ## Boundaries
 
 - The planner only handles assignments already stored locally; it does not
-  fetch assignments or estimates from Canvas.
-- The feature provides a service function, not an HTTP endpoint, form, or UI.
-- Estimates are not inferred by this flow. Callers must provide positive
-  `estimated_effort_minutes` values before an assignment can be planned.
+   fetch assignments or assignment descriptions from Canvas during generation.
+- The feature provides a service function, not UI wiring or an HTTP endpoint.
+- Missing estimates are generated during this flow when the assignment has
+   enough information. A positive estimate already saved on an assignment is
+   reused regardless of whether it is manual or automatic.
 - The AI output is never trusted as the final schedule: local validation is
   required before persistence.
 - Previously saved sessions reserve time but are not automatically regenerated

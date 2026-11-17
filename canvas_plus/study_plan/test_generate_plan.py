@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from assignments.models import Assignment
 from availability.models import Availability
@@ -21,6 +22,7 @@ from study_plan.exceptions import (
 from study_plan.generate import generate_plan
 from study_plan.models import StudyPlan as PersistedStudyPlan
 from study_plan.models import StudySession
+from study_plan.schema import EffortEstimate
 from study_plan.schema import StudyPlan as StudyPlanResponse
 from study_plan.schema import StudySessionProposal
 
@@ -368,6 +370,300 @@ class GeneratePlanTests(TestCase):
         for title in ("Missing due date", "Missing effort estimate", "Zero effort estimate"):
             with self.subTest(excluded_assignment=title):
                 self.assertNotIn(title, inference_input)
+
+    def test_generates_missing_estimate_and_reuses_saved_estimates(self):
+        """Generation estimates missing effort and preserves saved manual and automatic values."""
+        user = get_user_model().objects.create_user(username="estimate-during-generation")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(11, 15),
+        )
+        due_date = datetime.combine(
+            available_date + timedelta(days=1),
+            time(17),
+            tzinfo=local_timezone,
+        )
+        missing_estimate = Assignment.objects.create(
+            user=user,
+            canvas_course_id=21,
+            canvas_assignment_id=201,
+            title="New estimate assignment",
+            course="Biology",
+            due_date=due_date,
+            description="Write a short analysis of the assigned reading.",
+        )
+        manual_estimate = Assignment.objects.create(
+            user=user,
+            canvas_course_id=21,
+            canvas_assignment_id=202,
+            title="Manual estimate assignment",
+            course="Biology",
+            due_date=due_date,
+            description="Complete the provided problem set.",
+            estimated_effort_minutes=45,
+            effort_estimate_source="manual",
+        )
+        automatic_estimate = Assignment.objects.create(
+            user=user,
+            canvas_course_id=21,
+            canvas_assignment_id=203,
+            title="Existing automatic estimate assignment",
+            course="Biology",
+            due_date=due_date,
+            description="Prepare the lab report.",
+            estimated_effort_minutes=60,
+            effort_estimate_source="automatic",
+        )
+        proposal = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=missing_estimate.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+                StudySessionProposal(
+                    assignment_id=manual_estimate.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(10, 15),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+                StudySessionProposal(
+                    assignment_id=automatic_estimate.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(10, 15),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(11, 15),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+            ],
+        )
+
+        with (
+            patch(
+                "study_plan.effort_estimation.infer",
+                return_value=EffortEstimate(
+                    estimated_minutes=30,
+                    reason="A short analysis requires focused reading and writing.",
+                ),
+            ) as estimate_infer,
+            patch("study_plan.generate.infer", return_value=proposal) as plan_infer,
+        ):
+            plan = generate_plan(
+                user,
+                [missing_estimate.id, manual_estimate.id, automatic_estimate.id],
+            )
+
+        missing_estimate.refresh_from_db()
+        manual_estimate.refresh_from_db()
+        automatic_estimate.refresh_from_db()
+        self.assertEqual(missing_estimate.estimated_effort_minutes, 30)
+        self.assertEqual(missing_estimate.effort_estimate_source, "automatic")
+        self.assertEqual(manual_estimate.estimated_effort_minutes, 45)
+        self.assertEqual(manual_estimate.effort_estimate_source, "manual")
+        self.assertEqual(automatic_estimate.estimated_effort_minutes, 60)
+        self.assertEqual(automatic_estimate.effort_estimate_source, "automatic")
+        self.assertEqual(plan.sessions.count(), 3)
+        estimate_infer.assert_called_once()
+        plan_infer.assert_called_once()
+        planning_input = str(plan_infer.call_args.args[1])
+        for expected_minutes in (30, 45, 60):
+            self.assertIn(f'"estimated_effort_minutes": {expected_minutes}', planning_input)
+
+    def test_unestimable_assignments_are_skipped_with_notice(self):
+        """Assignments without details or with estimation failure do not block planning."""
+        user = get_user_model().objects.create_user(username="unestimable-assignments")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(10),
+        )
+        due_date = datetime.combine(
+            available_date + timedelta(days=1),
+            time(17),
+            tzinfo=local_timezone,
+        )
+        missing_information = Assignment.objects.create(
+            user=user,
+            canvas_course_id=22,
+            canvas_assignment_id=221,
+            title="Missing assignment details",
+            course="Biology",
+            due_date=due_date,
+            description="",
+        )
+        provider_failure = Assignment.objects.create(
+            user=user,
+            canvas_course_id=22,
+            canvas_assignment_id=222,
+            title="Estimator unavailable assignment",
+            course="Biology",
+            due_date=due_date,
+            description="Complete a short lab report.",
+        )
+        eligible_assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=22,
+            canvas_assignment_id=223,
+            title="Already estimated assignment",
+            course="Biology",
+            due_date=due_date,
+            description="Review the course notes.",
+            estimated_effort_minutes=30,
+            effort_estimate_source="manual",
+        )
+        proposal = StudyPlanResponse(
+            sessions=[
+                StudySessionProposal(
+                    assignment_id=eligible_assignment.id,
+                    start=datetime.combine(
+                        available_date,
+                        time(9),
+                        tzinfo=local_timezone,
+                    ),
+                    end=datetime.combine(
+                        available_date,
+                        time(9, 30),
+                        tzinfo=local_timezone,
+                    ),
+                    late=False,
+                ),
+            ],
+        )
+
+        with (
+            patch(
+                "study_plan.effort_estimation.infer",
+                side_effect=AIProviderError("temporary estimate provider failure"),
+            ) as estimate_infer,
+            patch("study_plan.generate.infer", return_value=proposal),
+        ):
+            plan = generate_plan(
+                user,
+                [
+                    missing_information.id,
+                    provider_failure.id,
+                    eligible_assignment.id,
+                ],
+            )
+
+        estimate_infer.assert_called_once()
+        self.assertEqual(
+            list(plan.sessions.values_list("assignment_id", flat=True)),
+            [eligible_assignment.id],
+        )
+        for assignment in (missing_information, provider_failure):
+            self.assertTrue(
+                any(assignment.title in notice for notice in plan.notices),
+                f"Expected a skip notice for {assignment.title!r}; got {plan.notices!r}",
+            )
+
+    def test_no_eligible_assignments_after_estimation(self):
+        """No plan is persisted when estimation leaves every selection ineligible."""
+        user = get_user_model().objects.create_user(username="no-usable-estimate")
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=23,
+            canvas_assignment_id=231,
+            title="Unestimable assignment",
+            course="Biology",
+            due_date=timezone.now() + timedelta(days=2),
+            description="Details are present, but estimation returns no result.",
+        )
+
+        with (
+            patch(
+                "study_plan.effort_estimation.infer",
+                return_value=None,
+            ) as estimate_infer,
+            patch("study_plan.generate.infer") as plan_infer,
+        ):
+            with self.assertRaises(NoEligibleAssignmentsError):
+                generate_plan(user, [assignment.id])
+
+        estimate_infer.assert_called_once()
+        plan_infer.assert_not_called()
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=user).exists())
+
+    def test_estimate_survives_plan_generation_failure(self):
+        """A saved automatic estimate remains when plan inference exhausts its retries."""
+        user = get_user_model().objects.create_user(username="estimate-before-plan-failure")
+        local_timezone = ZoneInfo(settings.TIME_ZONE)
+        available_date = date.today() + timedelta(days=1)
+        Availability.objects.create(
+            user=user,
+            date=available_date,
+            start_time=time(9),
+            end_time=time(10),
+        )
+        assignment = Assignment.objects.create(
+            user=user,
+            canvas_course_id=24,
+            canvas_assignment_id=241,
+            title="Estimate survives plan failure",
+            course="Biology",
+            due_date=datetime.combine(
+                available_date + timedelta(days=1),
+                time(17),
+                tzinfo=local_timezone,
+            ),
+            description="Write a report based on the provided experiment.",
+        )
+
+        with (
+            patch(
+                "study_plan.effort_estimation.infer",
+                return_value=EffortEstimate(
+                    estimated_minutes=60,
+                    reason="The report requires analysis and writing.",
+                ),
+            ) as estimate_infer,
+            patch(
+                "study_plan.generate.infer",
+                side_effect=[
+                    AIProviderError("temporary planning provider failure"),
+                    AIProviderError("planning provider remains unavailable"),
+                ],
+            ) as plan_infer,
+        ):
+            with self.assertRaises(StudyPlanRetriesExhaustedError):
+                generate_plan(user, [assignment.id])
+
+        assignment.refresh_from_db()
+        estimate_infer.assert_called_once()
+        self.assertEqual(plan_infer.call_count, 2)
+        self.assertEqual(assignment.estimated_effort_minutes, 60)
+        self.assertEqual(assignment.effort_estimate_source, "automatic")
+        self.assertFalse(PersistedStudyPlan.objects.filter(user=user).exists())
 
     @patch("study_plan.generate.infer")
     def test_empty_assignment_selection_raises_error(self, mock_infer):

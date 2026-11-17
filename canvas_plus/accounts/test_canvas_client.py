@@ -11,6 +11,9 @@ from . import canvas_client
 from .canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
+    CanvasFileTooLarge,
+    download_course_file,
+    get_course_file,
     get_course_syllabus,
     list_courses,
     list_upcoming_assignments,
@@ -83,6 +86,137 @@ def test_malformed_syllabus_is_not_treated_as_success():
                return_value=response({"id": 7, "syllabus_body": 42})):
         with pytest.raises(CanvasAPIError):
             get_course_syllabus("fake-token", 7)
+
+
+@pytest.mark.unit
+def test_course_file_request_returns_its_details():
+    """Asking for one course file returns the name, size, and download address the viewer needs."""
+    with patch("accounts.canvas_client.requests.get", return_value=response({
+        "id": 9,
+        "display_name": "syllabus.pdf",
+        "size": 184910,
+        "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+    })) as get:
+        assert get_course_file("fake-token", 7, 9) == {
+            "name": "syllabus.pdf",
+            "size": 184910,
+            "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+        }
+    assert get.call_args.args == ("https://canvas.example.edu/api/v1/courses/7/files/9",)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("payload", [
+    [],
+    {"display_name": "syllabus.pdf"},
+    {"display_name": "syllabus.pdf", "size": "big", "url": "https://canvas.example.edu/f"},
+])
+def test_malformed_file_details_are_not_treated_as_success(payload):
+    """File details missing a name, size, or address are reported as a Canvas problem."""
+    with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
+        with pytest.raises(CanvasAPIError):
+            get_course_file("fake-token", 7, 9)
+
+
+FILE_URL = "https://canvas.example.edu/files/9/download?download_frd=1"
+# The real redirect chain traced from UCCS Canvas: user content, then Instructure's file service.
+USER_CONTENT_URL = "https://a1-9.cluster1.canvas-user-content.com/files/9"
+FILE_SERVICE_URL = "https://inst-fs-iad-prod.inscloudgate.net/files/9"
+FILE_CDN_URL = "https://cdn.inst-fs-iad-prod.inscloudgate.net/9?signature=x"
+
+
+def file_response(chunks=(), *, status=200, location=None):
+    """A requests-like file response that streams its body in chunks."""
+    result = Mock(status_code=status)
+    result.headers = {"Location": location} if location else {}
+    result.iter_content.return_value = iter(chunks)
+    return result
+
+
+@pytest.mark.unit
+def test_file_download_sends_the_token_only_to_canvas():
+    """Canvas gets the token; the file storage it redirects to never does."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=USER_CONTENT_URL),
+        file_response([b"%PDF-1.7 ", b"pages"]),
+    ]) as get:
+        assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7 pages"
+    canvas_call, storage_call = get.call_args_list
+    assert canvas_call.args == (FILE_URL,)
+    assert canvas_call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+    assert storage_call.args == (USER_CONTENT_URL,)
+    assert "Authorization" not in storage_call.kwargs.get("headers", {})
+
+
+@pytest.mark.unit
+def test_file_download_follows_storage_redirects_without_the_token():
+    """Canvas's real three-hop chain works, and every hop after Canvas goes without the token."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=USER_CONTENT_URL),
+        file_response(status=302, location=FILE_SERVICE_URL),
+        file_response(status=302, location=FILE_CDN_URL),
+        file_response([b"%PDF-1.7"]),
+    ]) as get:
+        assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7"
+    assert get.call_count == 4
+    for storage_call in get.call_args_list[1:]:
+        assert "Authorization" not in storage_call.kwargs.get("headers", {})
+        assert storage_call.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("location", [
+    "http://inst-fs-iad-prod.inscloudgate.net/files/9",
+    "https://evil.example.net/files/9",
+    "https://evil-inscloudgate.net/files/9",
+    "https://169.254.169.254/latest/meta-data",
+    "https://127.0.0.1/admin",
+    "https://10.0.0.5/files/9",
+])
+def test_file_download_refuses_an_unsafe_redirect(location):
+    """Only HTTPS redirects to Canvas or Instructure's file storage are followed."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=location),
+    ]) as get:
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", FILE_URL)
+    assert get.call_count == 1
+
+
+@pytest.mark.unit
+def test_file_download_refuses_an_address_off_canvas():
+    """A download address on another host is never requested with the token."""
+    with patch("accounts.canvas_client.requests.get") as get:
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", "https://untrusted.example/files/9/download")
+    get.assert_not_called()
+
+
+@pytest.mark.unit
+def test_file_over_the_size_limit_stops_downloading():
+    """Downloading stops as soon as the file passes the limit."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=file_response([b"x" * 8, b"x" * 8, b"x" * 8])):
+        with pytest.raises(CanvasFileTooLarge):
+            download_course_file("fake-token", FILE_URL, max_bytes=10)
+
+
+@pytest.mark.unit
+def test_failed_file_download_is_a_canvas_problem():
+    """A file Canvas won't hand over is a normal Canvas error, not a crash."""
+    with patch("accounts.canvas_client.requests.get", return_value=file_response(status=404)):
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", FILE_URL)
+
+
+@pytest.mark.unit
+def test_unauthorized_request_keeps_the_token_valid():
+    """A 401 without Canvas's rejected-token header means not allowed, not an expired token."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=response({}, status=401, headers={})):
+        with pytest.raises(CanvasAPIError) as raised:
+            get_course_syllabus("fake-token", 7)
+    assert not isinstance(raised.value, CanvasAuthenticationError)
 
 
 @pytest.mark.unit
