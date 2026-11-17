@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -31,9 +32,12 @@ from .uploads import save_attachments, validate_batch
 from .week import this_week_context
 from .forms import EffortEstimateForm 
 from study_plan.effort_estimation import estimate_and_save_assignment_effort
+from study_plan.exceptions import StudyPlanError
+from study_plan.generate import generate_plan
 
 # Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
 COURSE_CACHE_SECONDS = 60 * 60
+MAX_ASSIGNMENT_PRIMARY_KEY = (1 << 63) - 1
 logger = logging.getLogger(__name__)
 
 
@@ -53,7 +57,7 @@ def recently_graded_context(token, courses, session):
 
 
 @sensitive_variables("token")
-def load_canvas_context(user, *, sync_all_assignments=False):
+def load_canvas_context(user, *, sync_all_assignments=False, load_upcoming=True):
     """Check the connection and load Canvas data for the student."""
     assignments = []
     unavailable_message = ""
@@ -84,8 +88,9 @@ def load_canvas_context(user, *, sync_all_assignments=False):
                 if courses is None:
                     courses = list_courses(token, session=session)
                     cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
-                assignments = list_upcoming_assignments(token, courses, session=session)
-                graded_context = recently_graded_context(token, courses, session)
+                if load_upcoming:
+                    assignments = list_upcoming_assignments(token, courses, session=session)
+                    graded_context = recently_graded_context(token, courses, session)
                 if sync_all_assignments:
                     try:
                         sync_canvas_assignments_if_needed(
@@ -175,6 +180,34 @@ def assignment_list(request):
             )
     context.update(this_week_context(request.user, context, timezone.localdate()))
     return render(request, "assignments/assignment_list.html", context)
+
+
+@login_required
+@require_POST
+def generate_study_plan(request):
+    """Generate a study plan for the signed-in student's submitted assignments."""
+    raw_assignment_ids = request.POST.getlist("assignment_ids")
+    if any(
+        not value.isascii() or not value.isdecimal() or len(value) > 19
+        for value in raw_assignment_ids
+    ):
+        messages.error(request, "Select valid assignments.")
+        return redirect("availability:list")
+
+    assignment_ids = [int(value) for value in raw_assignment_ids]
+    if any(
+        assignment_id < 1 or assignment_id > MAX_ASSIGNMENT_PRIMARY_KEY
+        for assignment_id in assignment_ids
+    ):
+        messages.error(request, "Select valid assignments.")
+        return redirect("availability:list")
+
+    try:
+        generate_plan(request.user, assignment_ids)
+    except StudyPlanError as error:
+        messages.error(request, str(error))
+        return redirect("availability:list")
+    return redirect(f"{reverse('availability:list')}?date=")
 
 
 @login_required
