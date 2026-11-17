@@ -1,0 +1,1 @@
+"""Tests for calendar event selection and serialization."""

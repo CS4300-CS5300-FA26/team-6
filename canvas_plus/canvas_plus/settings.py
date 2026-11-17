@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'courses.apps.CoursesConfig',
     'availability',
     'study_plan.apps.StudyPlanConfig',
+    'calendar_feed.apps.CalendarFeedConfig',
 ]
 
 MIDDLEWARE = [

@@ -51,6 +51,9 @@ def login_view(request):
 @login_required
 def settings_view(request):
     """Manage account settings, including the user's Canvas connection."""
+    if request.method == "POST" and request.POST.get("action") == "calendar":
+        raise NotImplementedError("Calendar subscription actions are not implemented yet.")
+
     form = CanvasConnectionForm(request.POST if request.method == "POST" else None)
     connection = CanvasConnection.objects.filter(user=request.user).first()
     courses = None
