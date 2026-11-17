@@ -3,7 +3,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
-import math
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -164,11 +163,14 @@ def get_course_syllabus(token, course_id, session=None):
 
 
 def _readable_score(score):
-    """True when a current score is absent or a real, finite number (not True or False)."""
+    """True when a current score is absent or a percentage from 0 to 1000 (not True or False).
+
+    Extra credit can push a score past 100, but never near 1000. The range check also
+    rejects NaN, infinity, and integers too large to convert, without converting them.
+    """
     if score is None:
         return True
-    return (isinstance(score, (int, float)) and not isinstance(score, bool)
-            and math.isfinite(score))
+    return isinstance(score, (int, float)) and not isinstance(score, bool) and 0 <= score <= 1000
 
 
 def _readable_enrollment(enrollment):
