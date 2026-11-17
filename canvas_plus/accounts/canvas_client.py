@@ -173,14 +173,14 @@ def _readable_enrollment(enrollment):
 
 
 @sensitive_variables("token")
-def get_course_grade(token, course_id):
+def get_course_grade(token, course_id, session=None):
     """Return one course with my enrollments' current scores and whether totals are hidden."""
     course, _ = _get_json(
         f"{canvas_base_url()}/api/v1/courses/{course_id}",
         token,
         {"include[]": "total_scores"},
         "Canvas could not load your grade. Please try again.",
-        None,
+        session,
     )
     enrollments = (course.get("enrollments") or []) if isinstance(course, dict) else None
     if not isinstance(enrollments, list) or not all(map(_readable_enrollment, enrollments)):

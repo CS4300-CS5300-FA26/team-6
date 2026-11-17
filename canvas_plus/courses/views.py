@@ -96,10 +96,10 @@ def course_list(request):
 
 
 @sensitive_variables("token")
-def _grade_line(token, course_id):
+def _grade_line(token, course_id, session):
     """My current grade line; if only the grade can't load, the rest of the page still shows."""
     try:
-        return current_grade(get_course_grade(token, course_id))
+        return current_grade(get_course_grade(token, course_id, session=session))
     except CanvasAuthenticationError:
         raise
     except CanvasAPIError:
@@ -120,7 +120,7 @@ def course_detail(request, course_id):
             return None
         syllabus = get_course_syllabus(token, course_id, session=session)
         assignments = _assignments_context(token, [course], session)
-        return course, syllabus, assignments, _grade_line(token, course_id)
+        return course, syllabus, assignments, _grade_line(token, course_id, session)
 
     found, state = _load_from_canvas(request.user, load)
     if found is None and not state:
