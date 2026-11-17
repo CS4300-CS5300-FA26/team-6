@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("generate/", views.generate_study_plan, name="generate_plan"),
     path(
         "attachments/<int:attachment_id>/remove/",
         views.remove_attachment,
@@ -13,6 +14,12 @@ urlpatterns = [
         "<int:course_id>/<int:assignment_id>/attachments/",
         views.upload_attachments,
         name="upload_attachments",
+    ),
+    # Search the student's locally indexed Canvas assignments.
+    path(
+        "search/",
+        views.search_assignments,
+        name="search_assignments",
     ),
     path("", views.assignment_list, name="assignment_list"),
     path(
