@@ -43,23 +43,23 @@ def prepare_student(context):
     context.client.force_login(context.user)
 
 
-@given('I am on the "Connect Canvas" page')
+@given('I am on the "Settings" page')
 def step_connection_page(context):
     prepare_student(context)
-    context.response = context.client.get(reverse("connect_canvas"))
+    context.response = context.client.get(reverse("settings"))
     assert context.response.status_code == 200
 
 
 @when('I paste a valid Canvas personal access token and click "Connect"')
 def step_connect_valid(context):
-    context.response = context.client.post(reverse("connect_canvas"), {"token": TOKEN})
+    context.response = context.client.post(reverse("settings"), {"token": TOKEN})
     assert context.response.status_code == 200
 
 
 @when('I paste an invalid token and click "Connect"')
 def step_connect_invalid(context):
     context.canvas.side_effect = CanvasAuthenticationError("Rejected")
-    context.response = context.client.post(reverse("connect_canvas"), {"token": "invalid-token"})
+    context.response = context.client.post(reverse("settings"), {"token": "invalid-token"})
 
 
 @then("I see a list of my enrolled course names")
@@ -69,10 +69,10 @@ def step_course_names(context):
         assert f'<li>{course["name"]}</li>' in html
 
 
-@then('I remain on the "Connect Canvas" page')
+@then('I remain on the "Settings" page')
 def step_still_connect_page(context):
     assert context.response.status_code == 200
-    assert context.response.wsgi_request.path == reverse("connect_canvas")
+    assert context.response.wsgi_request.path == reverse("settings")
 
 
 @given("I previously connected my Canvas account")
@@ -95,14 +95,14 @@ def step_open_app(context):
     context.response = context.client.get("/", follow=True)
 
 
-@then('I see a link to the "Connect Canvas" page')
+@then('I see a link to the "Settings" page')
 def step_reconnect_link(context):
-    assert f'href="{reverse("connect_canvas")}"' in context.response.content.decode()
+    assert f'href="{reverse("settings")}"' in context.response.content.decode()
 
 
-@when('I open the "Connect Canvas" page')
+@when('I open the "Settings" page')
 def step_reopen_connection(context):
-    context.response = context.client.get(reverse("connect_canvas"))
+    context.response = context.client.get(reverse("settings"))
     assert context.response.status_code == 200
 
 

@@ -5,7 +5,7 @@
 {% block content %}
   <h1>Course Hub</h1>
   {% if canvas_connection_missing %}
-    <p role="status">Connect Canvas to see your courses. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.</p>
+    <p role="status">Connect Canvas to see your courses. <a href="{% url 'settings' %}">Settings</a>.</p>
   {% elif canvas_unavailable %}
     <p role="status">Unable to load your courses. Please try again.</p>
   {% elif courses %}

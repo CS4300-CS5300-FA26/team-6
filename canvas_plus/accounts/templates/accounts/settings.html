@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Canvas+{% endblock %}
+
+{% block content %}
+  <style>
+    .canvas-settings { width: 100%; max-width: 34rem; margin: 2rem auto; color: #1f2933; }
+    .canvas-settings h1 { margin: 0 0 0.75rem; color: #17324d; }
+    .canvas-settings h2 { margin: 1.5rem 0 0.75rem; color: #17324d; }
+    .canvas-settings p { line-height: 1.6; }
+    .canvas-settings .intro { margin-bottom: 1.5rem; }
+    .canvas-settings form { padding: 1.5rem; border: 1px solid #d0d7de;
+                            border-radius: 8px; background: #fff; }
+    .canvas-settings label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+    .canvas-settings input[type="password"] { display: block; width: 100%; padding: 0.75rem;
+                                               border: 1px solid #7b8794; border-radius: 6px;
+                                               background: #fff; color: inherit; font: inherit; }
+    .canvas-settings button { padding: 0.75rem 1.25rem; border: 0; border-radius: 6px;
+                              background: #17324d; color: #fff; font: inherit;
+                              font-weight: 600; cursor: pointer; }
+    .canvas-settings button:hover { background: #284b6d; }
+    .canvas-settings input:focus-visible,
+    .canvas-settings button:focus-visible,
+    .canvas-settings a:focus-visible { outline: 3px solid #2869a8; outline-offset: 3px; }
+    .canvas-settings .errorlist { padding-left: 1.25rem; color: #a31818; line-height: 1.6; }
+    .canvas-settings .token-help { color: #465564; font-size: 0.95rem; }
+    .canvas-settings a { color: #17324d; }
+    @media (max-width: 40rem) {
+      .canvas-settings { margin: 1rem auto; }
+      .canvas-settings form { padding: 1rem; }
+      .canvas-settings button { width: 100%; }
+    }
+  </style>
+
+  <section class="canvas-settings" aria-labelledby="settings-heading">
+    <h1 id="settings-heading">Settings</h1>
+    <p class="intro">Manage your Canvas+ account connections.</p>
+
+    <section aria-labelledby="canvas-connection-heading">
+      <h2 id="canvas-connection-heading">Canvas connection</h2>
+      <p>
+        Connect your Canvas account so Canvas+ can load your courses and coursework.
+        Paste your Canvas personal access token below.
+      </p>
+
+      {% if saved_token_last_four %}
+        <p>Saved token: <span aria-label="Hidden token characters">••••</span>{{ saved_token_last_four }}</p>
+        <p class="token-help">Enter a new token below to replace your saved connection.</p>
+      {% endif %}
+
+      {% if canvas_connected %}
+        <p role="status">Canvas connected</p>
+        <h3>Your enrolled courses</h3>
+        <ul>
+          {% for course in courses %}
+            <li>{{ course.name }}</li>
+          {% empty %}
+            <li>No active enrolled courses found.</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <form method="post" action="{% url 'settings' %}">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <p class="token-help">
+          Use a personal access token from your school's Canvas account, rather than
+          your Canvas password. Your token is hidden as you enter it.
+        </p>
+        <button type="submit">Connect</button>
+      </form>
+    </section>
+
+    <p><a class="button-secondary" href="{% url 'assignment_list' %}">Back to assignments</a></p>
+  </section>
+{% endblock %}

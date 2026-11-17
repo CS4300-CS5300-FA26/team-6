@@ -121,7 +121,7 @@ def test_challenged_401_requires_reconnect(saved_student, resource):
     connection.refresh_from_db()
     assert not connection.is_valid
     assert "Your Canvas connection expired. Please reconnect." in page.content.decode()
-    assert '/accounts/connect-canvas/' in page.content.decode()
+    assert '/accounts/settings/' in page.content.decode()
     assert TOKEN not in page.content.decode()
     assert "Invalid access token." not in page.content.decode()
 

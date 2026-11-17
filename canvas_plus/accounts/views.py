@@ -49,8 +49,8 @@ def login_view(request):
 @sensitive_variables("token")
 @never_cache
 @login_required
-def connect_canvas(request):
-    """Validate with Canvas before saving an encrypted, user-owned connection."""
+def settings_view(request):
+    """Manage account settings, including the user's Canvas connection."""
     form = CanvasConnectionForm(request.POST if request.method == "POST" else None)
     connection = CanvasConnection.objects.filter(user=request.user).first()
     courses = None
@@ -78,7 +78,7 @@ def connect_canvas(request):
                 None, "Canvas connection is not configured. Please contact the administrator."
             )
 
-    return render(request, "accounts/connect_canvas.html", {
+    return render(request, "accounts/settings.html", {
         "form": form,
         "courses": courses,
         "canvas_connected": courses is not None,

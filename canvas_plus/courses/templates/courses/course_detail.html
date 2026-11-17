@@ -8,7 +8,7 @@
   {% if not_found %}
     <h1>Course not found</h1>
   {% elif canvas_connection_missing %}
-    <p role="status">Connect Canvas to see your courses. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.</p>
+    <p role="status">Connect Canvas to see your courses. <a href="{% url 'settings' %}">Settings</a>.</p>
   {% elif canvas_unavailable %}
     <p role="status">Unable to load this course. Please try again.</p>
   {% elif course %}
