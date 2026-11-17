@@ -7,6 +7,9 @@
   {% for message in messages %}
     <p class="{{ message.tags }}" role="status">{{ message }}</p>
   {% endfor %}
+  {% if assignment_sync_error %}
+    <p role="status">{{ assignment_sync_error }}</p>
+  {% endif %}
   {% if assignments_unavailable %}
     {% if not canvas_connection_expired %}
       <p role="status">

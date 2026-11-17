@@ -7,9 +7,13 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
+from . import canvas_client
 from .canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
+    CanvasFileTooLarge,
+    download_course_file,
+    get_course_file,
     get_course_syllabus,
     list_courses,
     list_upcoming_assignments,
@@ -28,9 +32,10 @@ def sequential_canvas_requests(monkeypatch):
     monkeypatch.setattr("accounts.canvas_client.MAX_CONCURRENT_REQUESTS", 1)
 
 
-def response(courses, *, status=200, next_url=None):
+def response(courses, *, status=200, next_url=None, headers=None):
     """Construct a requests-like response, including its pagination links."""
     result = Mock(status_code=status)
+    result.headers = headers or {}
     result.json.return_value = courses
     result.links = {"next": {"url": next_url}} if next_url else {}
     return result
@@ -84,6 +89,137 @@ def test_malformed_syllabus_is_not_treated_as_success():
 
 
 @pytest.mark.unit
+def test_course_file_request_returns_its_details():
+    """Asking for one course file returns the name, size, and download address the viewer needs."""
+    with patch("accounts.canvas_client.requests.get", return_value=response({
+        "id": 9,
+        "display_name": "syllabus.pdf",
+        "size": 184910,
+        "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+    })) as get:
+        assert get_course_file("fake-token", 7, 9) == {
+            "name": "syllabus.pdf",
+            "size": 184910,
+            "url": "https://canvas.example.edu/files/9/download?download_frd=1",
+        }
+    assert get.call_args.args == ("https://canvas.example.edu/api/v1/courses/7/files/9",)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("payload", [
+    [],
+    {"display_name": "syllabus.pdf"},
+    {"display_name": "syllabus.pdf", "size": "big", "url": "https://canvas.example.edu/f"},
+])
+def test_malformed_file_details_are_not_treated_as_success(payload):
+    """File details missing a name, size, or address are reported as a Canvas problem."""
+    with patch("accounts.canvas_client.requests.get", return_value=response(payload)):
+        with pytest.raises(CanvasAPIError):
+            get_course_file("fake-token", 7, 9)
+
+
+FILE_URL = "https://canvas.example.edu/files/9/download?download_frd=1"
+# The real redirect chain traced from UCCS Canvas: user content, then Instructure's file service.
+USER_CONTENT_URL = "https://a1-9.cluster1.canvas-user-content.com/files/9"
+FILE_SERVICE_URL = "https://inst-fs-iad-prod.inscloudgate.net/files/9"
+FILE_CDN_URL = "https://cdn.inst-fs-iad-prod.inscloudgate.net/9?signature=x"
+
+
+def file_response(chunks=(), *, status=200, location=None):
+    """A requests-like file response that streams its body in chunks."""
+    result = Mock(status_code=status)
+    result.headers = {"Location": location} if location else {}
+    result.iter_content.return_value = iter(chunks)
+    return result
+
+
+@pytest.mark.unit
+def test_file_download_sends_the_token_only_to_canvas():
+    """Canvas gets the token; the file storage it redirects to never does."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=USER_CONTENT_URL),
+        file_response([b"%PDF-1.7 ", b"pages"]),
+    ]) as get:
+        assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7 pages"
+    canvas_call, storage_call = get.call_args_list
+    assert canvas_call.args == (FILE_URL,)
+    assert canvas_call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+    assert storage_call.args == (USER_CONTENT_URL,)
+    assert "Authorization" not in storage_call.kwargs.get("headers", {})
+
+
+@pytest.mark.unit
+def test_file_download_follows_storage_redirects_without_the_token():
+    """Canvas's real three-hop chain works, and every hop after Canvas goes without the token."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=USER_CONTENT_URL),
+        file_response(status=302, location=FILE_SERVICE_URL),
+        file_response(status=302, location=FILE_CDN_URL),
+        file_response([b"%PDF-1.7"]),
+    ]) as get:
+        assert download_course_file("fake-token", FILE_URL) == b"%PDF-1.7"
+    assert get.call_count == 4
+    for storage_call in get.call_args_list[1:]:
+        assert "Authorization" not in storage_call.kwargs.get("headers", {})
+        assert storage_call.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("location", [
+    "http://inst-fs-iad-prod.inscloudgate.net/files/9",
+    "https://evil.example.net/files/9",
+    "https://evil-inscloudgate.net/files/9",
+    "https://169.254.169.254/latest/meta-data",
+    "https://127.0.0.1/admin",
+    "https://10.0.0.5/files/9",
+])
+def test_file_download_refuses_an_unsafe_redirect(location):
+    """Only HTTPS redirects to Canvas or Instructure's file storage are followed."""
+    with patch("accounts.canvas_client.requests.get", side_effect=[
+        file_response(status=302, location=location),
+    ]) as get:
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", FILE_URL)
+    assert get.call_count == 1
+
+
+@pytest.mark.unit
+def test_file_download_refuses_an_address_off_canvas():
+    """A download address on another host is never requested with the token."""
+    with patch("accounts.canvas_client.requests.get") as get:
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", "https://untrusted.example/files/9/download")
+    get.assert_not_called()
+
+
+@pytest.mark.unit
+def test_file_over_the_size_limit_stops_downloading():
+    """Downloading stops as soon as the file passes the limit."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=file_response([b"x" * 8, b"x" * 8, b"x" * 8])):
+        with pytest.raises(CanvasFileTooLarge):
+            download_course_file("fake-token", FILE_URL, max_bytes=10)
+
+
+@pytest.mark.unit
+def test_failed_file_download_is_a_canvas_problem():
+    """A file Canvas won't hand over is a normal Canvas error, not a crash."""
+    with patch("accounts.canvas_client.requests.get", return_value=file_response(status=404)):
+        with pytest.raises(CanvasAPIError):
+            download_course_file("fake-token", FILE_URL)
+
+
+@pytest.mark.unit
+def test_unauthorized_request_keeps_the_token_valid():
+    """A 401 without Canvas's rejected-token header means not allowed, not an expired token."""
+    with patch("accounts.canvas_client.requests.get",
+               return_value=response({}, status=401, headers={})):
+        with pytest.raises(CanvasAPIError) as raised:
+            get_course_syllabus("fake-token", 7)
+    assert not isinstance(raised.value, CanvasAuthenticationError)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("next_url", [
     "https://untrusted.example/api/v1/courses",
     "http://canvas.example.edu/api/v1/courses",
@@ -125,7 +261,7 @@ def test_rejected_credentials_on_a_later_page_expire_the_connection():
     """Authentication must be checked for every page, not just the first."""
     with patch("accounts.canvas_client.requests.get", side_effect=[
         response([], next_url="https://canvas.example.edu/api/v1/courses?page=2"),
-        response({}, status=401),
+        response({}, status=401, headers={"WWW-Authenticate": "Bearer"}),
     ]):
         with pytest.raises(CanvasAuthenticationError):
             list_courses("fake-token")
@@ -211,6 +347,144 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
         "description": None,
         
     }]
+
+
+@pytest.mark.unit
+def test_all_assignments_across_courses_and_pages():
+    """Fetch every assignment without bucket filtering and deduplicate by Canvas id."""
+    operation = getattr(canvas_client, "list_all_assignments", None)
+    assert callable(operation), "Canvas client has no all-assignment operation yet"
+
+    courses = [
+        {"id": 42, "name": "CS 4300"},
+        {"id": 84, "name": "MATH 2250"},
+    ]
+    next_url = "https://canvas.example.edu/api/v1/courses/42/assignments?page=2"
+    with patch(
+        "accounts.canvas_client.requests.get",
+        side_effect=[
+            response([{
+                "id": 101,
+                "name": "Future project",
+                "due_at": "2026-10-23T18:30:00Z",
+                "description": "Project details",
+            }], next_url=next_url),
+            response([{
+                "id": 102,
+                "name": "Undated reading",
+                "due_at": None,
+                "description": "Read chapter 4",
+            }]),
+            response([
+                {
+                    "id": 101,
+                    "name": "Duplicate project",
+                    "due_at": "2026-10-23T18:30:00Z",
+                    "description": "Duplicate record",
+                },
+                {
+                    "id": 103,
+                    "name": "Past quiz",
+                    "due_at": "2026-10-01T18:30:00Z",
+                    "description": None,
+                },
+            ]),
+        ],
+    ) as get:
+        result = operation("fake-token", courses)
+
+    assert result == [
+        {
+            "canvas_assignment_id": 101,
+            "canvas_course_id": 42,
+            "title": "Future project",
+            "course_name": "CS 4300",
+            "due_date": datetime(2026, 10, 23, 18, 30, tzinfo=timezone.utc),
+            "submitted": False,
+            "description": "Project details",
+        },
+        {
+            "canvas_assignment_id": 102,
+            "canvas_course_id": 42,
+            "title": "Undated reading",
+            "course_name": "CS 4300",
+            "due_date": None,
+            "submitted": False,
+            "description": "Read chapter 4",
+        },
+        {
+            "canvas_assignment_id": 103,
+            "canvas_course_id": 84,
+            "title": "Past quiz",
+            "course_name": "MATH 2250",
+            "due_date": datetime(2026, 10, 1, 18, 30, tzinfo=timezone.utc),
+            "submitted": False,
+            "description": None,
+        },
+    ]
+    assert get.call_count == 3
+    assert get.call_args_list[0].args == (
+        "https://canvas.example.edu/api/v1/courses/42/assignments",
+    )
+    assert get.call_args_list[1].args == (next_url,)
+    assert get.call_args_list[2].args == (
+        "https://canvas.example.edu/api/v1/courses/84/assignments",
+    )
+    assert get.call_args_list[0].kwargs["params"] == {"per_page": 100}
+    assert get.call_args_list[1].kwargs["params"] is None
+    assert get.call_args_list[2].kwargs["params"] == {"per_page": 100}
+    assert all(
+        "bucket" not in call.kwargs["params"]
+        for call in (get.call_args_list[0], get.call_args_list[2])
+    )
+    for call in get.call_args_list:
+        assert call.kwargs["headers"]["Authorization"] == "Bearer fake-token"
+        assert call.kwargs["timeout"] == 10
+        assert call.kwargs["allow_redirects"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("failure", "error_type", "expected_calls"), [
+    ("later_page_api_error", CanvasAPIError, 2),
+    ("malformed_later_page", CanvasAPIError, 2),
+    ("unsafe_pagination_link", CanvasAPIError, 1),
+    ("repeated_pagination_link", CanvasAPIError, 1),
+    ("later_page_unauthorized", CanvasAuthenticationError, 2),
+])
+def test_all_assignments_rejects_bad_later_page(failure, error_type, expected_calls):
+    """Later-page failures stay distinct and pagination never leaks the token."""
+    operation = getattr(canvas_client, "list_all_assignments", None)
+    assert callable(operation), "Canvas client has no all-assignment operation yet"
+
+    courses = [{"id": 42, "name": "CS 4300"}]
+    initial_url = "https://canvas.example.edu/api/v1/courses/42/assignments"
+    next_url = "https://canvas.example.edu/api/v1/courses/42/assignments?page=2"
+    if failure == "unsafe_pagination_link":
+        next_url = "https://untrusted.example/api/v1/assignments"
+    elif failure == "repeated_pagination_link":
+        next_url = initial_url
+
+    later_response = {
+        "later_page_api_error": response({}, status=500),
+        "malformed_later_page": response({"error": "not a list"}),
+        "later_page_unauthorized": response(
+            {}, status=401, headers={"WWW-Authenticate": "Bearer"}
+        ),
+    }.get(failure)
+    responses = [response([], next_url=next_url)]
+    if later_response is not None:
+        responses.append(later_response)
+
+    with patch("accounts.canvas_client.requests.get", side_effect=responses) as get:
+        with pytest.raises(error_type):
+            operation("fake-token", courses)
+
+    assert get.call_count == expected_calls
+    assert all(
+        call.args[0].startswith("https://canvas.example.edu/")
+        for call in get.call_args_list
+    )
+    assert get.call_args_list[0].args == (initial_url,)
 
 
 @pytest.mark.unit
@@ -407,7 +681,7 @@ def test_upcoming_assignments_raise_authentication_error_for_401():
     courses = [{"id": 42, "name": "CS 4300"}]
     with patch(
         "accounts.canvas_client.requests.get",
-        return_value=response({}, status=401),
+        return_value=response({}, status=401, headers={"WWW-Authenticate": "Bearer"}),
     ):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
@@ -563,7 +837,9 @@ def test_overdue_request_rejected_token_raises_authentication_error():
     courses = [{"id": 42, "name": "CS 4300"}]
     with patch(
         "accounts.canvas_client.requests.get",
-        side_effect=[response([]), response({}, status=401)],
+        side_effect=[
+            response([]), response({}, status=401, headers={"WWW-Authenticate": "Bearer"})
+        ],
     ):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
@@ -638,7 +914,10 @@ def test_rejected_token_during_a_concurrent_load(monkeypatch):
     """A revoked token is still reported as an authentication failure."""
     monkeypatch.undo()  # opt back in to real concurrency
     courses = [{"id": course_id, "name": f"Course {course_id}"} for course_id in (41, 42, 43)]
-    with patch("accounts.canvas_client.requests.get", return_value=response({}, status=401)):
+    with patch(
+        "accounts.canvas_client.requests.get",
+        return_value=response({}, status=401, headers={"WWW-Authenticate": "Bearer"}),
+    ):
         with pytest.raises(CanvasAuthenticationError):
             list_upcoming_assignments("fake-token", courses)
 

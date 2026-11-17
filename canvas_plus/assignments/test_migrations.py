@@ -17,6 +17,10 @@ from assignments.test_models import use_temp_media_root  # pylint: disable=impor
 
 PRIOR_MIGRATION = ("assignments", "0002_alter_assignment_id")
 OWNERSHIP_MIGRATION = ("assignments", "0003_assignment_user_studyfile_attachment")
+SYNC_FIELDS_PRIOR_MIGRATION = (
+    "assignments",
+    "0004_assignment_effort_estimate_source_and_more",
+)
 
 
 @pytest.mark.integration
@@ -161,3 +165,71 @@ class AssignmentOwnershipMigrationTests(TransactionTestCase):
         self.assertNotIn(
             OWNERSHIP_MIGRATION, self._executor().recorder.applied_migrations()
         )
+
+
+@pytest.mark.integration
+class AssignmentSyncMigrationTests(TransactionTestCase):
+    """Existing assignment data remains usable after adding sync fields."""
+
+    def setUp(self):
+        use_temp_media_root(self)
+        super().setUp()
+
+    def tearDown(self):
+        self._restore_schema()
+        super().tearDown()
+
+    def _executor(self):
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        return executor
+
+    def _migrate_to(self, target):
+        executor = self._executor()
+        executor.migrate([target])
+        return executor.loader.project_state([target]).apps
+
+    def _restore_schema(self):
+        executor = self._executor()
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+    def test_existing_assignment_survives_sync_fields(self):
+        """Populated 0004 assignment data survives the sync-fields migration."""
+        current_fields = {field.name for field in Assignment._meta.get_fields()}
+        required_fields = {"description", "sync_state"}
+        self.assertTrue(
+            required_fields <= current_fields,
+            f"Missing assignment sync fields: {required_fields - current_fields}",
+        )
+
+        prior_apps = self._migrate_to(SYNC_FIELDS_PRIOR_MIGRATION)
+        prior_assignment_model = prior_apps.get_model("assignments", "Assignment")
+        user = get_user_model().objects.create_user(username="sync-migration-owner")
+        due_date = timezone.now()
+        assignment = prior_assignment_model.objects.create(
+            user_id=user.pk,
+            title="Existing project",
+            course="CS 4300",
+            canvas_course_id=42,
+            canvas_assignment_id=101,
+            due_date=due_date,
+            estimated_effort_minutes=75,
+            effort_estimate_source="manual",
+        )
+
+        executor = self._executor()
+        targets = executor.loader.graph.leaf_nodes("assignments")
+        executor.migrate(targets)
+        migrated_apps = executor.loader.project_state(targets).apps
+        migrated_assignment_model = migrated_apps.get_model("assignments", "Assignment")
+        migrated = migrated_assignment_model.objects.get(pk=assignment.pk)
+
+        self.assertEqual(migrated.title, "Existing project")
+        self.assertEqual(migrated.course, "CS 4300")
+        self.assertEqual(migrated.canvas_course_id, 42)
+        self.assertEqual(migrated.canvas_assignment_id, 101)
+        self.assertEqual(migrated.due_date, due_date)
+        self.assertEqual(migrated.estimated_effort_minutes, 75)
+        self.assertEqual(migrated.effort_estimate_source, "manual")
+        self.assertIn(migrated.description, (None, ""))
+        self.assertIn(migrated.sync_state, {"synced", "missing", "failed"})

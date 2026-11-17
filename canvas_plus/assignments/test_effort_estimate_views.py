@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from assignments.models import Assignment
+from study_plan.schema import EffortEstimate
 from unittest.mock import patch
 
 @pytest.mark.django_db
@@ -59,6 +60,72 @@ def test_owner_can_update_effort_estimate(client):
 
     # The source should now show that the student entered it manually.
     assert assignment.effort_estimate_source == "manual"
+
+
+@pytest.mark.django_db
+@patch("study_plan.effort_estimation.infer")
+def test_reopening_manual_effort_estimate_preserves_saved_value(infer_mock, client):
+    """Reopening the edit page must not replace a student's estimate."""
+    user = get_user_model().objects.create_user(username="manual-estimate-owner")
+    assignment = Assignment.objects.create(
+        user=user,
+        canvas_course_id=1001,
+        canvas_assignment_id=2001,
+        title="Research Paper",
+        course="CS4300",
+        due_date=timezone.now(),
+        description="Write a research paper using academic sources.",
+        estimated_effort_minutes=90,
+        effort_estimate_source="automatic",
+    )
+    infer_mock.return_value = EffortEstimate(
+        estimated_minutes=60,
+        reason="Research and writing require focused work.",
+    )
+    client.force_login(user)
+    edit_url = reverse("edit_effort_estimate", args=[1001, 2001])
+
+    assert client.post(edit_url, {"estimated_effort_minutes": 120}).status_code == 302
+    response = client.get(edit_url)
+
+    assignment.refresh_from_db()
+    assert response.status_code == 200
+    assert assignment.estimated_effort_minutes == 120
+    assert assignment.effort_estimate_source == "manual"
+    assert response.context["form"]["estimated_effort_minutes"].value() == 120
+    infer_mock.assert_not_called()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("source", "minutes"),
+    [("automatic", 90), (None, 90), (None, 0)],
+)
+@patch("assignments.views.estimate_and_save_assignment_effort")
+def test_existing_effort_does_not_trigger_generation(estimate_mock, client, source, minutes):
+    """An existing effort value is preserved regardless of its source."""
+    user = get_user_model().objects.create_user(username="existing-effort-owner")
+    assignment = Assignment.objects.create(
+        user=user,
+        canvas_course_id=1001,
+        canvas_assignment_id=2001,
+        title="Research Paper",
+        course="CS4300",
+        due_date=timezone.now(),
+        description="Write a research paper using academic sources.",
+        estimated_effort_minutes=minutes,
+        effort_estimate_source=source,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("edit_effort_estimate", args=[1001, 2001]))
+
+    assignment.refresh_from_db()
+    assert response.status_code == 200
+    assert assignment.estimated_effort_minutes == minutes
+    assert assignment.effort_estimate_source == source
+    assert response.context["form"]["estimated_effort_minutes"].value() == minutes
+    estimate_mock.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -334,6 +401,77 @@ def test_opening_effort_page_generates_automatic_estimate(
     # The automatic estimate should have been persisted.
     assert assignment.estimated_effort_minutes == 90
     assert assignment.effort_estimate_source == "automatic"
+    assert assignment.description == (
+        "Write a five-page research paper using at least five academic sources."
+    )
 
     # The live view should have called the estimator exactly once.
     estimate_and_save_mock.assert_called_once()
+
+    # A later visit uses the saved local assignment rather than Canvas data.
+    response = client.get(
+        reverse("edit_effort_estimate", args=[42, 101])
+    )
+
+    assert response.status_code == 200
+    assignment.refresh_from_db()
+    assert assignment.estimated_effort_minutes == 90
+    assert assignment.effort_estimate_source == "automatic"
+    assert response.context["form"]["estimated_effort_minutes"].value() == 90
+    estimate_and_save_mock.assert_called_once()
+
+
+@pytest.mark.django_db
+@patch("study_plan.effort_estimation.infer")
+@patch("assignments.views.load_canvas_context")
+def test_existing_assignment_gets_automatic_estimate_from_assignment_list(
+    load_canvas_context_mock, infer_mock, client,
+):
+    """Opening edit effort estimates an existing assignment without an estimate."""
+    user = get_user_model().objects.create_user(username="existing-assignment-user")
+    client.force_login(user)
+    assignment = Assignment.objects.create(
+        user=user,
+        canvas_course_id=42,
+        canvas_assignment_id=101,
+        title="Research Paper",
+        course="CS 4300",
+        due_date=timezone.now(),
+        description="Write a five-page research paper with academic sources.",
+    )
+    load_canvas_context_mock.return_value = {
+        "assignments": [{
+            "canvas_assignment_id": assignment.canvas_assignment_id,
+            "canvas_course_id": assignment.canvas_course_id,
+            "title": assignment.title,
+            "course_name": assignment.course,
+            "due_date": assignment.due_date,
+            "submitted": False,
+            "priority": "Normal",
+        }],
+        "canvas_connection_expired": False,
+        "canvas_connection_missing": False,
+        "assignments_unavailable": False,
+        "assignments_unavailable_message": "",
+    }
+    infer_mock.return_value = EffortEstimate(
+        estimated_minutes=90,
+        reason="Research and writing require focused work.",
+    )
+
+    list_response = client.get(reverse("assignment_list"))
+    edit_url = reverse("edit_effort_estimate", args=[42, 101])
+    assert list_response.status_code == 200
+    assert b"No effort estimate yet." in list_response.content
+    assert f'href="{edit_url}"'.encode() in list_response.content
+
+    edit_response = client.get(edit_url)
+
+    assignment.refresh_from_db()
+    assert edit_response.status_code == 200
+    assert assignment.estimated_effort_minutes == 90
+    assert assignment.effort_estimate_source == "automatic"
+    assert edit_response.context["form"]["estimated_effort_minutes"].value() == 90
+    assert b"90 minutes" in edit_response.content
+    assert Assignment.objects.filter(user=user, canvas_assignment_id=101).count() == 1
+    infer_mock.assert_called_once()
