@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
+import math
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -162,13 +163,20 @@ def get_course_syllabus(token, course_id, session=None):
     return syllabus
 
 
+def _readable_score(score):
+    """True when a current score is absent or a real, finite number (not True or False)."""
+    if score is None:
+        return True
+    return (isinstance(score, (int, float)) and not isinstance(score, bool)
+            and math.isfinite(score))
+
+
 def _readable_enrollment(enrollment):
-    """True when an enrollment's current score is a number or absent, and its letter is text."""
+    """True when an enrollment's current score is readable and its letter is text or absent."""
     if not isinstance(enrollment, dict):
         return False
-    score = enrollment.get("computed_current_score")
     letter = enrollment.get("computed_current_grade")
-    return ((score is None or isinstance(score, (int, float)))
+    return (_readable_score(enrollment.get("computed_current_score"))
             and (letter is None or isinstance(letter, str)))
 
 
@@ -182,7 +190,7 @@ def get_course_grade(token, course_id, session=None):
         "Canvas could not load your grade. Please try again.",
         session,
     )
-    enrollments = (course.get("enrollments") or []) if isinstance(course, dict) else None
+    enrollments = course.get("enrollments", []) if isinstance(course, dict) else None
     if not isinstance(enrollments, list) or not all(map(_readable_enrollment, enrollments)):
         raise CanvasAPIError("Canvas returned unexpected grade data. Please try again.")
     return course
