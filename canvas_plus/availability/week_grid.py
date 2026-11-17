@@ -18,6 +18,8 @@ from django.db import transaction
 from .models import Availability
 
 GRID_HOURS = range(8, 20)  # one-hour blocks from 8 AM; the last is 7-8 PM
+# The lines between blocks, 8 AM to 8 PM: one above every block and one under the last.
+GRID_LABELS = [time(hour) for hour in range(8, 21)]
 BLOCK_VALUE = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2})")
 
 
@@ -109,7 +111,8 @@ def periods_by_day(user, days):
 def week_grid(user, today):
     """Monday to Sunday of today's week, with each day's blocks and whether they are selected.
 
-    Each day is {"date", "editable", "blocks"}, and each block {"hour", "value", "selected"}.
+    Each day is {"date", "editable", "blocks"}, and each block
+    {"hour", "start", "value", "selected"}, where start is the hour as a time.
     A block is selected only when the whole hour is covered, by one period or by
     touching periods merged together (10:00-11:30 and 11:30-12:00 cover 10 and 11).
     """
@@ -122,7 +125,12 @@ def week_grid(user, today):
             "date": day,
             "editable": day >= today,
             "blocks": [
-                {"hour": hour, "value": block_value(day, hour), "selected": covers(merged, hour)}
+                {
+                    "hour": hour,
+                    "start": time(hour),
+                    "value": block_value(day, hour),
+                    "selected": covers(merged, hour),
+                }
                 for hour in GRID_HOURS
             ],
         })

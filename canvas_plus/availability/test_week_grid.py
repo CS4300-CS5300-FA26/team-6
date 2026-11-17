@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from .models import Availability
-from .week_grid import GRID_HOURS, parse_block, save_week, week_grid
+from .week_grid import GRID_HOURS, GRID_LABELS, parse_block, save_week, week_grid
 
 pytestmark = pytest.mark.unit
 
@@ -117,6 +117,21 @@ class WeekGridTests(GridTestCase):
                     [block(day["date"], hour) for hour in range(8, 20)],
                 )
         self.assertEqual(self.selected(grid), [])
+
+    def test_each_block_carries_its_start_time(self):
+        for day in week_grid(self.student, TODAY):
+            with self.subTest(day=day["date"]):
+                self.assertEqual(
+                    [b["start"] for b in day["blocks"]],
+                    [time(8), time(9), time(10), time(11), time(12), time(13),
+                     time(14), time(15), time(16), time(17), time(18), time(19)],
+                )
+
+    def test_the_labels_are_the_lines_between_blocks_from_8_am_to_8_pm(self):
+        # One label at the top of every block, and one under the last block.
+        self.assertEqual(GRID_LABELS[0], time(8))
+        self.assertEqual(GRID_LABELS[-1], time(20))
+        self.assertEqual(GRID_LABELS, [time(h) for h in GRID_HOURS] + [time(GRID_HOURS[-1] + 1)])
 
     def test_a_block_is_selected_only_when_a_period_covers_the_whole_hour(self):
         self.available(FRIDAY, "14:00", "16:00")
