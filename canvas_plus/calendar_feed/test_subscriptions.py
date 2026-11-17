@@ -8,6 +8,7 @@ import pytest
 from django.urls import reverse
 
 from .models import CalendarSubscription
+from .services import get_subscription_by_token, issue_subscription
 
 
 pytestmark = pytest.mark.django_db
@@ -39,6 +40,29 @@ def feed_token(feed_url):
 def token_digest(token):
     """Return the persisted SHA-256 digest for a fixture bearer token."""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def test_subscription_service_issues_and_rotates_digest_only_token(django_user_model):
+    """Issuance returns a strong token while replacing only its stored digest."""
+    user = django_user_model.objects.create_user(username="service-owner")
+
+    first_token = issue_subscription(user)
+    subscription = CalendarSubscription.objects.get(user=user)
+    assert len(first_token) >= 40
+    assert subscription.token_digest == token_digest(first_token)
+    assert get_subscription_by_token(first_token) == subscription
+
+    second_token = issue_subscription(user)
+    subscription.refresh_from_db()
+    assert second_token != first_token
+    assert subscription.token_digest == token_digest(second_token)
+    assert get_subscription_by_token(first_token) is None
+    assert get_subscription_by_token(second_token) == subscription
+
+
+def test_subscription_lookup_rejects_unknown_token():
+    """An unknown bearer token never resolves to a subscription."""
+    assert get_subscription_by_token("unknown-calendar-token") is None
 
 
 def test_student_creates_and_rotates_subscription_url(client, django_user_model):
