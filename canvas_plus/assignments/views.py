@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -203,7 +204,8 @@ def generate_study_plan(request):
         generate_plan(request.user, assignment_ids)
     except StudyPlanError as error:
         messages.error(request, str(error))
-    return redirect("availability:list")
+        return redirect("availability:list")
+    return redirect(f"{reverse('availability:list')}?date=")
 
 
 @login_required

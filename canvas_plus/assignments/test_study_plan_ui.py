@@ -121,7 +121,7 @@ def test_generate_selected_assignments():
     )
     start = timezone.make_aware(datetime.combine(available_date, time(9)))
     for offset, assignment in enumerate(selected_assignments):
-        session_start = start + timedelta(hours=offset)
+        session_start = start + timedelta(days=offset)
         StudySession.objects.create(
             plan=plan,
             assignment=assignment,
@@ -145,10 +145,11 @@ def test_generate_selected_assignments():
         response = client.post(
             reverse("generate_plan"),
             {"assignment_ids": [str(assignment_id) for assignment_id in selected_ids]},
+            follow=True,
         )
 
-    assert response.status_code == 302
-    assert response["Location"] == reverse("availability:list")
+    assert response.status_code == 200
+    assert response.redirect_chain == [(f'{reverse("availability:list")}?date=', 302)]
     generate_plan.assert_called_once_with(user, selected_ids)
 
     assert assignment_row_titles(selection_page, all_titles) == set(all_titles)
@@ -167,9 +168,7 @@ def test_generate_selected_assignments():
         selection_page.context["availability_entries"].values_list("date", flat=True)
     ) == [available_date]
 
-    study_plan_response = client.get(
-        reverse("availability:list"), {"date": available_date.isoformat()}
-    )
+    study_plan_response = response
     assert assignment_row_titles(study_plan_response, all_titles) == set(all_titles)
     assert study_session_titles(study_plan_response) == {
         selected_assignments[0].title,
