@@ -14,6 +14,8 @@ jobs:
   lint_and_test:
     name: Lint and Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "fake-secret-key"
@@ -61,6 +63,21 @@ jobs:
         run: |
           coverage run --source=canvas_plus -m pytest
           coverage report -m --fail-under=80
+
+  dependency_review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on-severity: moderate
+          comment-summary-in-pr: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' && 'always' || 'never' }}
 
   # Sends each pull request's changes to OpenAI and posts the review as a PR comment.
   # Separate from lint_and_test, so an OpenAI problem never blocks the tests.
@@ -175,7 +192,7 @@ jobs:
 
   deploy:
     name: Deploy
-    needs: lint_and_test
+    needs: [lint_and_test, dependency_review]
     if: >-
       github.event.local_test != true &&
       github.event_name == 'push' && 
