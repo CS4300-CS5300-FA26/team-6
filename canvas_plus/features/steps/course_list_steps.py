@@ -234,6 +234,16 @@ def step_hub_student(context):
     )
 
 
+@given("Canvas fails to load the assignments")
+def step_hub_assignments_unavailable(context):
+    patcher = patch(
+        "courses.views.list_upcoming_assignments",
+        side_effect=CanvasAPIError("down"),
+    )
+    patcher.start()
+    context.add_cleanup(patcher.stop)
+
+
 @given("Canvas also has ended, concluded, invited, and teacher courses")
 def step_hub_excluded_courses(context):
     assert all(course in context.hub_canvas.courses for course in context.hub_excluded)
