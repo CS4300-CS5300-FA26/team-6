@@ -118,10 +118,14 @@ def test_course_grade_request_returns_my_current_scores():
     {"id": 7, "enrollments": [{"type": "student", "computed_current_score": float("inf")}]},
     {"id": 7, "hide_final_grades": "false",
      "enrollments": [{"type": "student", "computed_current_score": 97.41}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": 10**400}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": 1000.01}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": -5}]},
 ], ids=["not-a-course", "enrollments-not-a-list", "enrollment-not-an-object",
         "score-not-a-number", "letter-not-text", "empty-object-enrollments",
         "empty-text-enrollments", "score-true-or-false", "score-not-a-number-nan",
-        "score-infinite", "hidden-flag-not-true-or-false"])
+        "score-infinite", "hidden-flag-not-true-or-false", "score-huge-integer",
+        "score-over-1000", "score-negative"])
 def test_malformed_grade_is_not_treated_as_success(course):
     """A grade Canvas sends in an unreadable shape is reported as a Canvas problem, not shown."""
     with patch("accounts.canvas_client.requests.get", return_value=response(course)):
