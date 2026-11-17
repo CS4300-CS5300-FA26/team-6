@@ -56,6 +56,8 @@ team-6/
 │   │   │   ├── file_download_failed.html
 │   │   │   └── file_message.html       # Messages shown inside the file viewer
 │   │   ├── apps.py
+│   │   ├── assignment_summary.py       # Upcoming and past/graded summary selection
+│   │   ├── test_assignment_summary.py  # Summary date, grade, and limit boundaries
 │   │   ├── current.py                  # Which courses count as current
 │   │   ├── files.py                    # Turns syllabus file links into viewers and downloads
 │   │   ├── syllabus.py                 # Makes Canvas syllabus HTML safe to show
@@ -69,10 +71,12 @@ team-6/
 │   │   ├── steps/
 │   │   │   ├── assignment_steps.py
 │   │   │   ├── connect_canvas_steps.py
+│   │   │   ├── course_hub_assignments_steps.py # Course summary acceptance steps
 │   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
 │   │   ├── connect_canvas.feature
+│   │   ├── course_hub_assignments.feature # Course summary acceptance scenarios
 │   │   ├── course_page.feature
 │   │   ├── courses.feature
 │   │   └── landing_page.feature

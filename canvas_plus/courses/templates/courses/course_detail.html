@@ -12,7 +12,48 @@
     <p role="status">Unable to load this course. Please try again.</p>
   {% elif course %}
     <h1>{{ course.name }}</h1>
-    {% include "courses/upcoming_assignments.html" %}
+    <section class="upcoming" aria-labelledby="assignments-heading">
+      <h2 id="assignments-heading">Assignments</h2>
+      {% if assignments_unavailable %}
+        <p role="status">Unable to load assignments. Please try again.</p>
+      {% else %}
+        <div class="assignment-toggle" aria-label="Assignment views">
+          <a href="?view=upcoming"{% if assignment_view == "upcoming" %} aria-current="true"{% endif %}>Upcoming</a>
+          <a href="?view=past"{% if assignment_view == "past" %} aria-current="true"{% endif %}>Past/Graded</a>
+        </div>
+        {% if assignments %}
+          <ul class="assignment-list">
+            {% for assignment in assignments %}
+              <li class="assignment-card">
+                <div class="assignment-details">
+                  <h3 class="assignment-title">{{ assignment.title }}</h3>
+                </div>
+                {% if assignment_view == "upcoming" %}
+                  {% if assignment.due_date %}
+                    <p class="assignment-due">Due <time datetime="{{ assignment.due_date|date:'c' }}">{{ assignment.due_date|date:"M j, Y g:i A" }}</time></p>
+                  {% else %}
+                    <p class="assignment-due">No due date</p>
+                  {% endif %}
+                {% elif assignment.score != None %}
+                  <p class="assignment-due">{{ assignment.score|floatformat }} / {% if assignment.points_possible is None %}—{% else %}{{ assignment.points_possible|floatformat }}{% endif %}</p>
+                {% else %}
+                  <p class="assignment-due">Not graded yet</p>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>{% if assignment_view == "past" %}No past or graded assignments{% else %}No upcoming assignments{% endif %}</p>
+        {% endif %}
+        {% if assignments_truncated %}
+          {% if assignments_expanded %}
+            <p><a href="?view={{ assignment_view }}">Show fewer</a></p>
+          {% else %}
+            <p><a href="?view={{ assignment_view }}&amp;all=1">View all {{ assignment_count }} assignments</a></p>
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    </section>
     <h2>Syllabus</h2>
     {% if syllabus %}
       {# safe only because clean_syllabus ran it through nh3's allowlist first; #}

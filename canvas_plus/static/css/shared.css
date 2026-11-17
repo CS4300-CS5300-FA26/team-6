@@ -111,3 +111,7 @@ body.landing-page a { color: #17324d; }
 	.assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
 	.assignment-due { grid-column: 2; max-width: none; text-align: left; }
 }
+
+.assignment-toggle { display: flex; gap: 0.5rem; }
+.assignment-toggle a { padding: 0.5rem; border-radius: 0.25rem; color: #17324d; }
+.assignment-toggle a[aria-current="true"] { background: #17324d; color: white; font-weight: 700; }
