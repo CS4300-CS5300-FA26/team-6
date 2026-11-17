@@ -194,10 +194,13 @@ body.landing-page a { color: #17324d; }
 .study-plan-panel h2 { margin: 0 0 0.75rem; font-size: 1.15rem; }
 
 /* The week grid. --block is one hour's height and --head the day names' row, so the
-   hour labels and the blocks always line up. */
-.availability-grid { --block: 2rem; --head: 1.75rem; display: grid; grid-template-columns: auto repeat(7, minmax(0, 1fr)); }
+   hour labels and the blocks always line up. Each day is at least 40px wide (above the
+   24px touch target); where seven of those don't fit, the grid scrolls sideways itself. */
+.availability-grid { --block: 2rem; --head: 1.75rem; display: grid; grid-template-columns: auto repeat(7, minmax(2.5rem, 1fr));
+					 overflow-x: auto; padding-bottom: 0.5rem; }  /* scrolling also clips, so leave room for the 8 PM label */
 /* Each label sits on the line above its block; the 13th, on the bottom line, takes no height. */
-.grid-hours { padding: var(--head) 0.5rem 0 0; color: #52615c; font-size: 0.75rem; }
+/* The labels stay put while the days scroll; the background stops cells showing through. */
+.grid-hours { position: sticky; left: 0; z-index: 1; padding: var(--head) 0.5rem 0 0; background: #fff; color: #52615c; font-size: 0.75rem; }
 .grid-hours span { display: block; height: var(--block); line-height: 1; text-align: right; white-space: nowrap; transform: translateY(-0.5em); }
 .grid-hours span:last-child { height: 0; }
 /* Fieldsets have built-in quirks: reset them, and float the legend so it acts like a block. */
@@ -219,15 +222,21 @@ body.landing-page a { color: #17324d; }
 /* A negative offset keeps the outline inside the cell, where neighbours can't cover it. */
 .grid-day input:focus-visible { outline: 2px solid #17324d; outline-offset: -2px; }
 .grid-day input:checked:focus-visible { outline-color: #fff; outline-offset: -4px; }
-.availability-grid + button { margin-top: 0.75rem; }
+.availability-grid + button { margin-top: 0.25rem; }
+/* A summary styled as a button loses its built-in triangle, so draw one that still shows open or closed. */
+summary.button-secondary { list-style: none; }
+summary.button-secondary::-webkit-details-marker { display: none; }
+summary.button-secondary::before { content: "▸"; display: inline-block; width: 1em; }
+details[open] > summary.button-secondary::before { content: "▾"; }
+details[open] > summary.button-secondary { margin-bottom: 0.5rem; }
 
 @media (max-width: 60rem) {
-	/* The panels stack; the grid keeps its seven days, which stay above the 24px touch target. */
+	/* The panels stack; the grid keeps its seven days, and scrolls sideways when they don't fit. */
 	.study-plan-layout { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 40rem) {
-	/* Give the seven days every pixel the panel can spare, so each block stays above 24px wide. */
+	/* Give the seven days every pixel the panel can spare, so less of the week needs scrolling. */
 	.study-plan-panel { padding: 0.5rem; }
 	.grid-hours { padding-right: 0.25rem; font-size: 0.65rem; }
 	.grid-day legend { font-size: 0.65rem; }
