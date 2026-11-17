@@ -3,7 +3,7 @@
 {% block title %}Course file{% endblock %}
 
 {% block content %}
-  <p><a href="{% url 'course_detail' course_id %}">← Back to course</a></p>
+  <p><a class="button-secondary" href="{% url 'course_detail' course_id %}">← Back to course</a></p>
   {% if reason == "not_found" %}
     <h1>File not found</h1>
   {% else %}
