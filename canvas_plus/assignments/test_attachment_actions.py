@@ -34,6 +34,8 @@ class AttachmentActionTests(MediaRootTestCase):
         )
         self.enterContext(patch("assignments.views.load_canvas_context", side_effect=lambda *args, **kwargs: {
             "assignments_unavailable": False,
+            "canvas_connection_missing": False,
+            "canvas_connection_expired": False,
             "assignments": [{"canvas_assignment_id": 101, "canvas_course_id": 42,
                              "title": "Project", "course_name": "CS 4300"}],
         }))
