@@ -196,7 +196,9 @@ def step_formatted_syllabus_shown(context):
 
 @then("I can go back to my course list")
 def step_back_link(context):
-    assert f'<a href="{reverse("course_list")}">← All courses</a>' in page(context)
+    links = BeautifulSoup(page(context), "html.parser")
+    back = links.find("a", href=reverse("course_list"), string="← All courses")
+    assert back, "no link back to the course list"
 
 
 @then("I see the file's name")
@@ -563,7 +565,8 @@ def step_course_page_still_shows(context):
 @then("I can go back to the course")
 def step_back_to_course(context):
     course_url = reverse("course_detail", args=[CURRENT_COURSE["id"]])
-    assert f'<a href="{course_url}">← Back to course</a>' in page(context)
+    links = BeautifulSoup(page(context), "html.parser")
+    assert links.find("a", href=course_url, string="← Back to course"), "no link back to the course"
 
 
 @then("Canvas is never asked for it")
