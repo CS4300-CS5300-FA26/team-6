@@ -33,9 +33,12 @@ team-6/
 │   │   ├── migrations/
 │   │   ├── templates/assignments/
 │   │   │   └── assignment_list.html
+│   │   │   └── search_assignments.html
 │   │   ├── admin.py
 │   │   ├── apps.py
 │   │   ├── models.py
+│   │   ├── sync.py
+│   │   ├── test_assignment_search.py
 │   │   ├── tests.py
 │   │   ├── urls.py
 │   │   └── views.py
@@ -70,11 +73,13 @@ team-6/
 │   ├── features/                       # Executable Gherkin acceptance scenarios
 │   │   ├── steps/
 │   │   │   ├── assignment_steps.py
+│   │   │   ├── assignment_search_steps.py
 │   │   │   ├── connect_canvas_steps.py
 │   │   │   ├── course_grade_steps.py
 │   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
+│   │   ├── assignment_search.feature
 │   │   ├── connect_canvas.feature
 │   │   ├── course_grade.feature
 │   │   ├── course_page.feature
@@ -207,7 +212,7 @@ The Django administration site is at <http://127.0.0.1:8000/admin/>. Create an a
 
 ## Production deployment
 
-Live application: https://canvas-plus-1dc9dd2e56ac.herokuapp.com/
+Live application: https://canvas-plus.dev
 
 ## Connecting a Canvas account
 
@@ -242,6 +247,33 @@ is tracked separately in issue #39.
 The [assignment model guide](docs/assignment-models.md) describes the user-owned
 assignment, reusable file, and attachment schema for #42, including migration
 preconditions and the contract for #49 estimates.
+
+## Course Hub
+
+The **Courses** sidebar link opens the Course Hub at `/courses/`. Its tabs use
+Canvas course codes and open each course's page. The Hub lists coursework due in
+the next 7 days across all current courses, grouped by due day in the app's time
+zone (`TIME_ZONE`), with a link to the assignments page showing the full count.
+It has at most 20 course tabs; the tab limit does not limit the courses
+contributing assignments. Course pages show only their own coursework, grouped
+the same way without the 7-day limit, and retain their syllabus. The Hub does not
+show syllabi or contact cards. Course lists share the assignments page's one-hour
+cache, refreshed when the saved Canvas connection changes.
+
+## Assignment keyword search
+
+Signed-in students can search their locally synchronized Canvas assignments across all connected courses.
+
+Assignment search supports:
+
+- Case-insensitive assignment title matching
+- Case-insensitive assignment description matching
+- Course name display in search results
+- Direct links back to the assignment in Canvas
+- Empty-search validation
+- No-results messaging
+
+Search runs against locally synchronized `Assignment` records rather than making a live Canvas API request for every search. Only assignments owned by the signed-in student and currently marked as `synced` are included in normal search results.
 
 ## Dashboard known limitations
 
@@ -386,3 +418,11 @@ Jackson McGuire used Claude Code to help build the current grade on the course p
 #### Generating Study Sessiosn [Backend]
 
 Stephen used ai to write tests and implement code for the generate study session behavior. 
+#### Course Hub tab bar (issue 137)
+
+Joshua Douglas used Claude Code and Codex to generate test cases which were manually verified and fixed.
+Joshua Douglas used Claude Code and Codex to build the html involved in displaying courses on the course page in alignment with agreed upon new design
+
+#### Assignment keyword search
+
+Nathan Hinebaugh used ChatGPT to assist with implementation planning, Django search logic, pytest and Behave test development, and troubleshooting for the assignment keyword search feature. All suggested code was reviewed and tested locally before being committed.

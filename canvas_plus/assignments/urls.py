@@ -15,6 +15,12 @@ urlpatterns = [
         views.upload_attachments,
         name="upload_attachments",
     ),
+    # Search the student's locally indexed Canvas assignments.
+    path(
+        "search/",
+        views.search_assignments,
+        name="search_assignments",
+    ),
     path("", views.assignment_list, name="assignment_list"),
     path(
         "<int:course_id>/<int:assignment_id>/effort/",

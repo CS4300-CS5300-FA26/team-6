@@ -5,7 +5,6 @@ from functools import partial
 import requests
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from django.db.models import Q
 from accounts.canvas_client import (
     CanvasAPIError,
     CanvasAuthenticationError,
@@ -24,6 +24,7 @@ from accounts.canvas_client import (
     list_upcoming_assignments,
 )
 from accounts.models import CanvasConnection, SavedTokenError
+from accounts.course_cache import cached_courses
 from .grades import RECENT_WINDOW, recent_grades
 from .models import Attachment, Assignment
 from .priority import priority
@@ -34,8 +35,6 @@ from study_plan.effort_estimation import estimate_and_save_assignment_effort
 from study_plan.exceptions import StudyPlanError
 from study_plan.generate import generate_plan
 
-# Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
-COURSE_CACHE_SECONDS = 60 * 60
 MAX_ASSIGNMENT_PRIMARY_KEY = (1 << 63) - 1
 logger = logging.getLogger(__name__)
 
@@ -82,11 +81,7 @@ def load_canvas_context(user, *, sync_all_assignments=False, load_upcoming=True)
 
             token = connection.get_token()
             with requests.Session() as session:
-                courses_key = f"canvas-courses:{connection.pk}:{connection.updated_at.timestamp()}"
-                courses = cache.get(courses_key)
-                if courses is None:
-                    courses = list_courses(token, session=session)
-                    cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
+                courses = cached_courses(connection, token, session, list_courses)
                 if load_upcoming:
                     assignments = list_upcoming_assignments(token, courses, session=session)
                     graded_context = recently_graded_context(token, courses, session)
@@ -134,6 +129,70 @@ def load_canvas_context(user, *, sync_all_assignments=False, load_upcoming=True)
         **graded_context,
     }
 
+@login_required
+def search_assignments(request):
+    """Search the signed-in student's locally indexed Canvas assignments."""
+
+    # Normalize the search term so whitespace-only searches are treated
+    # the same as an empty search.
+    search_term = request.GET.get("q", "").strip()
+
+    # Start with no results. An empty search must not query assignments.
+    results = Assignment.objects.none()
+    search_ran = False
+
+    if search_term:
+        search_ran = True
+
+        # Search only assignments owned by the signed-in student and
+        # currently marked as successfully synchronized from Canvas.
+        results = Assignment.objects.filter(
+            user=request.user,
+            sync_state="synced",
+        ).filter(
+            # A match in either the assignment title or description
+            # should include the assignment in the results.
+            Q(title__icontains=search_term)
+            | Q(description__icontains=search_term)
+        ).order_by(
+            "course",
+            "title",
+        )
+
+    # CanvasConnection stores the student's Canvas host. We only use it
+    # to construct assignment links; the search itself remains local.
+    connection = CanvasConnection.objects.filter(
+        user=request.user,
+    ).first()
+
+    # Build Canvas assignment URLs from IDs already stored locally.
+    search_results = []
+    for assignment in results:
+        canvas_url = None
+
+        if connection is not None:
+            canvas_url = (
+                f"{connection.canvas_url.rstrip('/')}"
+                f"/courses/{assignment.canvas_course_id}"
+                f"/assignments/{assignment.canvas_assignment_id}"
+            )
+
+        search_results.append(
+            {
+                "assignment": assignment,
+                "canvas_url": canvas_url,
+            }
+        )
+
+    return render(
+        request,
+        "assignments/search_assignments.html",
+        {
+            "search_term": search_term,
+            "search_ran": search_ran,
+            "search_results": search_results,
+        },
+    )
 
 @login_required
 def assignment_list(request):
