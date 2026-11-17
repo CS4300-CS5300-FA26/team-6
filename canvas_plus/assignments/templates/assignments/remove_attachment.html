@@ -7,7 +7,7 @@
   <p>Remove {{ attachment.study_file.original_name }} from this assignment?</p>
   <form method="post">
     {% csrf_token %}
-    <button type="submit">Remove</button>
+    <button class="button-danger" type="submit">Remove</button>
   </form>
-  <a href="{% url 'assignment_list' %}">Cancel</a>
+  <a class="button-secondary" href="{% url 'assignment_list' %}">Cancel</a>
 {% endblock %}
