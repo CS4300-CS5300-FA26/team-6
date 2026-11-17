@@ -180,6 +180,16 @@ def _readable_enrollment(enrollment):
             and (letter is None or isinstance(letter, str)))
 
 
+def _readable_grade_course(course):
+    """True when the hidden-totals flag is true, false, or absent, and every enrollment reads."""
+    if not isinstance(course, dict):
+        return False
+    enrollments = course.get("enrollments", [])
+    return (isinstance(course.get("hide_final_grades", False), bool)
+            and isinstance(enrollments, list)
+            and all(map(_readable_enrollment, enrollments)))
+
+
 @sensitive_variables("token")
 def get_course_grade(token, course_id, session=None):
     """Return one course with my enrollments' current scores and whether totals are hidden."""
@@ -190,8 +200,7 @@ def get_course_grade(token, course_id, session=None):
         "Canvas could not load your grade. Please try again.",
         session,
     )
-    enrollments = course.get("enrollments", []) if isinstance(course, dict) else None
-    if not isinstance(enrollments, list) or not all(map(_readable_enrollment, enrollments)):
+    if not _readable_grade_course(course):
         raise CanvasAPIError("Canvas returned unexpected grade data. Please try again.")
     return course
 
