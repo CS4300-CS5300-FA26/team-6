@@ -1,6 +1,7 @@
-"""Tests for reading a student's most recent study plan for display."""
+"""Tests for reading a student's study plans for display."""
 
 from datetime import date, datetime, time, timedelta
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -11,7 +12,7 @@ from django.utils import timezone
 # pylint: disable=import-error
 from assignments.models import Assignment
 from study_plan.models import StudyPlan, StudySession
-from study_plan.selectors import latest_plan_sessions, study_plan_context
+from study_plan.selectors import plan_sessions, study_plan_context
 
 
 class StudyPlanTestCase(TestCase):
@@ -53,16 +54,16 @@ class StudyPlanTestCase(TestCase):
         return [session.assignment.title for session in sessions]
 
 
-class LatestPlanSessionsTests(StudyPlanTestCase):
-    """Only the signed-in student's newest plan is shown, in order, by local day."""
+class PlanSessionsTests(StudyPlanTestCase):
+    """The signed-in student's plans are shown, in order, by local day."""
 
     def test_no_plan_returns_none(self):
         """A student who never generated a plan gets None, not an empty list."""
-        self.assertIsNone(latest_plan_sessions(self.user))
+        self.assertIsNone(plan_sessions(self.user))
 
     def test_no_plan_with_a_day_returns_none(self):
         """Choosing a day still reports no plan, rather than an empty day."""
-        self.assertIsNone(latest_plan_sessions(self.user, day=self.day))
+        self.assertIsNone(plan_sessions(self.user, day=self.day))
 
     def test_sessions_come_back_in_start_order(self):
         """Sessions are ordered by start time, not by when they were saved."""
@@ -73,18 +74,34 @@ class LatestPlanSessionsTests(StudyPlanTestCase):
         self.add_session(plan, "Next Day", self.local_datetime(next_day, time(8)))
 
         self.assertEqual(
-            self.titles(latest_plan_sessions(self.user)),
+            self.titles(plan_sessions(self.user)),
             ["Morning", "Afternoon", "Next Day"],
         )
 
-    def test_older_plan_sessions_are_excluded(self):
-        """Only the most recent plan counts; earlier plans are superseded."""
+    def test_older_plan_sessions_are_included(self):
+        """Without a day filter, sessions from every plan are shown."""
         older = self.make_plan(self.user, created_at=timezone.now() - timedelta(days=7))
         self.add_session(older, "Old Essay", self.local_datetime(self.day, time(9)))
         latest = self.make_plan(self.user)
         self.add_session(latest, "Lab 4", self.local_datetime(self.day, time(10)))
 
-        self.assertEqual(self.titles(latest_plan_sessions(self.user)), ["Lab 4"])
+        self.assertEqual(self.titles(plan_sessions(self.user)), ["Old Essay", "Lab 4"])
+
+    def test_selected_day_includes_sessions_from_all_my_plans(self):
+        """A selected local day includes every owned plan, but no other dates or users."""
+        older = self.make_plan(self.user, created_at=timezone.now() - timedelta(days=7))
+        self.add_session(older, "Older Session", self.local_datetime(self.day, time(9)))
+        self.add_session(
+            older, "Other Day", self.local_datetime(self.day + timedelta(days=1), time(8))
+        )
+        latest = self.make_plan(self.user)
+        self.add_session(latest, "Newer Session", self.local_datetime(self.day, time(10)))
+        theirs = self.make_plan(self.other_user)
+        self.add_session(theirs, "Other Student", self.local_datetime(self.day, time(11)))
+
+        context = study_plan_context(self.user, self.day.isoformat())
+
+        self.assertEqual(self.titles(context["study_sessions"]), ["Older Session", "Newer Session"])
 
     def test_another_students_newer_plan_is_not_returned(self):
         """A newer plan belonging to someone else never replaces mine."""
@@ -93,14 +110,14 @@ class LatestPlanSessionsTests(StudyPlanTestCase):
         theirs = self.make_plan(self.other_user, created_at=timezone.now() + timedelta(hours=1))
         self.add_session(theirs, "Their Thesis", self.local_datetime(self.day, time(11)))
 
-        self.assertEqual(self.titles(latest_plan_sessions(self.user)), ["Lab 4"])
+        self.assertEqual(self.titles(plan_sessions(self.user)), ["Lab 4"])
 
     def test_only_another_student_has_a_plan_returns_none(self):
         """Someone else's plan does not count as mine."""
         theirs = self.make_plan(self.other_user)
         self.add_session(theirs, "Their Thesis", self.local_datetime(self.day, time(11)))
 
-        self.assertIsNone(latest_plan_sessions(self.user))
+        self.assertIsNone(plan_sessions(self.user))
 
     def test_day_returns_only_that_days_sessions(self):
         """Choosing a day narrows the plan to sessions starting on it."""
@@ -108,14 +125,14 @@ class LatestPlanSessionsTests(StudyPlanTestCase):
         self.add_session(plan, "HW3", self.local_datetime(self.day, time(14)))
         self.add_session(plan, "Lab 4", self.local_datetime(self.day + timedelta(days=1), time(9)))
 
-        self.assertEqual(self.titles(latest_plan_sessions(self.user, day=self.day)), ["HW3"])
+        self.assertEqual(self.titles(plan_sessions(self.user, day=self.day)), ["HW3"])
 
     def test_plan_with_nothing_that_day_returns_empty_not_none(self):
         """A plan with a free day is different from having no plan at all."""
         plan = self.make_plan(self.user)
         self.add_session(plan, "Lab 4", self.local_datetime(self.day + timedelta(days=1), time(9)))
 
-        self.assertEqual(list(latest_plan_sessions(self.user, day=self.day)), [])
+        self.assertEqual(list(plan_sessions(self.user, day=self.day)), [])
 
     def test_late_evening_session_counts_on_its_local_day(self):
         """11:30 PM Denver on Nov 5 is Nov 6 in UTC, but belongs to Nov 5 for the student."""
@@ -126,7 +143,7 @@ class LatestPlanSessionsTests(StudyPlanTestCase):
         )
 
         self.assertEqual(
-            self.titles(latest_plan_sessions(self.user, day=self.day)), ["Late Night"]
+            self.titles(plan_sessions(self.user, day=self.day)), ["Late Night"]
         )
 
     def test_reading_assignment_titles_takes_two_queries(self):
@@ -136,7 +153,7 @@ class LatestPlanSessionsTests(StudyPlanTestCase):
             self.add_session(plan, f"Session {hour}", self.local_datetime(self.day, time(hour)))
 
         with self.assertNumQueries(2):
-            self.titles(latest_plan_sessions(self.user))
+            self.titles(plan_sessions(self.user))
 
 
 class StudyPlanContextTests(StudyPlanTestCase):
@@ -148,15 +165,17 @@ class StudyPlanContextTests(StudyPlanTestCase):
         self.add_session(plan, "HW3", self.local_datetime(self.day, time(14)))
         self.add_session(plan, "Lab 4", self.local_datetime(self.day + timedelta(days=1), time(9)))
 
-    def test_no_day_shows_the_whole_plan(self):
-        """Without ?date= every session is shown and no day is selected."""
-        context = study_plan_context(self.user, None)
+    def test_no_day_defaults_to_local_today(self):
+        """Without ?date= only today's sessions are shown."""
+        fixed_now = self.local_datetime(self.day, time(23))
+        with patch("django.utils.timezone.now", return_value=fixed_now):
+            context = study_plan_context(self.user, None)
 
-        self.assertEqual(self.titles(context["study_sessions"]), ["HW3", "Lab 4"])
-        self.assertIsNone(context["study_day"])
+        self.assertEqual(self.titles(context["study_sessions"]), ["HW3"])
+        self.assertEqual(context["study_day"], self.day)
 
-    def test_empty_day_is_the_same_as_no_day(self):
-        """An empty ?date= (a cleared date picker) is not an error."""
+    def test_empty_day_shows_the_whole_plan(self):
+        """An empty ?date= shows all days without an error."""
         context = study_plan_context(self.user, "")
 
         self.assertEqual(self.titles(context["study_sessions"]), ["HW3", "Lab 4"])
