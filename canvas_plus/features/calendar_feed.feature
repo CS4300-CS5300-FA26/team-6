@@ -1,9 +1,24 @@
 Feature: Personal calendar subscriptions
-  Scenario: A student issues, copies, and rotates a private feed URL
-    When I issue, copy, and rotate a personal subscription URL
+  As an enrolled college student
+  I want a private calendar subscription URL for my coursework schedule
+  So that I can view assignment deadlines and planned study sessions in my calendar application
 
-  Scenario: A student fetches assignment and study-session events
-    When I fetch assignment and study-session events from local records
+  Scenario: I create and rotate my personal calendar URL
+    Given I am signed in to Canvas Plus as a student
+    When I create a calendar subscription in account settings
+    Then I receive a personal calendar URL
+    And the URL is shown only in the creation response
+    When I rotate my calendar subscription
+    Then the new URL differs and the previous URL is revoked
 
-  Scenario: A student subscribes before any events exist
-    When I subscribe to a valid empty calendar feed using local records
+  Scenario: My calendar feed shows assignment deadlines and study sessions
+    Given my account has a due-dated assignment and a saved study session
+    When a calendar client requests my feed
+    Then the feed contains a point deadline with its assignment and course
+    And the feed contains a timed study session with its assignment and course
+    And the feed excludes another student's coursework
+
+  Scenario: I can subscribe before eligible coursework events exist
+    Given I have an active subscription and no eligible coursework events
+    When a calendar client requests my feed
+    Then I receive a valid calendar with no events
