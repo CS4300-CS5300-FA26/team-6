@@ -5,7 +5,6 @@ from functools import partial
 import requests
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -25,18 +24,18 @@ from accounts.canvas_client import (
     list_upcoming_assignments,
 )
 from accounts.models import CanvasConnection, SavedTokenError
+from accounts.course_cache import cached_courses
 from .grades import RECENT_WINDOW, recent_grades
 from .models import Attachment, Assignment
 from .priority import priority
 from .sync import sync_canvas_assignments_if_needed
 from .uploads import save_attachments, validate_batch
+from .week import this_week_context
 from .forms import EffortEstimateForm 
 from study_plan.effort_estimation import estimate_and_save_assignment_effort
 from study_plan.exceptions import StudyPlanError
 from study_plan.generate import generate_plan
 
-# Enrollments rarely change mid-term; reconnecting Canvas starts a fresh cache key.
-COURSE_CACHE_SECONDS = 60 * 60
 MAX_ASSIGNMENT_PRIMARY_KEY = (1 << 63) - 1
 logger = logging.getLogger(__name__)
 
@@ -83,11 +82,7 @@ def load_canvas_context(user, *, sync_all_assignments=False, load_upcoming=True)
 
             token = connection.get_token()
             with requests.Session() as session:
-                courses_key = f"canvas-courses:{connection.pk}:{connection.updated_at.timestamp()}"
-                courses = cache.get(courses_key)
-                if courses is None:
-                    courses = list_courses(token, session=session)
-                    cache.set(courses_key, courses, COURSE_CACHE_SECONDS)
+                courses = cached_courses(connection, token, session, list_courses)
                 if load_upcoming:
                     assignments = list_upcoming_assignments(token, courses, session=session)
                     graded_context = recently_graded_context(token, courses, session)
@@ -242,6 +237,7 @@ def assignment_list(request):
             assignments_by_id[attachment.assignment.canvas_assignment_id]["attachments"].append(
                 attachment
             )
+    context.update(this_week_context(request.user, context, timezone.localdate()))
     return render(request, "assignments/assignment_list.html", context)
 
 
