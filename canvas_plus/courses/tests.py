@@ -234,7 +234,7 @@ class CoursePageTests(ConnectedStudentTestCase):
         self.assertNotContains(response, "No syllabus posted")
 
     @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
-    def test_course_page_shows_my_current_grade_under_its_name(self, _syllabus, _list_courses):
+    def test_course_page_shows_my_current_grade_under_its_name(self, syllabus, _list_courses):
         """My current grade for this course sits between the course name and the syllabus."""
         self.canvas_grade.return_value = GRADED_COURSE
 
@@ -243,7 +243,9 @@ class CoursePageTests(ConnectedStudentTestCase):
         self.assertIn('<p class="current-grade">Current grade: 97.41%</p>', page)
         self.assertLess(page.index("<h1>"), page.index("Current grade"))
         self.assertLess(page.index("Current grade"), page.index("<h2>Syllabus</h2>"))
-        self.canvas_grade.assert_called_once_with("fake-canvas-token", 1)
+        session = syllabus.call_args.kwargs["session"]
+        self.assertIsNotNone(session)
+        self.canvas_grade.assert_called_once_with("fake-canvas-token", 1, session=session)
 
     @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
     def test_course_where_i_am_not_a_student_has_no_grade_line(self, _syllabus, _list_courses):

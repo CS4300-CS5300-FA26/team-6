@@ -912,6 +912,17 @@ def test_requests_reuse_the_supplied_session():
 
 
 @pytest.mark.unit
+def test_grade_request_reuses_the_supplied_session():
+    """The grade request goes through the caller's session, not a new connection."""
+    session = Mock()
+    session.get.return_value = response({"id": 7, "enrollments": []})
+    with patch("accounts.canvas_client.requests.get") as get:
+        get_course_grade("fake-token", 7, session=session)
+    get.assert_not_called()
+    session.get.assert_called_once()
+
+
+@pytest.mark.unit
 def test_course_requests_run_concurrently(monkeypatch):
     """Every course and bucket request is in flight at once instead of one at a time."""
     monkeypatch.undo()  # opt back in to real concurrency
