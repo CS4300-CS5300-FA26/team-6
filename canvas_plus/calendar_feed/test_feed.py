@@ -161,7 +161,7 @@ def test_source_deletion_removes_events_and_source_updates_refresh_them(
     user = django_user_model.objects.create_user(username="source-refresh-owner")
     token = "source-refresh-feed-secret"
     create_subscription(user, token)
-    assignment_due = timezone.now() + timedelta(days=2)
+    assignment_due = timezone.now().replace(microsecond=0) + timedelta(days=2)
     assignment = Assignment.objects.create(
         user=user,
         title="Original deadline",
@@ -180,8 +180,8 @@ def test_source_deletion_removes_events_and_source_updates_refresh_them(
     session = StudySession.objects.create(
         plan=StudyPlan.objects.create(user=user),
         assignment=session_assignment,
-        start=timezone.now() + timedelta(days=1),
-        end=timezone.now() + timedelta(days=1, hours=1),
+        start=timezone.now().replace(microsecond=0) + timedelta(days=1),
+        end=timezone.now().replace(microsecond=0) + timedelta(days=1, hours=1),
     )
 
     with patch("requests.get", side_effect=AssertionError("Canvas request made")):

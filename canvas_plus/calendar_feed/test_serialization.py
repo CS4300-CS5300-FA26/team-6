@@ -61,6 +61,24 @@ def assert_invalid_retention_rejected(user, retention):
             generate_feed(user)
 
 
+def next_new_york_spring_transition(now):
+    """Return the next New York spring-forward instant within retention."""
+    year = now.year
+    while True:
+        march_first = datetime(year, 3, 1)
+        first_sunday = 1 + (6 - march_first.weekday()) % 7
+        transition = datetime(
+            year,
+            3,
+            first_sunday + 7,
+            7,
+            tzinfo=datetime_timezone.utc,
+        )
+        if transition > now - timedelta(days=100):
+            return transition
+        year += 1
+
+
 def test_feed_includes_stored_due_dates_for_every_sync_state(
     django_user_model,
 ):
@@ -72,7 +90,7 @@ def test_feed_includes_stored_due_dates_for_every_sync_state(
             user=user,
             title=f"Assignment {sync_state}",
             course=f"Course {sync_state}",
-            due_date=timezone.now() + timedelta(days=offset),
+            due_date=timezone.now().replace(microsecond=0) + timedelta(days=offset),
             description=f"Private description {sync_state}",
             sync_state=sync_state,
             canvas_course_id=100 + offset,
@@ -111,7 +129,7 @@ def test_assignment_event_is_a_point_with_stable_uid(django_user_model):
         user=user,
         title="Original assignment title",
         course="Original course name",
-        due_date=timezone.now() + timedelta(days=2),
+        due_date=timezone.now().replace(microsecond=0) + timedelta(days=2),
         canvas_course_id=301,
         canvas_assignment_id=401,
     )
@@ -121,7 +139,7 @@ def test_assignment_event_is_a_point_with_stable_uid(django_user_model):
     original_event = original_events[0]
     original_uid = str(original_event["UID"])
 
-    updated_due_date = timezone.now() + timedelta(days=5)
+    updated_due_date = timezone.now().replace(microsecond=0) + timedelta(days=5)
     assignment.title = "Updated assignment title"
     assignment.course = "Updated course name"
     assignment.due_date = updated_due_date
@@ -143,7 +161,7 @@ def test_feed_includes_sessions_from_all_owned_plans(django_user_model):
     """All sessions from every owned plan appear, but another student's do not."""
     user = django_user_model.objects.create_user(username="session-owner")
     other_user = django_user_model.objects.create_user(username="other-session-owner")
-    now = timezone.now()
+    now = timezone.now().replace(microsecond=0)
 
     assignments = [
         Assignment.objects.create(
@@ -200,9 +218,9 @@ def test_feed_uses_configured_timezone_across_dst(django_user_model):
     user = django_user_model.objects.create_user(username="dst-calendar-owner")
     timezone_name = "America/New_York"
     configured_timezone = ZoneInfo(timezone_name)
-    due_instant = datetime(2026, 3, 8, 6, 30, tzinfo=datetime_timezone.utc)
-    session_start = datetime(2026, 3, 8, 6, 30, tzinfo=datetime_timezone.utc)
-    session_end = datetime(2026, 3, 8, 7, 30, tzinfo=datetime_timezone.utc)
+    transition = next_new_york_spring_transition(timezone.now())
+    due_instant = transition - timedelta(minutes=30)
+    session_end = transition + timedelta(minutes=30)
 
     assignment = Assignment.objects.create(
         user=user,
@@ -216,7 +234,7 @@ def test_feed_uses_configured_timezone_across_dst(django_user_model):
     StudySession.objects.create(
         plan=plan,
         assignment=assignment,
-        start=session_start,
+        start=due_instant,
         end=session_end,
     )
 
@@ -230,10 +248,10 @@ def test_feed_uses_configured_timezone_across_dst(django_user_model):
     encoded_end = session_event.decoded("DTEND")
 
     assert encoded_due.astimezone(datetime_timezone.utc) == due_instant
-    assert encoded_start.astimezone(datetime_timezone.utc) == session_start
+    assert encoded_start.astimezone(datetime_timezone.utc) == due_instant
     assert encoded_end.astimezone(datetime_timezone.utc) == session_end
     assert encoded_due.utcoffset() == due_instant.astimezone(configured_timezone).utcoffset()
-    assert encoded_start.utcoffset() == session_start.astimezone(configured_timezone).utcoffset()
+    assert encoded_start.utcoffset() == due_instant.astimezone(configured_timezone).utcoffset()
     assert encoded_end.utcoffset() == session_end.astimezone(configured_timezone).utcoffset()
 
 
