@@ -308,8 +308,10 @@ def test_upcoming_assignments_are_normalized_and_include_course_name():
         "course_name": "CS 4300",
         "due_date": datetime(2026, 10, 23, 0, 30, tzinfo=timezone.utc),
         "submitted": False,
+        "score": None,
+        "points_possible": None,
         "description": None,
-        
+
     }]
     assert get.call_args_list[0].args == (
         "https://canvas.example.edu/api/v1/courses/42/assignments",
@@ -344,8 +346,10 @@ def test_upcoming_assignments_preserve_missing_due_date_as_none():
         "course_name": "CS 4300",
         "due_date": None,
         "submitted": False,
+        "score": None,
+        "points_possible": None,
         "description": None,
-        
+
     }]
 
 
@@ -401,6 +405,8 @@ def test_all_assignments_across_courses_and_pages():
             "course_name": "CS 4300",
             "due_date": datetime(2026, 10, 23, 18, 30, tzinfo=timezone.utc),
             "submitted": False,
+            "score": None,
+            "points_possible": None,
             "description": "Project details",
         },
         {
@@ -410,6 +416,8 @@ def test_all_assignments_across_courses_and_pages():
             "course_name": "CS 4300",
             "due_date": None,
             "submitted": False,
+            "score": None,
+            "points_possible": None,
             "description": "Read chapter 4",
         },
         {
@@ -419,6 +427,8 @@ def test_all_assignments_across_courses_and_pages():
             "course_name": "MATH 2250",
             "due_date": datetime(2026, 10, 1, 18, 30, tzinfo=timezone.utc),
             "submitted": False,
+            "score": None,
+            "points_possible": None,
             "description": None,
         },
     ]
@@ -430,9 +440,11 @@ def test_all_assignments_across_courses_and_pages():
     assert get.call_args_list[2].args == (
         "https://canvas.example.edu/api/v1/courses/84/assignments",
     )
-    assert get.call_args_list[0].kwargs["params"] == {"per_page": 100}
+    assert get.call_args_list[0].kwargs["params"] == {
+        "include[]": "submission", "per_page": 100}
     assert get.call_args_list[1].kwargs["params"] is None
-    assert get.call_args_list[2].kwargs["params"] == {"per_page": 100}
+    assert get.call_args_list[2].kwargs["params"] == {
+        "include[]": "submission", "per_page": 100}
     assert all(
         "bucket" not in call.kwargs["params"]
         for call in (get.call_args_list[0], get.call_args_list[2])
@@ -799,8 +811,10 @@ def test_submission_status_is_normalized(submission, submitted):
         "course_name": "CS 4300",
         "due_date": None,
         "submitted": submitted,
+        "score": None,
+        "points_possible": None,
         "description": None,
-        
+
     }]
 
 
@@ -934,3 +948,40 @@ def test_upcoming_assignments_require_positive_nonboolean_assignment_id(identity
     ):
         with pytest.raises(CanvasAPIError):
             list_upcoming_assignments("fake-token", [{"id": 42, "name": "CS 4300"}])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("submission, expected", [
+    ({"workflow_state": "graded", "posted_at": "2026-10-01", "score": 92}, 92),
+    ({"workflow_state": "graded", "posted_at": None, "score": 92}, None),
+    ({"workflow_state": "graded", "posted_at": "2026-10-01", "score": 92,
+      "excused": True}, None),
+    # A resubmission after grading keeps the released score.
+    ({"workflow_state": "submitted", "posted_at": "2026-10-01", "score": 92}, 92),
+    ({"workflow_state": "graded", "posted_at": "2026-10-01", "score": 0}, 0),
+    ({}, None),
+])
+def test_assignment_only_exposes_released_scores(submission, expected):
+    """Only graded, posted, non-excused numeric scores belong to the student."""
+    from .canvas_client import _normalize_assignment  # pylint: disable=import-outside-toplevel
+    result = _normalize_assignment(
+        {"id": 1, "name": "Homework", "submission": submission, "points_possible": 100},
+        "CS 4300", 1,
+    )
+    assert result["score"] == expected
+    assert result["points_possible"] == 100
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["score", "points_possible"])
+@pytest.mark.parametrize("value", [True, False, "92"])
+def test_assignment_rejects_non_numeric_grade_fields(field, value):
+    """Malformed grades fail even when the submission has not been posted."""
+    from .canvas_client import _normalize_assignment  # pylint: disable=import-outside-toplevel
+    assignment = {"id": 1, "name": "Homework", "submission": {}}
+    if field == "score":
+        assignment["submission"][field] = value
+    else:
+        assignment[field] = value
+    with pytest.raises(CanvasAPIError):
+        _normalize_assignment(assignment, "CS 4300", 1)
