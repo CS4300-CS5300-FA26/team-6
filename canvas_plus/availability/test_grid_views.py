@@ -12,11 +12,13 @@ from datetime import date, time
 from unittest.mock import patch
 
 import pytest
+from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import Availability
+from .week_grid import GRID_LABELS
 
 pytestmark = pytest.mark.integration
 
@@ -69,3 +71,20 @@ class GridViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         grid = response.context["week_grid"]
         self.assertEqual([day["date"] for day in grid], [date(2020, 11, d) for d in range(16, 23)])
+        self.assertEqual(response.context["grid_labels"], GRID_LABELS)
+
+    def test_the_grid_form_carries_the_csrf_token_a_browser_sends(self):
+        # The test client normally skips CSRF checks; a browser never does.
+        browser = Client(enforce_csrf_checks=True)
+        browser.login(username="grid_view_student", password="pw-123456")
+        page = BeautifulSoup(browser.get(reverse("availability:list")).content, "html.parser")
+        form = page.find("input", attrs={"name": "block"}).find_parent("form")
+        token = form.find("input", attrs={"name": "csrfmiddlewaretoken"})
+        self.assertIsNotNone(token, "the grid form has no CSRF token")
+
+        response = browser.post(
+            form["action"], {"csrfmiddlewaretoken": token["value"], "block": ["2020-11-19T10"]}
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.thursday_periods(), [(time(10), time(11))])

@@ -75,14 +75,23 @@ def submitted_blocks(soup):
     }
 
 
-def save(context, blocks):
+def form_action(soup):
+    """Where the grid's form posts to, read from the page as a browser would."""
+    box = soup.find("input", attrs={"name": "block"})
+    assert box is not None, "the page has no grid"
+    form = box.find_parent("form")
+    assert form is not None and form.get("action"), "the grid is not in a form with an action"
+    return form["action"]
+
+
+def save(context, blocks, url=None):
     """Post a set of block values to the save URL, as the grid's form does.
 
     A save redirects back to the Study Plan page (post, redirect, get), so a
     404, 405 or login redirect fails here instead of looking like "nothing saved".
     """
     context.response = context.client.post(
-        reverse("availability:save_week"), {"block": sorted(blocks)}
+        url or reverse("availability:save_week"), {"block": sorted(blocks)}
     )
     assert context.response.status_code == 302, context.response.status_code
     assert context.response.url == reverse("availability:list"), context.response.url
@@ -154,7 +163,7 @@ def step_select_and_save(context, day, blocks):
         value = block_value(day_date(context, day), hour)
         assert not checkbox(soup, value).has_attr("disabled"), f"{value} cannot be selected"
         chosen.add(value)
-    save(context, chosen)
+    save(context, chosen, form_action(soup))
 
 
 @when("I deselect the {day} {blocks} block and save")
@@ -166,7 +175,7 @@ def step_deselect_and_save(context, day, blocks):
         value = block_value(day_date(context, day), hour)
         assert checkbox(soup, value).has_attr("checked"), f"{value} was not selected"
         chosen.discard(value)
-    save(context, chosen)
+    save(context, chosen, form_action(soup))
 
 
 # These two forge a request on purpose: no page, just a value a browser would never

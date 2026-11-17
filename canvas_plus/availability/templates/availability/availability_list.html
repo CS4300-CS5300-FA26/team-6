@@ -3,12 +3,13 @@
 {% block title %}Availability{% endblock %}
 
 {% block content %}
-    <!-- Page heading for the student's availability section. -->
-    <h1>My Availability</h1>
+    <h1>Study Plan</h1>
 
     {% for message in messages %}
         <p class="{{ message.tags }}" role="status">{{ message }}</p>
     {% endfor %}
+
+    {% include "availability/week_grid.html" %}
 
     <!-- Form used to create a new availability entry. -->
     <h2>Add Availability</h2>
@@ -240,7 +241,7 @@
     </script>
 
     <!-- The student's study plans, optionally narrowed to one day. -->
-    <h2>Study plan</h2>
+    <h2>Generated Plan</h2>
 
     <!-- GET only reads, so no CSRF token; it also makes ?date= bookmarkable. -->
     <form method="get">

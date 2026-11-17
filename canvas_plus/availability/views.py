@@ -12,7 +12,7 @@ from assignments.views import load_canvas_context
 from study_plan.selectors import study_plan_context  # pylint: disable=import-error
 from .forms import AvailabilityForm
 from .models import Availability
-from .week_grid import save_week, week_grid
+from .week_grid import GRID_LABELS, save_week, week_grid
 
 @login_required
 def availability_list(request):
@@ -140,6 +140,7 @@ def availability_list(request):
                 query or course or date_filter_submitted or no_due_date
             ),
             "week_grid": week_grid(request.user, timezone.localdate()),
+            "grid_labels": GRID_LABELS,
             #study plan section; ?date= picks one day
             **study_plan_context(request.user, request.GET.get("date")),
         },

@@ -1,0 +1,27 @@
+<!-- This week's availability, one fieldset per day so each column reads as a group. -->
+<!-- Keep this heading bare (no id or class): the layout scenario matches its exact markup. -->
+<h2>My Availability</h2>
+<form method="post" action="{% url 'availability:save_week' %}">
+    {% csrf_token %}
+    <div class="availability-grid">
+        <!-- The lines between blocks; screen readers get each block's own label instead. -->
+        <div class="grid-hours" aria-hidden="true">
+            {% for label in grid_labels %}<span>{{ label|time:"g A" }}</span>{% endfor %}
+        </div>
+        {% for day in week_grid %}
+            <fieldset class="grid-day">
+                <legend>{{ day.date|date:"D" }}</legend>
+                {% for block in day.blocks %}
+                    <label>
+                        <!-- Past days are disabled; the save ignores them either way. -->
+                        <input type="checkbox" name="block" value="{{ block.value }}"
+                               {% if block.selected %}checked{% endif %}
+                               {% if not day.editable %}disabled{% endif %}>
+                        <span class="visually-hidden">{{ day.date|date:"l" }} {{ block.start|time:"g A" }}</span>
+                    </label>
+                {% endfor %}
+            </fieldset>
+        {% endfor %}
+    </div>
+    <button type="submit">Save availability</button>
+</form>
