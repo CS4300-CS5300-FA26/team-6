@@ -84,3 +84,14 @@ Feature: Course Hub course tabs
     When I open the Course Hub dashboard
     Then I don't see "Sprint 3 demo" on the dashboard
     And the dashboard links to the assignments page with "View all 5 assignments →"
+
+  Scenario: Assignment load failure keeps the course tabs
+    Given Canvas fails to load the assignments
+    When I open the Course Hub dashboard
+    Then I see "Unable to load upcoming assignments"
+    And I see exactly these Course Hub tabs
+      | course_code |
+      | CS 4300     |
+      | MATH 2150   |
+      | ENGL 1310   |
+      | HIST 1010   |

@@ -16,7 +16,7 @@ from study_plan.models import StudyPlan, StudySession
 NO_PLAN_MESSAGE = "No study plan has been generated yet."
 INVALID_DAY_MESSAGE = "That day is not a valid date."
 EMPTY_DAY_MESSAGE = "No study sessions on this day."
-EMPTY_PLAN_MESSAGE = "This study plan has no sessions."
+EMPTY_PLAN_MESSAGE = "Your study plans have no sessions."
 DEFAULT_DAY, DEFAULT_START, DEFAULT_END = "2026-11-05", "2:00 PM", "3:00 PM"
 
 
@@ -77,6 +77,11 @@ def step_session(context, title):
     add_session(my_plan(context), title)
 
 
+@given("my most recent study plan has a session for \"{title}\" today")
+def step_session_today(context, title):
+    add_session(my_plan(context), title, day=timezone.localdate().isoformat())
+
+
 @given("my most recent study plan has no sessions")
 def step_plan_without_sessions(context):
     my_plan(context)
@@ -111,6 +116,11 @@ def step_open_availability(context):
     context.response = context.client.get(reverse("availability:list"))
 
 
+@when("I open my availability page for all days")
+def step_open_availability_all_days(context):
+    context.response = context.client.get(reverse("availability:list"), {"date": ""})
+
+
 @when("I open my availability page for \"{day}\"")
 def step_open_availability_for_day(context, day):
     context.response = context.client.get(reverse("availability:list"), {"date": day})
@@ -120,7 +130,6 @@ def step_open_availability_for_day(context, day):
 def step_open_study_plan_from_sidebar(context):
     url = reverse("availability:list")
     context.response = context.client.get(url)
-    # Only the sidebar counts; the page's own "Show all days" link has the same href.
     sidebar = re.search(r"<nav[^>]*>(.*?)</nav>", context.response.content.decode(), re.S)
     link = f'href="{url}">Study Plan</a>'
     assert sidebar and link in sidebar.group(1), "sidebar has no Study Plan link"

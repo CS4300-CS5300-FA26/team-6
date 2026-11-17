@@ -15,6 +15,32 @@ main { flex: 1; min-width: 0; max-width: 72rem; margin: 0 auto; padding: 1rem; }
 					border-radius: 6px; background: #fef2f2; color: #991b1b; line-height: 1.6; }
 .connection-alert a { color: inherit; font-weight: 600; text-decoration: underline; }
 .connection-alert a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.error { display: inline-block; max-width: 100%; margin: 0.5rem 0; padding: 0.5rem 0.75rem; border: 1px solid #fca5a5; border-radius: 4px; background: #fef2f2; color: #991b1b; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+
+/* Shared buttons and content links. More specific rules (nav, landing page) override these. */
+button { padding: 0.5rem 1rem; border: 1px solid #17324d; border-radius: 6px; background: #17324d;
+		 color: #fff; font: inherit; cursor: pointer; }
+button:hover { border-color: #0f2236; background: #0f2236; }
+button:focus-visible { outline: 2px solid #17324d; outline-offset: 2px; }
+main a { color: #1d4f80; text-underline-offset: 0.15em; }
+main a:hover { color: #0f2236; text-decoration-thickness: 2px; }
+main a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* The sidebar is dark, so its controls get a light outline and a light-bordered menu button. */
+nav a:focus-visible, nav button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.menu-toggle { border-color: #fff; background: transparent; }
+.menu-toggle:hover { border-color: #fff; background: #284b6d; }
+/* Secondary and destructive actions. The classes work on both <button> and <a>, so a link can look like a button. */
+.button-secondary, .button-danger { display: inline-block; padding: 0.5rem 1rem; border: 1px solid; border-radius: 6px;
+									 font: inherit; line-height: 1.2; text-decoration: none; cursor: pointer;
+									 justify-self: start; }  /* inside a grid, stay button-sized instead of filling the cell */
+.button-secondary { border-color: #17324d; background: #fff; color: #17324d; }
+.button-secondary:hover { border-color: #0f2236; background: #e8eef4; color: #0f2236; }
+.button-danger { border-color: #9b1c13; background: #9b1c13; color: #fff; }
+.button-danger:hover { border-color: #7a150f; background: #7a150f; color: #fff; }
+.button-secondary:focus-visible { outline: 2px solid #17324d; outline-offset: 2px; }
+.button-danger:focus-visible { outline: 2px solid #9b1c13; outline-offset: 2px; }
+/* A Cancel or Back button after a form gets space from the form's own button. */
+form + .button-secondary { margin-top: 0.5rem; }
 
 @media (max-width: 40rem) {
 	body > nav { flex-basis: 8rem; padding: 0.5rem; }
@@ -106,10 +132,37 @@ body.landing-page a { color: #17324d; }
 .upcoming .assignment-due { white-space: nowrap; }
 .view-all { margin: 1rem 0 0; }
 .view-all a { color: #17324d; }
+.planning-assignments { margin: 2rem 0; }
+.planning-assignment-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); align-items: end; gap: 0.75rem; margin: 1rem 0; padding: 1rem; border: 1px solid #cbd5d1; border-radius: 4px; background: #f5f8f6; }
+.planning-assignment-filters label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+.planning-assignment-filters input:not([type="checkbox"]), .planning-assignment-filters select { width: 100%; min-width: 0; padding: 0.5rem; border: 1px solid #aebbb5; border-radius: 3px; background: #fff; color: #263b34; font: inherit; }
+.planning-assignment-filters input:focus-visible, .planning-assignment-filters select:focus-visible { outline: 2px solid #245b49; outline-offset: 2px; }
+.planning-assignment-filters .planning-no-due-date { display: flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; }
+.planning-no-due-date input { width: 1.1rem; height: 1.1rem; accent-color: #245b49; }
+.planning-filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; min-height: 2.5rem; }
+.planning-filter-actions button { flex: 0 0 auto; padding: 0.55rem 0.75rem; border: 0; border-radius: 4px; background: #17324d; color: #fff; font: inherit; white-space: nowrap; cursor: pointer; }
+.planning-filter-actions a { color: #17324d; }
+.planning-assignment-form { margin: 1rem 0; }
+.planning-assignment-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #cbd5d1; border-radius: 4px; }
+.planning-assignment-table { width: 100%; min-width: 34rem; border-collapse: collapse; table-layout: fixed; background: #fff; }
+.planning-assignment-table th, .planning-assignment-table td { padding: 0.75rem; border-bottom: 1px solid #dce3e0; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.planning-assignment-table th { background: #eef3f1; color: #263b34; font-size: 0.9rem; }
+.planning-assignment-table tbody tr:hover { background: #f5f8f6; }
+.planning-assignment-table th:first-child, .planning-assignment-table td:first-child { width: 5rem; text-align: center; white-space: nowrap; }
+.planning-assignment-table th:nth-child(3), .planning-assignment-table td:nth-child(3) { width: 10rem; }
+.planning-assignment-table th:last-child, .planning-assignment-table td:last-child { width: 7rem; }
+.planning-assignment-table input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: #245b49; cursor: pointer; }
+.planning-assignment-table input[type="checkbox"]:focus-visible { outline: 2px solid #17324d; outline-offset: 3px; }
+.planning-assignment-title { font-weight: 700; overflow-wrap: anywhere; }
+.planning-generate-button { margin-top: 1rem; padding: 0.65rem 1rem; border: 0; border-radius: 4px; background: #245b49; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.planning-generate-button:hover { background: #194b3b; }
+.planning-generate-button:focus-visible { outline: 2px solid #17324d; outline-offset: 3px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 @media (max-width: 40rem) {
 	.assignment-card { grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; }
 	.assignment-due { grid-column: 2; max-width: none; text-align: left; }
+	.planning-assignment-table-scroll { border-radius: 0; }
 }
 
 .assignment-toggle { display: flex; gap: 0.5rem; }

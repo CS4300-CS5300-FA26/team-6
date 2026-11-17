@@ -3,7 +3,7 @@
 {% block title %}{% if course %}{{ course.name }}{% else %}Course{% endif %}{% endblock %}
 
 {% block content %}
-  <p><a href="{% url 'course_list' %}">← All courses</a></p>
+  <p><a class="button-secondary" href="{% url 'course_list' %}">← All courses</a></p>
   {% if not_found %}
     <h1>Course not found</h1>
   {% elif canvas_connection_missing %}

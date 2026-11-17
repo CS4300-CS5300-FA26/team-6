@@ -167,7 +167,8 @@ class CoursePageTests(ConnectedStudentTestCase):
         """A student can return to the list of their courses."""
         response = self.open_course()
 
-        self.assertContains(response, f'<a href="{reverse("course_list")}">← All courses</a>')
+        page = BeautifulSoup(response.content, "html.parser")
+        self.assertIsNotNone(page.find("a", href=reverse("course_list"), string="← All courses"))
 
     @patch("courses.views.get_course_syllabus", return_value=FILE_SYLLABUS)
     def test_syllabus_pdf_opens_in_place(self, _syllabus, _list_courses):
