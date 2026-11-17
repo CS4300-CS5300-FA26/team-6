@@ -290,3 +290,24 @@ def test_search_result_keeps_canvas_link_for_invalid_connection(client):
         in response.content
     )
     assert b'target="_blank"' in response.content
+
+@pytest.mark.django_db
+def test_assignment_list_links_to_search_page(client):
+    """The assignments page should provide navigation to keyword search."""
+
+    # Create and authenticate the student.
+    user = get_user_model().objects.create_user(
+        username="assignment-search-link-user",
+    )
+    client.force_login(user)
+
+    # Open the assignments page.
+    response = client.get(
+        reverse("assignment_list")
+    )
+
+    # The page should render and expose the search route.
+    assert response.status_code == 200
+    assert reverse("search_assignments").encode() in response.content
+    assert b"Search" in response.content
+    
