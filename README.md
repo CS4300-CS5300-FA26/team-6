@@ -33,9 +33,12 @@ team-6/
 │   │   ├── migrations/
 │   │   ├── templates/assignments/
 │   │   │   └── assignment_list.html
+│   │   │   └── search_assignments.html
 │   │   ├── admin.py
 │   │   ├── apps.py
 │   │   ├── models.py
+│   │   ├── sync.py
+│   │   ├── test_assignment_search.py
 │   │   ├── tests.py
 │   │   ├── urls.py
 │   │   └── views.py
@@ -68,10 +71,12 @@ team-6/
 │   ├── features/                       # Executable Gherkin acceptance scenarios
 │   │   ├── steps/
 │   │   │   ├── assignment_steps.py
+│   │   │   ├── assignment_search_steps.py
 │   │   │   ├── connect_canvas_steps.py
 │   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
+│   │   ├── assignment_search.feature
 │   │   ├── connect_canvas.feature
 │   │   ├── course_page.feature
 │   │   ├── courses.feature
@@ -238,6 +243,21 @@ The [assignment model guide](docs/assignment-models.md) describes the user-owned
 assignment, reusable file, and attachment schema for #42, including migration
 preconditions and the contract for #49 estimates.
 
+## Assignment keyword search
+
+Signed-in students can search their locally synchronized Canvas assignments across all connected courses.
+
+Assignment search supports:
+
+- Case-insensitive assignment title matching
+- Case-insensitive assignment description matching
+- Course name display in search results
+- Direct links back to the assignment in Canvas
+- Empty-search validation
+- No-results messaging
+
+Search runs against locally synchronized `Assignment` records rather than making a live Canvas API request for every search. Only assignments owned by the signed-in student and currently marked as `synced` are included in normal search results.
+
 ## Dashboard known limitations
 
 - Overdue work stays listed for as long as the course is active, even if it is months old.
@@ -377,3 +397,7 @@ Jackson McGuire used Claude Code to help build the syllabus file preview. Jackso
 #### Generating Study Sessiosn [Backend]
 
 Stephen used ai to write tests and implement code for the generate study session behavior. 
+
+#### Assignment keyword search
+
+Nathan Hinebaugh used ChatGPT to assist with implementation planning, Django search logic, pytest and Behave test development, and troubleshooting for the assignment keyword search feature. All suggested code was reviewed and tested locally before being committed.
