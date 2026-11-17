@@ -58,9 +58,11 @@ team-6/
 │   │   ├── apps.py
 │   │   ├── current.py                  # Which courses count as current
 │   │   ├── files.py                    # Turns syllabus file links into viewers and downloads
+│   │   ├── grades.py                   # The current grade line on a course page
 │   │   ├── syllabus.py                 # Makes Canvas syllabus HTML safe to show
 │   │   ├── test_current.py
 │   │   ├── test_files.py
+│   │   ├── test_grades.py
 │   │   ├── test_syllabus.py
 │   │   ├── tests.py
 │   │   ├── urls.py
@@ -69,13 +71,16 @@ team-6/
 │   │   ├── steps/
 │   │   │   ├── assignment_steps.py
 │   │   │   ├── connect_canvas_steps.py
+│   │   │   ├── course_grade_steps.py
 │   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
 │   │   ├── connect_canvas.feature
+│   │   ├── course_grade.feature
 │   │   ├── course_page.feature
 │   │   ├── courses.feature
-│   │   └── landing_page.feature
+│   │   ├── landing_page.feature
+│   │   └── syllabus_files.feature
 │   ├── templates/                      # Shared layout and landing page
 │   │   ├── base.html
 │   │   └── landing.html
@@ -373,6 +378,10 @@ Jackson McGuire used Claude Code to help build the course page. Jackson ran ever
 #### Syllabus file preview
 
 Jackson McGuire used Claude Code to help build the syllabus file preview. Jackson ran every test red and green himself and verified previews, downloads, and locked files against his real Canvas courses on a local server.
+
+#### Current grade on the course page
+
+Jackson McGuire used Claude Code to help build the current grade on the course page. Jackson ran every test red and green himself, and checked each course's grade against Canvas's own Grades page on a local server.
 
 #### Generating Study Sessiosn [Backend]
 
