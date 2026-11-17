@@ -39,10 +39,12 @@ Feature: Weekly availability grid on the Study Plan page
     Then the Monday and Tuesday blocks cannot be selected
     And the Wednesday blocks can be selected
 
-  # The page disables past days, but a request can still include them.
+  # The page disables past days, but a request can still include them. The
+  # Thursday block shows the request was saved and only Monday was dropped.
   Scenario: Blocks on days that have passed are ignored
-    When I submit the Monday 10 AM block
+    When I submit the Monday 10 AM block together with the Thursday 10 AM block
     Then I have no availability on Monday
+    And on Thursday I am available only from 10:00 AM to 11:00 AM
 
   Scenario: Availability on days that have passed survives a save
     Given I am available on Monday from 10:00 AM to 12:00 PM
@@ -62,8 +64,9 @@ Feature: Weekly availability grid on the Study Plan page
     Then on Thursday I am available only from 10:00 AM to 11:00 AM and from 9:00 PM to 10:00 PM
 
   Scenario: Blocks outside this week are ignored
-    When I submit a block for next Monday
+    When I submit a block for next Monday together with the Thursday 10 AM block
     Then I have no availability on next Monday
+    And on Thursday I am available only from 10:00 AM to 11:00 AM
 
   # Abuse case: a lookup that forgets whose availability it is would show theirs.
   Scenario: Another student's availability is not shown
