@@ -26,6 +26,7 @@ pytestmark = pytest.mark.unit
 
 TODAY = date(2020, 11, 18)  # Wednesday
 MONDAY = date(2020, 11, 16)
+TUESDAY = date(2020, 11, 17)
 THURSDAY = date(2020, 11, 19)
 FRIDAY = date(2020, 11, 20)
 SUNDAY = date(2020, 11, 22)
@@ -58,7 +59,7 @@ class GridTestCase(TestCase):
         self.other = users.create_user(username="other_grid_student", password="pw-123456")
 
     def available(self, day, start, end, user=None):
-        Availability.objects.create(
+        return Availability.objects.create(
             user=user or self.student, date=day, start_time=at(start), end_time=at(end)
         )
 
@@ -83,6 +84,8 @@ class ParseBlockTests(TestCase):
             "2020-11-19T1a",
             "nonsense",
             "2020-11-19T10T10",
+            "2020-11-19T+1",  # int() would accept these two
+            "2020-11-19T 9",
         ]:
             with self.subTest(value=value):
                 self.assertIsNone(parse_block(value))
@@ -122,6 +125,14 @@ class WeekGridTests(GridTestCase):
 
         self.assertEqual(selected, [(FRIDAY, 14), (FRIDAY, 15)])
 
+    def test_touching_periods_cover_an_hour_together(self):
+        self.available(THURSDAY, "10:00", "11:30")
+        self.available(THURSDAY, "11:30", "12:00")
+
+        selected = self.selected(week_grid(self.student, TODAY))
+
+        self.assertEqual(selected, [(THURSDAY, 10), (THURSDAY, 11)])
+
     def test_a_partly_covered_hour_is_not_selected(self):
         self.available(THURSDAY, "9:30", "10:15")
 
@@ -133,6 +144,19 @@ class WeekGridTests(GridTestCase):
         self.assertEqual(
             [day["editable"] for day in grid], [False, False, True, True, True, True, True]
         )
+
+    def test_the_week_is_the_same_whichever_day_today_is(self):
+        for today, editable in [
+            (MONDAY, [True] * 7),
+            (SUNDAY, [False] * 6 + [True]),
+        ]:
+            with self.subTest(today=today):
+                grid = week_grid(self.student, today)
+
+                self.assertEqual(
+                    [day["date"] for day in grid], [date(2020, 11, d) for d in range(16, 23)]
+                )
+                self.assertEqual([day["editable"] for day in grid], editable)
 
     def test_another_students_periods_select_nothing(self):
         self.available(THURSDAY, "10:00", "12:00", user=self.other)
@@ -155,6 +179,31 @@ class SaveWeekTests(GridTestCase):
         save_week(self.student, TODAY, [block(THURSDAY, 10), block(THURSDAY, 11)])
 
         self.assert_periods(THURSDAY, ("10:00", "12:00"))
+
+    def test_a_duplicate_block_is_one_period(self):
+        save_week(self.student, TODAY, [block(THURSDAY, 10), block(THURSDAY, 10)])
+
+        self.assert_periods(THURSDAY, ("10:00", "11:00"))
+
+    def test_today_can_be_saved_and_yesterday_cannot(self):
+        save_week(self.student, TODAY, [block(TODAY, 10), block(TUESDAY, 10)])
+
+        self.assert_periods(TODAY, ("10:00", "11:00"))
+        self.assert_periods(TUESDAY)
+
+    def test_a_day_whose_time_did_not_change_keeps_its_rows(self):
+        friday = self.available(FRIDAY, "14:00", "16:00")
+
+        # The page shows Friday 2 and 3 PM ticked, so a save sends them again.
+        save_week(
+            self.student, TODAY, [block(FRIDAY, 14), block(FRIDAY, 15), block(THURSDAY, 10)]
+        )
+
+        self.assertEqual(
+            list(Availability.objects.filter(user=self.student, date=FRIDAY).values_list("pk")),
+            [(friday.pk,)],
+        )
+        self.assert_periods(THURSDAY, ("10:00", "11:00"))
 
     def test_separate_blocks_are_separate_periods(self):
         save_week(self.student, TODAY, [block(THURSDAY, 10), block(THURSDAY, 14)])
