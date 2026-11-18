@@ -430,3 +430,8 @@ Joshua Douglas used Claude Code and Codex to build the html involved in displayi
 #### Assignment keyword search
 
 Nathan Hinebaugh used ChatGPT to assist with implementation planning, Django search logic, pytest and Behave test development, and troubleshooting for the assignment keyword search feature. All suggested code was reviewed and tested locally before being committed.
+
+
+#### Calendar Feed Generation
+
+Stephen Tovar used copilot to assist with creating the .ics serialization and calendar feed end point.
