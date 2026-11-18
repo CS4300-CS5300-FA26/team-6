@@ -5,12 +5,14 @@ from datetime import date, datetime, time, timedelta
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from assignments.models import Assignment
 from assignments.views import load_canvas_context
 from study_plan.selectors import study_plan_context  # pylint: disable=import-error
 from .forms import AvailabilityForm
 from .models import Availability
+from .week_grid import GRID_LABELS, save_week, week_grid
 
 @login_required
 def availability_list(request):
@@ -137,10 +139,22 @@ def availability_list(request):
             "assignment_filters_active": bool(
                 query or course or date_filter_submitted or no_due_date
             ),
+            "week_grid": week_grid(request.user, timezone.localdate()),
+            "grid_labels": GRID_LABELS,
             #study plan section; ?date= picks one day
             **study_plan_context(request.user, request.GET.get("date")),
         },
     )
+
+
+@login_required
+@require_POST
+def availability_save_week(request):
+    """Save the grid's ticked blocks for this week, then show the page again."""
+    save_week(request.user, timezone.localdate(), request.POST.getlist("block"))
+    return redirect("availability:list")
+
+
 @login_required
 def availability_edit(request, availability_id):
     """allow change to availability"""
