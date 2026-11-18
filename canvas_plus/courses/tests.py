@@ -592,6 +592,7 @@ class CourseAssignmentSummaryTests(ConnectedStudentTestCase):
              "score": None},
             {"title": "Partial", "due_date": None, "score": 92.5, "points_possible": 100.0},
             {"title": "Whole", "due_date": None, "score": 88.0, "points_possible": 100.0},
+            {"title": "Precise", "due_date": None, "score": 99.43, "points_possible": 100.0},
         ]
         response = self.open_summary(assignments, "?view=past")
         self.assertContains(response, 'href="?view=past" aria-current="true"')
@@ -602,6 +603,8 @@ class CourseAssignmentSummaryTests(ConnectedStudentTestCase):
         # Canvas sends floats; whole numbers display without a trailing ".0".
         self.assertContains(response, "92.5 / 100<")
         self.assertContains(response, "88 / 100<")
+        # Two-decimal scores match Canvas instead of rounding to one decimal.
+        self.assertContains(response, "99.43 / 100<")
 
     def test_empty_views_hide_view_all(self):
         """An empty course has clear messages and no misleading all-assignments link."""
