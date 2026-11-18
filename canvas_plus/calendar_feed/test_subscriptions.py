@@ -69,13 +69,23 @@ def test_student_creates_and_rotates_subscription_url(client, django_user_model)
     """Creating a feed URL is personal, and rotating it rejects the old URL."""
     signed_in_student(client, django_user_model)
 
-    created = client.post(SETTINGS_URL, {"action": "calendar"})
+    created = client.post(
+        SETTINGS_URL,
+        {"action": "calendar"},
+        HTTP_X_FORWARDED_PROTO="https",
+    )
     assert created.status_code == 200
     first_url = copyable_feed_url(created)
+    assert urlsplit(first_url).scheme == "https"
 
-    rotated = client.post(SETTINGS_URL, {"action": "calendar"})
+    rotated = client.post(
+        SETTINGS_URL,
+        {"action": "calendar"},
+        HTTP_X_FORWARDED_PROTO="https",
+    )
     assert rotated.status_code == 200
     second_url = copyable_feed_url(rotated)
+    assert urlsplit(second_url).scheme == "https"
     assert second_url != first_url
 
     old_feed = client.get(urlsplit(first_url).path)
