@@ -14,6 +14,7 @@ from .canvas_client import (
     CanvasFileTooLarge,
     download_course_file,
     get_course_file,
+    get_course_grade,
     get_course_syllabus,
     list_courses,
     list_upcoming_assignments,
@@ -86,6 +87,50 @@ def test_malformed_syllabus_is_not_treated_as_success():
                return_value=response({"id": 7, "syllabus_body": 42})):
         with pytest.raises(CanvasAPIError):
             get_course_syllabus("fake-token", 7)
+
+
+@pytest.mark.unit
+def test_course_grade_request_returns_my_current_scores():
+    """The grade request asks Canvas for the course with my current totals and returns it."""
+    course = {
+        "id": 7,
+        "hide_final_grades": False,
+        "enrollments": [{"type": "student", "computed_current_score": 97.41,
+                         "computed_current_grade": None}],
+    }
+    with patch("accounts.canvas_client.requests.get", return_value=response(course)) as get:
+        assert get_course_grade("fake-token", 7) == course
+    assert get.call_args.args == ("https://canvas.example.edu/api/v1/courses/7",)
+    assert get.call_args.kwargs["params"] == {"include[]": "total_scores"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("course", [
+    [],
+    {"id": 7, "enrollments": "student"},
+    {"id": 7, "enrollments": ["student"]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": "97.41"}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_grade": 4}]},
+    {"id": 7, "enrollments": {}},
+    {"id": 7, "enrollments": ""},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": True}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": float("nan")}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": float("inf")}]},
+    {"id": 7, "hide_final_grades": "false",
+     "enrollments": [{"type": "student", "computed_current_score": 97.41}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": 10**400}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": 1000.01}]},
+    {"id": 7, "enrollments": [{"type": "student", "computed_current_score": -5}]},
+], ids=["not-a-course", "enrollments-not-a-list", "enrollment-not-an-object",
+        "score-not-a-number", "letter-not-text", "empty-object-enrollments",
+        "empty-text-enrollments", "score-true-or-false", "score-not-a-number-nan",
+        "score-infinite", "hidden-flag-not-true-or-false", "score-huge-integer",
+        "score-over-1000", "score-negative"])
+def test_malformed_grade_is_not_treated_as_success(course):
+    """A grade Canvas sends in an unreadable shape is reported as a Canvas problem, not shown."""
+    with patch("accounts.canvas_client.requests.get", return_value=response(course)):
+        with pytest.raises(CanvasAPIError):
+            get_course_grade("fake-token", 7)
 
 
 @pytest.mark.unit
@@ -891,6 +936,17 @@ def test_requests_reuse_the_supplied_session():
 
     get.assert_not_called()
     assert session.get.call_count == 3
+
+
+@pytest.mark.unit
+def test_grade_request_reuses_the_supplied_session():
+    """The grade request goes through the caller's session, not a new connection."""
+    session = Mock()
+    session.get.return_value = response({"id": 7, "enrollments": []})
+    with patch("accounts.canvas_client.requests.get") as get:
+        get_course_grade("fake-token", 7, session=session)
+    get.assert_not_called()
+    session.get.assert_called_once()
 
 
 @pytest.mark.unit

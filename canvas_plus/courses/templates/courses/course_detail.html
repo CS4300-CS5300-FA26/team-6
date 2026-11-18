@@ -12,7 +12,10 @@
   {% elif canvas_unavailable %}
     <p role="status">Unable to load this course. Please try again.</p>
   {% elif course %}
-    <h1>{{ course.name }}</h1>
+    <div class="course-header">
+      <h1>{{ course.name }}</h1>
+      {% if grade %}<p class="current-grade">{{ grade }}</p>{% endif %}
+    </div>
     <section class="upcoming" aria-labelledby="assignments-heading">
       <h2 id="assignments-heading">Assignments</h2>
       {% if assignments_unavailable %}

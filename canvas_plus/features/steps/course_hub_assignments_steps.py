@@ -13,7 +13,8 @@ from features.steps.course_list_steps import connect_student
 def prepare_summary(context):
     """Arrange live Canvas responses for the selected course."""
     context.canvas_courses.return_value = [{"id": 1, "name": "CS 4300"}]
-    for name, result in (("get_course_syllabus", None), ("list_all_assignments", [])):
+    for name, result in (("get_course_syllabus", None), ("list_all_assignments", []),
+                         ("get_course_grade", {"enrollments": []})):
         patcher = patch(f"courses.views.{name}", return_value=result)
         mock = patcher.start()
         context.add_cleanup(patcher.stop)

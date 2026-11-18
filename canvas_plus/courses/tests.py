@@ -44,6 +44,11 @@ FILE_SYLLABUS = (
     '<p>Syllabus: <a class="instructure_file_link" title="syllabus.pdf" '
     'href="https://canvas.example.edu/courses/1/files/9?wrap=1">syllabus.pdf</a></p>'
 )
+GRADED_COURSE = {
+    "hide_final_grades": False,
+    "enrollments": [{"type": "student", "computed_current_score": 97.41,
+                     "computed_current_grade": None}],
+}
 
 
 class ConnectedStudentTestCase(TestCase):
@@ -139,13 +144,16 @@ class CourseListPageTests(ConnectedStudentTestCase):
 @pytest.mark.integration
 @patch("courses.views.list_courses", return_value=[CURRENT_COURSE])
 class CoursePageTests(ConnectedStudentTestCase):
-    """A course page shows that course's syllabus from Canvas."""
+    """A course page shows that course's syllabus and my current grade from Canvas."""
 
     def setUp(self):
         super().setUp()
-        patcher = patch("courses.views.list_all_assignments", return_value=[])
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        grade = patch("courses.views.get_course_grade", return_value={"enrollments": []})
+        self.canvas_grade = grade.start()
+        self.addCleanup(grade.stop)
+        assignments = patch("courses.views.list_all_assignments", return_value=[])
+        assignments.start()
+        self.addCleanup(assignments.stop)
 
     def open_course(self, course_id=1):
         """Open one course page as the signed-in student."""
@@ -196,6 +204,7 @@ class CoursePageTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "Course not found", status_code=404)
         get_course_syllabus.assert_not_called()
+        self.canvas_grade.assert_not_called()
 
     @patch("courses.views.get_course_syllabus")
     def test_missing_connection_asks_to_connect(self, get_course_syllabus, list_courses):
@@ -207,6 +216,7 @@ class CoursePageTests(ConnectedStudentTestCase):
         self.assertContains(response, "Connect Canvas to see your courses")
         list_courses.assert_not_called()
         get_course_syllabus.assert_not_called()
+        self.canvas_grade.assert_not_called()
 
     def test_expired_connection_asks_to_reconnect(self, list_courses):
         """A rejected token is saved as expired and the student is told to reconnect."""
@@ -225,6 +235,49 @@ class CoursePageTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "Unable to load this course. Please try again.")
         self.assertNotContains(response, "No syllabus posted")
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_course_page_shows_my_current_grade_under_its_name(self, syllabus, _list_courses):
+        """My current grade for this course sits between the course name and the syllabus."""
+        self.canvas_grade.return_value = GRADED_COURSE
+
+        page = self.open_course().content.decode()
+
+        self.assertIn('<p class="current-grade">Current grade: 97.41%</p>', page)
+        self.assertLess(page.index("<h1>"), page.index("Current grade"))
+        self.assertLess(page.index("Current grade"), page.index("<h2>Syllabus</h2>"))
+        session = syllabus.call_args.kwargs["session"]
+        self.assertIsNotNone(session)
+        self.canvas_grade.assert_called_once_with("fake-canvas-token", 1, session=session)
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_course_where_i_am_not_a_student_has_no_grade_line(self, _syllabus, _list_courses):
+        """No empty grade line is left on the page when Canvas has no grade of mine."""
+        response = self.open_course()
+
+        self.assertNotContains(response, 'class="current-grade"')
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_grade_outage_still_shows_the_syllabus(self, _syllabus, _list_courses):
+        """If Canvas can't send my grade, the rest of the course page still loads."""
+        self.canvas_grade.side_effect = CanvasAPIError("Down")
+
+        response = self.open_course()
+
+        self.assertContains(response, "Unable to load your current grade. Please try again.")
+        self.assertContains(response, "<h4>Grading</h4>")
+        self.assertNotContains(response, "Unable to load this course")
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_rejected_token_while_loading_grade_asks_to_reconnect(self, _syllabus, _list_courses):
+        """A token Canvas rejects while sending my grade still marks the connection expired."""
+        self.canvas_grade.side_effect = CanvasAuthenticationError("Rejected")
+
+        response = self.open_course()
+
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.is_valid)
+        self.assertContains(response, "Your Canvas connection expired. Please reconnect.")
 
 
 @pytest.mark.integration
@@ -556,7 +609,8 @@ class CourseAssignmentSummaryTests(ConnectedStudentTestCase):
     def setUp(self):
         super().setUp()
         for target, value in (("list_courses", [CURRENT_COURSE]),
-                              ("get_course_syllabus", None)):
+                              ("get_course_syllabus", None),
+                              ("get_course_grade", {"enrollments": []})):
             patcher = patch(f"courses.views.{target}", return_value=value)
             patcher.start()
             self.addCleanup(patcher.stop)
