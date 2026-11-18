@@ -248,6 +248,19 @@ The [Canvas connection study guide](docs/canvas-connection.md) explains the requ
 flow, files, tests, deployment configuration, and limitations. Assignment importing
 is tracked separately in issue #39.
 
+## Calendar subscriptions
+
+Signed-in students can create a private calendar feed URL from **Settings**. Add
+the URL to a calendar app as an internet-calendar subscription. It includes local
+assignment deadlines and saved study sessions, is read-only, and does not make
+Canvas requests when fetched. The URL is a bearer credential: keep it private;
+rotating it immediately revokes the previous URL. Events are retained for 112
+elapsed days by default, configurable with `CALENDAR_FEED_RETENTION_DAYS`.
+Calendar apps control their own refresh and cache behavior, so previously
+downloaded events may remain visible until the app updates its copy. See the
+[calendar feed guide](docs/calendar-feed.md) for setup, credential handling, and
+retention details.
+
 The [assignment model guide](docs/assignment-models.md) describes the user-owned
 assignment, reusable file, and attachment schema for #42, including migration
 preconditions and the contract for #49 estimates.
@@ -430,3 +443,8 @@ Joshua Douglas used Claude Code and Codex to build the html involved in displayi
 #### Assignment keyword search
 
 Nathan Hinebaugh used ChatGPT to assist with implementation planning, Django search logic, pytest and Behave test development, and troubleshooting for the assignment keyword search feature. All suggested code was reviewed and tested locally before being committed.
+
+
+#### Calendar Feed Generation
+
+Stephen Tovar used copilot to assist with creating the .ics serialization and calendar feed end point.

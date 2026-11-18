@@ -3,11 +3,15 @@ from django.contrib.auth import login, logout
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.contrib.auth.forms import AuthenticationForm
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
+
+from calendar_feed.models import CalendarSubscription
+from calendar_feed.services import issue_subscription
 
 from .forms import CanvasConnectionForm, RegistrationForm
 from .canvas_client import CanvasAPIError, CanvasAuthenticationError, canvas_base_url, list_courses
@@ -46,16 +50,28 @@ def login_view(request):
     )
 
 @sensitive_post_parameters("token")
-@sensitive_variables("token")
+@sensitive_variables("token", "feed_url")
 @never_cache
 @login_required
 def settings_view(request):
     """Manage account settings, including the user's Canvas connection."""
-    form = CanvasConnectionForm(request.POST if request.method == "POST" else None)
+    calendar_action = (
+        request.method == "POST" and request.POST.get("action") == "calendar"
+    )
+    feed_url = None
+    if calendar_action:
+        token = issue_subscription(request.user)
+        feed_url = request.build_absolute_uri(
+            reverse("calendar_feed", args=[token])
+        )
+
+    form = CanvasConnectionForm(
+        request.POST if request.method == "POST" and not calendar_action else None
+    )
     connection = CanvasConnection.objects.filter(user=request.user).first()
     courses = None
 
-    if request.method == "POST" and form.is_valid():
+    if request.method == "POST" and not calendar_action and form.is_valid():
 
         token = form.cleaned_data["token"]
 
@@ -84,6 +100,10 @@ def settings_view(request):
         "canvas_connected": courses is not None,
         "saved_token_last_four": connection.token_last_four if connection else "",
         "canvas_connection_expired": connection is not None and not connection.is_valid,
+        "calendar_feed_url": feed_url,
+        "has_calendar_subscription": CalendarSubscription.objects.filter(
+            user=request.user
+        ).exists(),
     })
 
 
