@@ -19,7 +19,7 @@
             {% if user.is_authenticated %}
                 <li><a href="{% url 'course_list' %}">Courses</a></li>
                 <li><a href="{% url 'availability:list' %}">Study Plan</a></li>
-                <li><a href="{% url 'connect_canvas' %}">Connect Canvas</a></li>
+                <li><a href="{% url 'settings' %}">Settings</a></li>
                 <li class="logout-item">
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
@@ -49,11 +49,11 @@
     {% endblock %}
         {% if canvas_connection_expired %}
             <p class="connection-alert" role="alert">Your Canvas connection expired. Please reconnect.
-                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+                <a href="{% url 'settings' %}">Settings</a>
             </p>
         {% elif canvas_connection_error %}
             <p role="status">{{ canvas_connection_error }}
-                <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+                <a href="{% url 'settings' %}">Settings</a>
             </p>
         {% endif %}
         {% block content %}{% endblock %}

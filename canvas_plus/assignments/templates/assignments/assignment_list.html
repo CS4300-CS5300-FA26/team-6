@@ -24,7 +24,7 @@
     {% if not canvas_connection_expired %}
       <p role="status">
       {% if canvas_connection_missing %}
-        Connect Canvas to see your upcoming assignments. <a href="{% url 'connect_canvas' %}">Connect Canvas</a>.
+        Connect Canvas to see your upcoming assignments. <a href="{% url 'settings' %}">Settings</a>.
       {% else %}
         {{ assignments_unavailable_message }}
       {% endif %}

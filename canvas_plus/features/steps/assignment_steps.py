@@ -405,7 +405,7 @@ def step_connection_prompt_not_empty_state(context):
     assert context.response.status_code == 200
     html = context.response.content.decode()
     assert "Connect Canvas to see your upcoming assignments." in html
-    assert 'href="/accounts/connect-canvas/"' in html
+    assert 'href="/accounts/settings/"' in html
     assert "No upcoming assignments" not in html
 
 
@@ -414,7 +414,7 @@ def step_expired_connection_message(context):
     assert context.response.status_code == 200
     html = context.response.content.decode()
     assert html.count("Your Canvas connection expired.") == 1
-    assert 'href="/accounts/connect-canvas/"' in html
+    assert 'href="/accounts/settings/"' in html
     assert "No upcoming assignments" not in html
 
 

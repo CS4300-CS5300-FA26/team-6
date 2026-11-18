@@ -300,7 +300,7 @@ class CanvasAssignmentsPageTests(TestCase):
         self.assertFalse(self.connection.is_valid)
         self.assertEqual(first_response.status_code, 200)
         self.assertContains(first_response, "Your Canvas connection expired. Please reconnect.")
-        self.assertContains(first_response, reverse("connect_canvas"))
+        self.assertContains(first_response, reverse("settings"))
         self.assertEqual(
             first_response.content.decode().count("Your Canvas connection expired."),
             1,
@@ -312,7 +312,7 @@ class CanvasAssignmentsPageTests(TestCase):
 
         self.assertEqual(second_response.status_code, 200)
         self.assertContains(second_response, "Your Canvas connection expired. Please reconnect.")
-        self.assertContains(second_response, reverse("connect_canvas"))
+        self.assertContains(second_response, reverse("settings"))
         self.assertNotContains(second_response, "No upcoming assignments")
         list_courses_mock.assert_called_once_with("fake-canvas-token", session=ANY)
         list_upcoming_assignments_mock.assert_not_called()
@@ -363,7 +363,7 @@ class CanvasAssignmentsPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Connect Canvas to see your upcoming assignments")
-        self.assertContains(response, reverse("connect_canvas"))
+        self.assertContains(response, reverse("settings"))
         self.assertNotContains(response, "No upcoming assignments.")
 
 PAGES_USING_BASE_TEMPLATE = ["/assignments/"]

@@ -215,10 +215,10 @@ Live application: https://canvas-plus.dev
 
 ## Connecting a Canvas account
 
-Sign in to Canvas+ and choose **Connect Canvas** from the sidebar. Paste a personal
+Sign in to Canvas+ and open **Settings** from the sidebar. Paste a personal
 access token generated in your school's Canvas account. A successful connection
 shows your active student course names and saves the credential encrypted. Returning
-to the connection page shows only its last four characters. Opening the signed-in
+to Settings shows only its last four characters. Opening the signed-in
 home page checks the saved connection and offers reconnection if Canvas rejects it.
 
 Configure these environment variables before connecting:
