@@ -181,6 +181,9 @@ body.landing-page a { color: #17324d; }
 	.planning-assignment-table-scroll { border-radius: 0; }
 }
 
+.assignment-toggle { display: flex; gap: 0.5rem; }
+.assignment-toggle a { padding: 0.5rem; border-radius: 0.25rem; color: #17324d; }
+.assignment-toggle a[aria-current="true"] { background: #17324d; color: white; font-weight: 700; }
 @media (max-width: 60rem) {
 	.dashboard, .week-grid { grid-template-columns: minmax(0, 1fr); }
 	.week-day { min-height: 0; }

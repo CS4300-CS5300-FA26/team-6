@@ -130,6 +130,9 @@ def course_with_syllabus(context, syllabus):
     """A connected student enrolled in one current course whose syllabus Canvas returns."""
     connect_student(context)
     context.canvas_courses.return_value = [CURRENT_COURSE]
+    assignments = patch("courses.views.list_all_assignments", return_value=[])
+    assignments.start()
+    context.add_cleanup(assignments.stop)
     patcher = patch("courses.views.get_course_syllabus", Mock(return_value=syllabus))
     patcher.start()
     context.add_cleanup(patcher.stop)

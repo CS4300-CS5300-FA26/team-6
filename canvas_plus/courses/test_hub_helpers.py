@@ -296,8 +296,13 @@ def _matches_enrollment(course, params, now):
 
 
 def _in_bucket(assignment, bucket, now):
-    """Mirror SortsAssignments: upcoming is due within a week; overdue is past due, unsubmitted."""
+    """Mirror SortsAssignments: upcoming is due within a week; overdue is past due, unsubmitted.
+
+    No bucket returns everything, as the course summary requests.
+    """
     due = _parse(assignment["due_at"])
+    if bucket is None:  # no bucket parameter: Canvas returns every assignment
+        return True
     if bucket == "upcoming":
         return due is not None and now <= due <= now + timedelta(weeks=1)
     if bucket == "overdue":
