@@ -4,7 +4,7 @@ As an enrolled student, I want to connect Canvas with a personal access token
 so that Canvas+ can load my courses and coursework.
 
 These tests define the feature's initial interface:
-* GET/POST /accounts/connect-canvas/, with a form field named ``token``.
+* GET/POST /accounts/settings/, with a form field named ``token``.
 * A Django setting named CANVAS_BASE_URL, pointing at the school's Canvas host.
 * Opening / (following redirects) checks a saved connection's validity.
 
@@ -31,7 +31,8 @@ from .models import CanvasConnection
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
-CONNECT_URL = "/accounts/connect-canvas/"
+CONNECT_URL = "/accounts/settings/"
+RETIRED_CONNECT_URL = "/accounts/connect-canvas/"
 VALID_TOKEN = "fake-canvas-secret-prefix-W9Z7"
 INVALID_TOKEN = "fake-invalid-canvas-token"
 COURSES = [
@@ -132,10 +133,27 @@ def signed_in_student(client, django_user_model, canvas_api):
     return client, user
 
 
+def test_settings_replaces_the_old_connection_page(student_client):
+    """The Settings hub is available and the standalone page is retired."""
+    client, _user = student_client
+    assert client.get(CONNECT_URL).status_code == 200
+    assert client.get(RETIRED_CONNECT_URL).status_code == 404
+
+
+def test_navigation_shows_settings_and_not_connect_canvas(student_client):
+    """Authenticated navigation links to Settings, not the old Connect Canvas link."""
+    client, _user = student_client
+    page = PageContent(client.get(CONNECT_URL))
+    assert "Settings" in page.list_items
+    assert "Connect Canvas" not in page.list_items
+    assert CONNECT_URL in page.links
+    assert RETIRED_CONNECT_URL not in page.links
+
+
 def connect_successfully(client):
     """Establish the Given state through the same page a student will use."""
     page = client.get(CONNECT_URL)
-    assert page.status_code == 200, "The Connect Canvas page must exist."
+    assert page.status_code == 200, "The Settings page must exist."
     response = client.post(CONNECT_URL, {"token": VALID_TOKEN}, follow=True)
     assert response.status_code == 200
     assert "Canvas connected" in PageContent(response).text

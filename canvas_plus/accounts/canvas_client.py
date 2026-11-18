@@ -162,6 +162,51 @@ def get_course_syllabus(token, course_id, session=None):
     return syllabus
 
 
+def _readable_score(score):
+    """True when a current score is absent or a percentage from 0 to 1000 (not True or False).
+
+    Extra credit can push a score past 100, but never near 1000. The range check also
+    rejects NaN, infinity, and integers too large to convert, without converting them.
+    """
+    if score is None:
+        return True
+    return isinstance(score, (int, float)) and not isinstance(score, bool) and 0 <= score <= 1000
+
+
+def _readable_enrollment(enrollment):
+    """True when an enrollment's current score is readable and its letter is text or absent."""
+    if not isinstance(enrollment, dict):
+        return False
+    letter = enrollment.get("computed_current_grade")
+    return (_readable_score(enrollment.get("computed_current_score"))
+            and (letter is None or isinstance(letter, str)))
+
+
+def _readable_grade_course(course):
+    """True when the hidden-totals flag is true, false, or absent, and every enrollment reads."""
+    if not isinstance(course, dict):
+        return False
+    enrollments = course.get("enrollments", [])
+    return (isinstance(course.get("hide_final_grades", False), bool)
+            and isinstance(enrollments, list)
+            and all(map(_readable_enrollment, enrollments)))
+
+
+@sensitive_variables("token")
+def get_course_grade(token, course_id, session=None):
+    """Return one course with my enrollments' current scores and whether totals are hidden."""
+    course, _ = _get_json(
+        f"{canvas_base_url()}/api/v1/courses/{course_id}",
+        token,
+        {"include[]": "total_scores"},
+        "Canvas could not load your grade. Please try again.",
+        session,
+    )
+    if not _readable_grade_course(course):
+        raise CanvasAPIError("Canvas returned unexpected grade data. Please try again.")
+    return course
+
+
 @sensitive_variables("token")
 def get_course_file(token, course_id, file_id):
     """Return one course file's name, size in bytes, and download address."""
@@ -277,6 +322,15 @@ def _normalize_assignment(assignment, course_name, course_id):
     submission = assignment.get("submission")
     if submission is not None and not isinstance(submission, dict):
         raise CanvasAPIError(invalid)
+    score = (submission or {}).get("score")
+    points_possible = assignment.get("points_possible")
+    for value in (score, points_possible):
+        if value is not None and (isinstance(value, bool)
+                                  or not isinstance(value, (int, float))):
+            raise CanvasAPIError(invalid)
+    # Released = posted; workflow_state flips back to "submitted" on resubmission.
+    if not submission or submission.get("posted_at") is None or submission.get("excused"):
+        score = None
     due_date = None
     if assignment.get("due_at") is not None:
         try:
@@ -302,6 +356,8 @@ def _normalize_assignment(assignment, course_name, course_id):
         "course_name": course_name,
         "due_date": due_date,
         "submitted": submitted,
+        "score": score,
+        "points_possible": points_possible,
         "description": assignment.get("description"),
     }
 
@@ -337,7 +393,8 @@ def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
 def _list_course_all_assignments(token, course, base_url, session):
     """Fetch every assignment page for one validated course without bucket filters."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
-    params = {"per_page": 100}
+    # Submissions carry the student's released score for the Course Hub summary.
+    params = {"include[]": "submission", "per_page": 100}
     visited = set()
     assignments = []
     while next_url:

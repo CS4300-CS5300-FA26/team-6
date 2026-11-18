@@ -1,5 +1,5 @@
 """Integration tests for the course list and course pages."""
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 from bs4 import BeautifulSoup
@@ -44,6 +44,11 @@ FILE_SYLLABUS = (
     '<p>Syllabus: <a class="instructure_file_link" title="syllabus.pdf" '
     'href="https://canvas.example.edu/courses/1/files/9?wrap=1">syllabus.pdf</a></p>'
 )
+GRADED_COURSE = {
+    "hide_final_grades": False,
+    "enrollments": [{"type": "student", "computed_current_score": 97.41,
+                     "computed_current_grade": None}],
+}
 
 
 class ConnectedStudentTestCase(TestCase):
@@ -139,7 +144,16 @@ class CourseListPageTests(ConnectedStudentTestCase):
 @pytest.mark.integration
 @patch("courses.views.list_courses", return_value=[CURRENT_COURSE])
 class CoursePageTests(ConnectedStudentTestCase):
-    """A course page shows that course's syllabus from Canvas."""
+    """A course page shows that course's syllabus and my current grade from Canvas."""
+
+    def setUp(self):
+        super().setUp()
+        grade = patch("courses.views.get_course_grade", return_value={"enrollments": []})
+        self.canvas_grade = grade.start()
+        self.addCleanup(grade.stop)
+        assignments = patch("courses.views.list_all_assignments", return_value=[])
+        assignments.start()
+        self.addCleanup(assignments.stop)
 
     def open_course(self, course_id=1):
         """Open one course page as the signed-in student."""
@@ -190,6 +204,7 @@ class CoursePageTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "Course not found", status_code=404)
         get_course_syllabus.assert_not_called()
+        self.canvas_grade.assert_not_called()
 
     @patch("courses.views.get_course_syllabus")
     def test_missing_connection_asks_to_connect(self, get_course_syllabus, list_courses):
@@ -201,6 +216,7 @@ class CoursePageTests(ConnectedStudentTestCase):
         self.assertContains(response, "Connect Canvas to see your courses")
         list_courses.assert_not_called()
         get_course_syllabus.assert_not_called()
+        self.canvas_grade.assert_not_called()
 
     def test_expired_connection_asks_to_reconnect(self, list_courses):
         """A rejected token is saved as expired and the student is told to reconnect."""
@@ -219,6 +235,49 @@ class CoursePageTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "Unable to load this course. Please try again.")
         self.assertNotContains(response, "No syllabus posted")
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_course_page_shows_my_current_grade_under_its_name(self, syllabus, _list_courses):
+        """My current grade for this course sits between the course name and the syllabus."""
+        self.canvas_grade.return_value = GRADED_COURSE
+
+        page = self.open_course().content.decode()
+
+        self.assertIn('<p class="current-grade">Current grade: 97.41%</p>', page)
+        self.assertLess(page.index("<h1>"), page.index("Current grade"))
+        self.assertLess(page.index("Current grade"), page.index("<h2>Syllabus</h2>"))
+        session = syllabus.call_args.kwargs["session"]
+        self.assertIsNotNone(session)
+        self.canvas_grade.assert_called_once_with("fake-canvas-token", 1, session=session)
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_course_where_i_am_not_a_student_has_no_grade_line(self, _syllabus, _list_courses):
+        """No empty grade line is left on the page when Canvas has no grade of mine."""
+        response = self.open_course()
+
+        self.assertNotContains(response, 'class="current-grade"')
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_grade_outage_still_shows_the_syllabus(self, _syllabus, _list_courses):
+        """If Canvas can't send my grade, the rest of the course page still loads."""
+        self.canvas_grade.side_effect = CanvasAPIError("Down")
+
+        response = self.open_course()
+
+        self.assertContains(response, "Unable to load your current grade. Please try again.")
+        self.assertContains(response, "<h4>Grading</h4>")
+        self.assertNotContains(response, "Unable to load this course")
+
+    @patch("courses.views.get_course_syllabus", return_value=FORMATTED_SYLLABUS)
+    def test_rejected_token_while_loading_grade_asks_to_reconnect(self, _syllabus, _list_courses):
+        """A token Canvas rejects while sending my grade still marks the connection expired."""
+        self.canvas_grade.side_effect = CanvasAuthenticationError("Rejected")
+
+        response = self.open_course()
+
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.is_valid)
+        self.assertContains(response, "Your Canvas connection expired. Please reconnect.")
 
 
 @pytest.mark.integration
@@ -434,18 +493,22 @@ class CourseHubFocusedListTests(ConnectedStudentTestCase):
         # The sidebar also links there, so look only inside the assignments section.
         self.assertIsNone(upcoming_section(response).find("a", href=reverse("assignment_list")))
 
-    def test_course_page_has_no_hub_scope_or_view_all_link(self):
-        """A course page lists its own work by day without the hub's scope line or link."""
+    def test_course_page_summary_lists_only_its_own_work(self):
+        """A course page's summary has that course's work, split by due date, not the hub's scope."""
         software = self.active_courses[0]
+        url = reverse("course_detail", args=[software["id"]])
 
-        response = self.client.get(reverse("course_detail", args=[software["id"]]))
+        def titles(query):
+            response = self.client.get(url + query)
+            section = BeautifulSoup(response.content, "html.parser").select_one(
+                'section[aria-labelledby="assignments-heading"]')
+            self.assertNotIn("All courses", section.get_text(" ", strip=True))
+            self.assertIsNone(section.find("a", href=reverse("assignment_list")))
+            return [item.get_text(strip=True) for item in section.select(".assignment-title")]
 
-        section = upcoming_section(response)
-        self.assertNotIn("All courses", section.get_text(" ", strip=True))
-        self.assertIsNone(section.find("a", href=reverse("assignment_list")))
-        self.assertEqual([title for _, cards in hub_day_groups(response)
-                          for _, title, _, _ in cards],
-                         ["Sprint 3 demo", "Sprint 4 retrospective"])
+        self.assertEqual(titles(""), ["Sprint 4 retrospective"])
+        self.assertEqual(titles("?view=past"), ["Sprint 3 demo"])  # already due at HUB_NOW
+
 
 
 
@@ -537,3 +600,118 @@ class CourseFileTests(ConnectedStudentTestCase):
 
         self.assertContains(response, "File not found", status_code=404)
         get_course_file.assert_not_called()
+
+
+@pytest.mark.integration
+class CourseAssignmentSummaryTests(ConnectedStudentTestCase):
+    """Selected-course assignments appear with safe grades and a complete count."""
+
+    def setUp(self):
+        super().setUp()
+        for target, value in (("list_courses", [CURRENT_COURSE]),
+                              ("get_course_syllabus", None),
+                              ("get_course_grade", {"enrollments": []})):
+            patcher = patch(f"courses.views.{target}", return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def open_summary(self, assignments, query="", error=None):
+        """Load the selected course with a mocked live assignment response."""
+        with patch("courses.views.list_all_assignments", return_value=assignments,
+                   side_effect=error) as fetch:
+            response = self.client.get(reverse("course_detail", args=[1]) + query)
+        fetch.assert_called_once_with("fake-canvas-token", [CURRENT_COURSE], session=ANY)
+        return response
+
+    def test_default_and_invalid_view_show_upcoming(self):
+        """Upcoming is the default and invalid toggle values fall back to it."""
+        from datetime import datetime, timezone  # pylint: disable=import-outside-toplevel
+        assignments = [{"title": "Future homework", "due_date": datetime(
+            2099, 1, 2, 18, 30, tzinfo=timezone.utc), "score": None},
+            {"title": "Old homework", "due_date": datetime(
+                2000, 1, 1, tzinfo=timezone.utc), "score": None}]
+        for query in ("", "?view=invalid", "?view=upcoming"):
+            response = self.open_summary(assignments, query)
+            self.assertContains(response, "Future homework")
+            self.assertNotContains(response, "Old homework")
+            self.assertContains(response, 'href="?view=upcoming" aria-current="true"')
+            self.assertContains(response, "Jan 2, 2099 11:30 AM")
+
+    def test_past_shows_scores_and_pending_grades(self):
+        """Released zero scores are displayed and overdue ungraded work says so."""
+        from datetime import datetime, timezone  # pylint: disable=import-outside-toplevel
+        assignments = [
+            {"title": "Graded early", "due_date": None, "score": 0, "points_possible": 100},
+            {"title": "Pending", "due_date": datetime(2000, 1, 1, tzinfo=timezone.utc),
+             "score": None},
+            {"title": "Partial", "due_date": None, "score": 92.5, "points_possible": 100.0},
+            {"title": "Whole", "due_date": None, "score": 88.0, "points_possible": 100.0},
+            {"title": "Precise", "due_date": None, "score": 99.43, "points_possible": 100.0},
+        ]
+        response = self.open_summary(assignments, "?view=past")
+        self.assertContains(response, 'href="?view=past" aria-current="true"')
+        self.assertContains(response, "Graded early")
+        self.assertContains(response, "0 / 100")
+        self.assertContains(response, "Pending")
+        self.assertContains(response, "Not graded yet")
+        # Canvas sends floats; whole numbers display without a trailing ".0".
+        self.assertContains(response, "92.5 / 100<")
+        self.assertContains(response, "88 / 100<")
+        # Two-decimal scores match Canvas instead of rounding to one decimal.
+        self.assertContains(response, "99.43 / 100<")
+
+    def test_empty_views_hide_view_all(self):
+        """An empty course has clear messages and no misleading all-assignments link."""
+        for query, message in (("", "No upcoming assignments"),
+                               ("?view=past", "No past or graded assignments")):
+            response = self.open_summary([], query)
+            self.assertContains(response, message)
+            self.assertNotContains(response, "View all")
+
+    def test_view_all_expands_in_page_without_leaving_the_app(self):
+        """More than five items show five plus an in-page link that reveals the rest."""
+        assignments = [{"title": f"Homework {index}", "due_date": None, "score": None}
+                       for index in range(12)]
+        response = self.open_summary(assignments)
+        self.assertContains(response, 'href="?view=upcoming&amp;all=1">View all 12 assignments')
+        self.assertContains(response, "Homework ", count=5)
+        self.assertNotContains(response, "canvas.example.edu/courses/1/assignments")
+        self.assertNotContains(response, "_blank")
+
+        expanded = self.open_summary(assignments, "?view=upcoming&all=1")
+        self.assertContains(expanded, "Homework ", count=12)
+        self.assertContains(expanded, 'href="?view=upcoming">Show fewer')
+        self.assertNotContains(expanded, "View all")
+
+    def test_toggle_links_return_to_the_short_list(self):
+        """Switching views never carries the expanded state along."""
+        response = self.open_summary([], "?view=past&all=1")
+        self.assertContains(response, 'href="?view=upcoming">Upcoming')
+        self.assertContains(response, 'href="?view=past" aria-current="true">Past/Graded')
+
+    def test_no_expand_link_when_everything_is_shown(self):
+        """Five or fewer items need no view-all link, even with all=1 in the URL."""
+        assignments = [{"title": f"Homework {index}", "due_date": None, "score": None}
+                       for index in range(5)]
+        for query in ("", "?all=1"):
+            response = self.open_summary(assignments, query)
+            self.assertContains(response, "Homework ", count=5)
+            self.assertNotContains(response, "View all")
+            self.assertNotContains(response, "Show fewer")
+
+    def test_assignment_outage_keeps_the_rest_of_the_course_page(self):
+        """If only the assignments fail, the course page still loads with a clear message."""
+        response = self.open_summary([], error=CanvasAPIError("Down"))
+        self.assertContains(response, "Unable to load assignments. Please try again.")
+        self.assertNotContains(response, "No upcoming assignments")
+        self.assertNotContains(response, "Past/Graded")
+        self.assertContains(response, "<h1>Operating Systems I</h1>")
+        self.connection.refresh_from_db()
+        self.assertTrue(self.connection.is_valid)
+
+    def test_assignment_auth_failure_still_expires_the_connection(self):
+        """A rejected token is never mistaken for an assignments outage."""
+        response = self.open_summary([], error=CanvasAuthenticationError("Rejected"))
+        self.assertContains(response, "Your Canvas connection expired. Please reconnect.")
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.is_valid)

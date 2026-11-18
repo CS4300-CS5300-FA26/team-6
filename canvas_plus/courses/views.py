@@ -20,15 +20,19 @@ from accounts.canvas_client import (
     canvas_origin,
     download_course_file,
     get_course_file,
+    get_course_grade,
     get_course_syllabus,
     list_courses,
+    list_all_assignments,
     list_upcoming_assignments,
     open_course_file,
 )
 from accounts.course_cache import cached_courses
 from accounts.models import CanvasConnection, SavedTokenError
+from .assignment_summary import SUMMARY_LIMIT, split_assignments
 from .current import is_current
 from .files import embed_file_viewers
+from .grades import current_grade
 from .syllabus import clean_syllabus
 from .upcoming import due_this_week, group_by_day
 
@@ -80,6 +84,17 @@ def _assignments_context(token, courses, session, this_week=False):
     return {"assignment_days": group_by_day(shown, now), "assignment_total": len(assignments)}
 
 
+@sensitive_variables("token")
+def _course_assignments(token, course, session):
+    """All of one course's assignments, or None so the page still loads without them."""
+    try:
+        return list_all_assignments(token, [course], session=session)
+    except CanvasAuthenticationError:
+        raise
+    except CanvasAPIError:
+        return None
+
+
 @login_required
 def course_list(request):
     """Show active course tabs and upcoming coursework across all current courses."""
@@ -91,6 +106,17 @@ def course_list(request):
 
     context, state = _load_from_canvas(request.user, load)
     return render(request, "courses/course_list.html", {**(context or {}), **state})
+
+
+@sensitive_variables("token")
+def _grade_line(token, course_id, session):
+    """My current grade line; if only the grade can't load, the rest of the page still shows."""
+    try:
+        return current_grade(get_course_grade(token, course_id, session=session))
+    except CanvasAuthenticationError:
+        raise
+    except CanvasAPIError:
+        return "Unable to load your current grade. Please try again."
 
 
 @login_required
@@ -106,15 +132,29 @@ def course_detail(request, course_id):
         if course is None:
             return None
         syllabus = get_course_syllabus(token, course_id, session=session)
-        return course, syllabus, _assignments_context(token, [course], session)
+        assignments = _course_assignments(token, course, session)
+        return course, syllabus, assignments, _grade_line(token, course_id, session)
 
     found, state = _load_from_canvas(request.user, load)
     if found is None and not state:
         return render(request, "courses/course_detail.html", {"not_found": True}, status=404)
     context = dict(state)
     if found:
-        course, syllabus, assignments_context = found
-        context.update(assignments_context)
+        course, syllabus, assignments, context["grade"] = found
+        selected_view = "past" if request.GET.get("view") == "past" else "upcoming"
+        in_view = (
+            None if assignments is None
+            else split_assignments(assignments, timezone.now())[selected_view]
+        )
+        show_all = request.GET.get("all") == "1"
+        context.update(
+            assignment_view=selected_view,
+            assignments_unavailable=in_view is None,
+            assignments=in_view if show_all else (in_view or [])[:SUMMARY_LIMIT],
+            assignment_count=len(in_view or []),
+            assignments_truncated=len(in_view or []) > SUMMARY_LIMIT,
+            assignments_expanded=show_all,
+        )
         context["course"] = course
         context["syllabus"] = embed_file_viewers(
             clean_syllabus(syllabus, canvas_base_url(), course_id)

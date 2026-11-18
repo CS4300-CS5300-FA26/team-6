@@ -59,11 +59,15 @@ team-6/
 │   │   │   ├── file_download_failed.html
 │   │   │   └── file_message.html       # Messages shown inside the file viewer
 │   │   ├── apps.py
+│   │   ├── assignment_summary.py       # Upcoming and past/graded summary selection
+│   │   ├── test_assignment_summary.py  # Summary date, grade, and limit boundaries
 │   │   ├── current.py                  # Which courses count as current
 │   │   ├── files.py                    # Turns syllabus file links into viewers and downloads
+│   │   ├── grades.py                   # The current grade line on a course page
 │   │   ├── syllabus.py                 # Makes Canvas syllabus HTML safe to show
 │   │   ├── test_current.py
 │   │   ├── test_files.py
+│   │   ├── test_grades.py
 │   │   ├── test_syllabus.py
 │   │   ├── tests.py
 │   │   ├── urls.py
@@ -73,14 +77,19 @@ team-6/
 │   │   │   ├── assignment_steps.py
 │   │   │   ├── assignment_search_steps.py
 │   │   │   ├── connect_canvas_steps.py
+│   │   │   ├── course_grade_steps.py
+│   │   │   ├── course_hub_assignments_steps.py # Course summary acceptance steps
 │   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
 │   │   ├── assignment_search.feature
 │   │   ├── connect_canvas.feature
+│   │   ├── course_grade.feature
+│   │   ├── course_hub_assignments.feature # Course summary acceptance scenarios
 │   │   ├── course_page.feature
 │   │   ├── courses.feature
-│   │   └── landing_page.feature
+│   │   ├── landing_page.feature
+│   │   └── syllabus_files.feature
 │   ├── templates/                      # Shared layout and landing page
 │   │   ├── base.html
 │   │   └── landing.html
@@ -211,10 +220,10 @@ Live application: https://canvas-plus.dev
 
 ## Connecting a Canvas account
 
-Sign in to Canvas+ and choose **Connect Canvas** from the sidebar. Paste a personal
+Sign in to Canvas+ and open **Settings** from the sidebar. Paste a personal
 access token generated in your school's Canvas account. A successful connection
 shows your active student course names and saves the credential encrypted. Returning
-to the connection page shows only its last four characters. Opening the signed-in
+to Settings shows only its last four characters. Opening the signed-in
 home page checks the saved connection and offers reconnection if Canvas rejects it.
 
 Configure these environment variables before connecting:
@@ -238,6 +247,19 @@ closed until both settings are supplied. Apply the new accounts migration with
 The [Canvas connection study guide](docs/canvas-connection.md) explains the request
 flow, files, tests, deployment configuration, and limitations. Assignment importing
 is tracked separately in issue #39.
+
+## Calendar subscriptions
+
+Signed-in students can create a private calendar feed URL from **Settings**. Add
+the URL to a calendar app as an internet-calendar subscription. It includes local
+assignment deadlines and saved study sessions, is read-only, and does not make
+Canvas requests when fetched. The URL is a bearer credential: keep it private;
+rotating it immediately revokes the previous URL. Events are retained for 112
+elapsed days by default, configurable with `CALENDAR_FEED_RETENTION_DAYS`.
+Calendar apps control their own refresh and cache behavior, so previously
+downloaded events may remain visible until the app updates its copy. See the
+[calendar feed guide](docs/calendar-feed.md) for setup, credential handling, and
+retention details.
 
 The [assignment model guide](docs/assignment-models.md) describes the user-owned
 assignment, reusable file, and attachment schema for #42, including migration
@@ -406,6 +428,10 @@ Jackson McGuire used Claude Code to help build the course page. Jackson ran ever
 
 Jackson McGuire used Claude Code to help build the syllabus file preview. Jackson ran every test red and green himself and verified previews, downloads, and locked files against his real Canvas courses on a local server.
 
+#### Current grade on the course page
+
+Jackson McGuire used Claude Code to help build the current grade on the course page. Jackson ran every test red and green himself, and checked each course's grade against Canvas's own Grades page on a local server.
+
 #### Generating Study Sessiosn [Backend]
 
 Stephen used ai to write tests and implement code for the generate study session behavior. 
@@ -417,3 +443,8 @@ Joshua Douglas used Claude Code and Codex to build the html involved in displayi
 #### Assignment keyword search
 
 Nathan Hinebaugh used ChatGPT to assist with implementation planning, Django search logic, pytest and Behave test development, and troubleshooting for the assignment keyword search feature. All suggested code was reviewed and tested locally before being committed.
+
+
+#### Calendar Feed Generation
+
+Stephen Tovar used copilot to assist with creating the .ics serialization and calendar feed end point.

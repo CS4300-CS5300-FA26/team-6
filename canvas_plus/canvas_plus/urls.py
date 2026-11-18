@@ -36,5 +36,6 @@ urlpatterns = [
     path('accounts/', include("accounts.urls")),
     path('courses/', include("courses.urls")),
     path('availability/', include("availability.urls")),
+    path('calendar-feed/', include("calendar_feed.urls")),
     path('health/', health_check, name="health_check"),
 ]

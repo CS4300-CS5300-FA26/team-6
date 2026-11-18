@@ -1,0 +1,1 @@
+"""Calendar subscription feeds for assignments and study sessions."""
