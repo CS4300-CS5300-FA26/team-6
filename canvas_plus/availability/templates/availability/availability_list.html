@@ -55,7 +55,7 @@
             {% if canvas_connection_missing %}
                 <p role="status">
                     Canvas is not connected. The assignments shown may be from your last successful sync.
-                    <a href="{% url 'connect_canvas' %}">Connect Canvas</a>
+                    <a href="{% url 'settings' %}">Settings</a>
                 </p>
             {% elif assignment_sync_error %}
                 <p role="status">{{ assignment_sync_error }}</p>

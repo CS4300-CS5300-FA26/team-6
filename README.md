@@ -59,6 +59,8 @@ team-6/
 │   │   │   ├── file_download_failed.html
 │   │   │   └── file_message.html       # Messages shown inside the file viewer
 │   │   ├── apps.py
+│   │   ├── assignment_summary.py       # Upcoming and past/graded summary selection
+│   │   ├── test_assignment_summary.py  # Summary date, grade, and limit boundaries
 │   │   ├── current.py                  # Which courses count as current
 │   │   ├── files.py                    # Turns syllabus file links into viewers and downloads
 │   │   ├── grades.py                   # The current grade line on a course page
@@ -76,12 +78,14 @@ team-6/
 │   │   │   ├── assignment_search_steps.py
 │   │   │   ├── connect_canvas_steps.py
 │   │   │   ├── course_grade_steps.py
+│   │   │   ├── course_hub_assignments_steps.py # Course summary acceptance steps
 │   │   │   ├── course_list_steps.py
 │   │   │   └── landing_steps.py
 │   │   ├── assignments_page.feature
 │   │   ├── assignment_search.feature
 │   │   ├── connect_canvas.feature
 │   │   ├── course_grade.feature
+│   │   ├── course_hub_assignments.feature # Course summary acceptance scenarios
 │   │   ├── course_page.feature
 │   │   ├── courses.feature
 │   │   ├── landing_page.feature
@@ -216,10 +220,10 @@ Live application: https://canvas-plus.dev
 
 ## Connecting a Canvas account
 
-Sign in to Canvas+ and choose **Connect Canvas** from the sidebar. Paste a personal
+Sign in to Canvas+ and open **Settings** from the sidebar. Paste a personal
 access token generated in your school's Canvas account. A successful connection
 shows your active student course names and saves the credential encrypted. Returning
-to the connection page shows only its last four characters. Opening the signed-in
+to Settings shows only its last four characters. Opening the signed-in
 home page checks the saved connection and offers reconnection if Canvas rejects it.
 
 Configure these environment variables before connecting:

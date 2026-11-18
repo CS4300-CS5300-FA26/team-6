@@ -132,6 +132,7 @@ def course_with_syllabus(context, syllabus):
     context.canvas_courses.return_value = [CURRENT_COURSE]
     context.canvas_grade = Mock(return_value={"enrollments": []})
     for target, fake in (
+        ("courses.views.list_all_assignments", Mock(return_value=[])),
         ("courses.views.get_course_syllabus", Mock(return_value=syllabus)),
         ("courses.views.get_course_grade", context.canvas_grade),
     ):

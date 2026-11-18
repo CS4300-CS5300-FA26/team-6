@@ -75,7 +75,7 @@ def canvas_http():
         elif url == f"{BASE_URL}/api/v1/courses/42":
             payload = data["detail"]
         elif url == f"{BASE_URL}/api/v1/courses/42/assignments":
-            payload = data["assignments"] if params["bucket"] == "overdue" else []
+            payload = data["assignments"] if params.get("bucket") == "overdue" else []
         elif url == f"{BASE_URL}/api/v1/courses/42/students/submissions":
             payload = data["submissions"]
             if data.get("filter_since"):

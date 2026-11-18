@@ -322,6 +322,15 @@ def _normalize_assignment(assignment, course_name, course_id):
     submission = assignment.get("submission")
     if submission is not None and not isinstance(submission, dict):
         raise CanvasAPIError(invalid)
+    score = (submission or {}).get("score")
+    points_possible = assignment.get("points_possible")
+    for value in (score, points_possible):
+        if value is not None and (isinstance(value, bool)
+                                  or not isinstance(value, (int, float))):
+            raise CanvasAPIError(invalid)
+    # Released = posted; workflow_state flips back to "submitted" on resubmission.
+    if not submission or submission.get("posted_at") is None or submission.get("excused"):
+        score = None
     due_date = None
     if assignment.get("due_at") is not None:
         try:
@@ -347,6 +356,8 @@ def _normalize_assignment(assignment, course_name, course_id):
         "course_name": course_name,
         "due_date": due_date,
         "submitted": submitted,
+        "score": score,
+        "points_possible": points_possible,
         "description": assignment.get("description"),
     }
 
@@ -382,7 +393,8 @@ def _list_course_upcoming_assignments(token, course, bucket, base_url, session):
 def _list_course_all_assignments(token, course, base_url, session):
     """Fetch every assignment page for one validated course without bucket filters."""
     next_url = f"{base_url}/api/v1/courses/{course['id']}/assignments"
-    params = {"per_page": 100}
+    # Submissions carry the student's released score for the Course Hub summary.
+    params = {"include[]": "submission", "per_page": 100}
     visited = set()
     assignments = []
     while next_url:
